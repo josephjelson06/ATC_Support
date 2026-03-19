@@ -617,7 +617,7 @@ export default function ChatWidget() {
                   </motion.div>
                   <h2 className="text-xl font-bold text-slate-900 mb-2">Ticket Submitted!</h2>
                   <div className="text-sm text-slate-600 mb-8 flex flex-col items-center gap-2">
-                    <p>Ticket created successfully. You'll receive email updates.</p>
+                    <p>Ticket created successfully. Our support team will follow up using the contact details you shared.</p>
                     {ticketDisplayId && (
                       <button
                         onClick={() => void copyTicketId()}

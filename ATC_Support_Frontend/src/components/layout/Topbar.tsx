@@ -1,5 +1,6 @@
 import { Search } from 'lucide-react';
 
+import NotificationMenu from './NotificationMenu';
 import { useRole } from '../../contexts/RoleContext';
 
 export default function Topbar() {
@@ -30,6 +31,7 @@ export default function Topbar() {
             className="pl-10 pr-4 py-2 bg-slate-100 border-none rounded-lg text-sm w-64 focus:ring-2 focus:ring-orange-500/50 transition-all outline-none"
           />
         </div>
+        <NotificationMenu />
       </div>
     </header>
   );

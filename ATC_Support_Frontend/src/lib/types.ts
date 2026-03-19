@@ -9,6 +9,7 @@ export type ChatSessionStatus = 'ACTIVE' | 'ENDED' | 'ESCALATED';
 export type TicketMessageType = 'REPLY' | 'INTERNAL_NOTE' | 'SYSTEM';
 export type ChatRole = 'USER' | 'JULIA';
 export type KnowledgeStatus = 'DRAFT' | 'PUBLISHED';
+export type NotificationType = 'TICKET_CREATED' | 'TICKET_ASSIGNED' | 'TICKET_ESCALATED' | 'TICKET_RESOLVED' | 'TICKET_REOPENED';
 
 export interface ApiUser {
   id: number;
@@ -27,6 +28,11 @@ export interface AuthResponse {
 
 export interface AuthMeResponse {
   user: ApiUser;
+}
+
+export interface NotificationListResponse {
+  items: ApiNotification[];
+  unreadCount: number;
 }
 
 export interface PaginatedResponse<T> {
@@ -145,6 +151,19 @@ export interface ApiTicketAttachment {
   sizeBytes: number;
   createdAt: string;
   uploadedBy?: ApiUser | null;
+}
+
+export interface ApiNotification {
+  id: number;
+  displayId: string;
+  userId: number;
+  type: NotificationType;
+  title: string;
+  body: string;
+  link?: string | null;
+  isRead: boolean;
+  createdAt: string;
+  readAt?: string | null;
 }
 
 export interface ApiEscalationHistory {

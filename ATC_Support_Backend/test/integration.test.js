@@ -132,6 +132,104 @@ test('widget escalation creates a ticket', async () => {
   assert.equal(response.body.project?.widgetKey, 'widget_warehouse_portal');
 });
 
+test('ticket notifications can be listed and marked as read', async () => {
+  const seLogin = await request.post('/api/auth/login').send({ email: 'se@atc.com', password: 'password' }).expect(200);
+  const plLogin = await request.post('/api/auth/login').send({ email: 'pl1@atc.com', password: 'password' }).expect(200);
+
+  const seToken = seLogin.body.token;
+  const seUser = seLogin.body.user;
+  const plToken = plLogin.body.token;
+
+  await request.post('/api/notifications/read-all').set('Authorization', `Bearer ${seToken}`).expect(200);
+  await request.post('/api/notifications/read-all').set('Authorization', `Bearer ${plToken}`).expect(200);
+
+  const createdTicket = await request
+    .post('/api/widget/widget_warehouse_portal/escalate')
+    .send({
+      name: 'Notification Tester',
+      email: 'integration-notify@test.com',
+      title: 'Notification workflow ticket',
+      description: 'Ticket for notification integration test.',
+      priority: 'MEDIUM',
+    })
+    .expect(201);
+
+  const ticketId = createdTicket.body.id;
+  assert.ok(ticketId);
+
+  const seNotifications = await request
+    .get('/api/notifications?limit=10')
+    .set('Authorization', `Bearer ${seToken}`)
+    .expect(200);
+
+  const seCreatedNotification = seNotifications.body.items.find(
+    (notification) => notification.type === 'TICKET_CREATED' && notification.link === `/agent/ticket/${ticketId}`,
+  );
+
+  assert.ok(seCreatedNotification);
+  assert.equal(seNotifications.body.unreadCount, 1);
+
+  const markedRead = await request
+    .post(`/api/notifications/${seCreatedNotification.id}/read`)
+    .set('Authorization', `Bearer ${seToken}`)
+    .expect(200);
+
+  assert.equal(markedRead.body.isRead, true);
+  assert.ok(markedRead.body.readAt);
+
+  const seNotificationsAfterRead = await request
+    .get('/api/notifications?limit=10')
+    .set('Authorization', `Bearer ${seToken}`)
+    .expect(200);
+
+  assert.equal(seNotificationsAfterRead.body.unreadCount, 0);
+
+  const plNotifications = await request
+    .get('/api/notifications?limit=10')
+    .set('Authorization', `Bearer ${plToken}`)
+    .expect(200);
+
+  const plCreatedNotification = plNotifications.body.items.find(
+    (notification) => notification.type === 'TICKET_CREATED' && notification.link === `/agent/ticket/${ticketId}`,
+  );
+
+  assert.ok(plCreatedNotification);
+  assert.equal(plNotifications.body.unreadCount, 1);
+
+  const clearedNotifications = await request
+    .post('/api/notifications/read-all')
+    .set('Authorization', `Bearer ${plToken}`)
+    .expect(200);
+
+  assert.equal(clearedNotifications.body.updatedCount, 1);
+
+  await request
+    .post(`/api/tickets/${ticketId}/assign`)
+    .set('Authorization', `Bearer ${seToken}`)
+    .send({ assignedToId: seUser.id })
+    .expect(200);
+
+  await request.post(`/api/tickets/${ticketId}/start`).set('Authorization', `Bearer ${seToken}`).expect(200);
+
+  await request
+    .post(`/api/tickets/${ticketId}/escalate`)
+    .set('Authorization', `Bearer ${seToken}`)
+    .send({ note: 'Escalation notification test.' })
+    .expect(200);
+
+  const plNotificationsAfterEscalate = await request
+    .get('/api/notifications?limit=10')
+    .set('Authorization', `Bearer ${plToken}`)
+    .expect(200);
+
+  const plEscalationNotification = plNotificationsAfterEscalate.body.items.find(
+    (notification) => notification.type === 'TICKET_ESCALATED' && notification.link === `/agent/ticket/${ticketId}`,
+  );
+
+  assert.ok(plEscalationNotification);
+  assert.equal(plNotificationsAfterEscalate.body.unreadCount, 1);
+});
+
 test('ticket lifecycle: assign, start, escalate, resolve', async () => {
   const seLogin = await request.post('/api/auth/login').send({ email: 'se@atc.com', password: 'password' }).expect(200);
   const plLogin = await request.post('/api/auth/login').send({ email: 'pl1@atc.com', password: 'password' }).expect(200);

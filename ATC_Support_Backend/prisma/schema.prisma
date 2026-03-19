@@ -76,6 +76,14 @@ enum KnowledgeStatus {
   PUBLISHED
 }
 
+enum NotificationType {
+  TICKET_CREATED
+  TICKET_ASSIGNED
+  TICKET_ESCALATED
+  TICKET_RESOLVED
+  TICKET_REOPENED
+}
+
 model User {
   id                      Int                 @id @default(autoincrement())
   name                    String
@@ -91,6 +99,7 @@ model User {
   runbooks                Runbook[]           @relation("RunbookAuthor")
   projectDocs             ProjectDoc[]        @relation("ProjectDocAuthor")
   escalationEvents        EscalationHistory[] @relation("EscalationActor")
+  notifications           Notification[]
 
   @@index([role])
   @@index([status])
@@ -254,6 +263,22 @@ model TicketAttachment {
   @@index([ticketId])
   @@index([ticketMessageId])
   @@index([uploadedById])
+}
+
+model Notification {
+  id        Int              @id @default(autoincrement())
+  userId    Int
+  type      NotificationType
+  title     String
+  body      String
+  link      String?
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+  readAt    DateTime?
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([userId, createdAt])
 }
 
 model ChatSession {

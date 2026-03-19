@@ -6,6 +6,7 @@ import { prisma } from '../lib/prisma';
 import { authMiddleware } from '../middleware/auth';
 import { requireRole } from '../middleware/role';
 import { validate } from '../middleware/validate';
+import { notifyTicketAssigned, notifyTicketEscalated, notifyTicketReopened, notifyTicketResolved } from '../services/notifications';
 import { createWidgetTicket } from '../services/tickets';
 import { assertTicketAccess, ticketScopeForUser } from '../utils/access';
 import { asyncHandler, badRequest, forbidden, notFound, parseId } from '../utils/http';
@@ -340,6 +341,14 @@ router.post(
         },
       });
 
+      await notifyTicketAssigned(transaction, {
+        ticketId,
+        ticketTitle: ticket.title,
+        assigneeId: nextAssigneeId,
+        actorUserId: req.user!.id,
+        actorName: req.user!.name,
+      });
+
       return nextTicket;
     });
 
@@ -446,6 +455,14 @@ router.post(
         },
       });
 
+      await notifyTicketEscalated(transaction, {
+        ticketId,
+        ticketTitle: ticket.title,
+        projectLeadId: ticket.project.assignedToId,
+        actorUserId: req.user!.id,
+        actorName: req.user!.name,
+      });
+
       return nextTicket;
     });
 
@@ -532,6 +549,14 @@ router.post(
         },
       });
 
+      await notifyTicketReopened(transaction, {
+        ticketId,
+        ticketTitle: ticket.title,
+        recipientUserIds: [ticket.assignedToId, ticket.project.assignedToId],
+        actorUserId: req.user!.id,
+        actorName: req.user!.name,
+      });
+
       return nextTicket;
     });
 
@@ -570,6 +595,14 @@ router.post(
           type: MessageType.SYSTEM,
           content: `ticket resolved by ${req.user!.name}`,
         },
+      });
+
+      await notifyTicketResolved(transaction, {
+        ticketId,
+        ticketTitle: ticket.title,
+        recipientUserIds: [ticket.assignedToId, ticket.project.assignedToId],
+        actorUserId: req.user!.id,
+        actorName: req.user!.name,
       });
 
       return nextTicket;

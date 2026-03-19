@@ -1,6 +1,7 @@
 import { ChatSessionStatus, MessageType, TicketPriority, TicketStatus } from '@prisma/client';
 
 import { prisma } from '../lib/prisma';
+import { notifyNewWidgetTicket } from './notifications';
 import { badRequest, notFound } from '../utils/http';
 
 type CreateWidgetTicketInput = {
@@ -22,6 +23,7 @@ export const createWidgetTicket = async (input: CreateWidgetTicketInput) => {
       id: true,
       name: true,
       widgetEnabled: true,
+      assignedToId: true,
     },
   });
 
@@ -128,6 +130,15 @@ export const createWidgetTicket = async (input: CreateWidgetTicketInput) => {
         type: MessageType.SYSTEM,
         content: `Ticket created from widget escalation for ${input.name} (${input.email}).`,
       },
+    });
+
+    await notifyNewWidgetTicket(transaction, {
+      ticketId: ticket.id,
+      ticketTitle: ticket.title,
+      projectName: project.name,
+      priority: ticket.priority,
+      clientName: input.name,
+      projectLeadId: project.assignedToId,
     });
 
     return ticket;

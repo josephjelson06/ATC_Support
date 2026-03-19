@@ -116,6 +116,14 @@ export const serializeTicketAttachment = <T extends AnyRecord | null | undefined
   return nextAttachment;
 };
 
+export const serializeNotification = <T extends AnyRecord | null | undefined>(notification: T) => {
+  if (!notification) {
+    return null;
+  }
+
+  return withDisplayId(notification, 'NTF');
+};
+
 export const serializeEscalationHistory = <T extends AnyRecord | null | undefined>(event: T) => {
   if (!event) {
     return null;

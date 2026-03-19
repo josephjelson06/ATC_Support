@@ -32,13 +32,15 @@ import { apiFetch } from '../../lib/api';
 import { humanizeEnum } from '../../lib/format';
 import type { ApiProject, ApiRunbook, ApiTicket, ApiUser, TicketStatus } from '../../lib/types';
 
-const ticketStatusOrder: TicketStatus[] = ['NEW', 'ASSIGNED', 'IN_PROGRESS', 'ESCALATED', 'RESOLVED'];
+const ticketStatusOrder: TicketStatus[] = ['NEW', 'ASSIGNED', 'IN_PROGRESS', 'WAITING_ON_CUSTOMER', 'ESCALATED', 'REOPENED', 'RESOLVED'];
 
 const statusColors: Record<TicketStatus, string> = {
   NEW: '#94a3b8',
   ASSIGNED: '#f59e0b',
   IN_PROGRESS: '#3b82f6',
+  WAITING_ON_CUSTOMER: '#d97706',
   ESCALATED: '#8b5cf6',
+  REOPENED: '#f43f5e',
   RESOLVED: '#10b981',
 };
 

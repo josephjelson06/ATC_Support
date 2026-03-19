@@ -3,7 +3,7 @@ export type BackendUserStatus = 'ACTIVE' | 'INACTIVE';
 export type ClientStatus = 'ACTIVE' | 'INACTIVE';
 export type ProjectStatus = 'ACTIVE' | 'INACTIVE';
 export type TicketPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
-export type TicketStatus = 'NEW' | 'ASSIGNED' | 'IN_PROGRESS' | 'ESCALATED' | 'RESOLVED';
+export type TicketStatus = 'NEW' | 'ASSIGNED' | 'IN_PROGRESS' | 'WAITING_ON_CUSTOMER' | 'ESCALATED' | 'REOPENED' | 'RESOLVED';
 export type TicketSource = 'WIDGET';
 export type ChatSessionStatus = 'ACTIVE' | 'ENDED' | 'ESCALATED';
 export type TicketMessageType = 'REPLY' | 'INTERNAL_NOTE' | 'SYSTEM';
@@ -132,6 +132,19 @@ export interface ApiTicketMessage {
   type?: TicketMessageType;
   createdAt: string;
   user?: ApiUser | null;
+  attachments?: ApiTicketAttachment[];
+}
+
+export interface ApiTicketAttachment {
+  id: number;
+  ticketId: number;
+  ticketMessageId?: number | null;
+  uploadedById?: number | null;
+  originalName: string;
+  mimeType: string;
+  sizeBytes: number;
+  createdAt: string;
+  uploadedBy?: ApiUser | null;
 }
 
 export interface ApiEscalationHistory {

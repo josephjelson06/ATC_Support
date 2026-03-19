@@ -41,6 +41,23 @@ export const formatRelativeTime = (value?: string | null) => {
   return relativeTimeFormatter.format(Math.round(diffMs / day), 'day');
 };
 
+export const formatBytes = (value?: number | null) => {
+  if (!value || value <= 0) {
+    return '0 B';
+  }
+
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let size = value;
+  let unitIndex = 0;
+
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+
+  return `${size >= 10 || unitIndex === 0 ? Math.round(size) : size.toFixed(1)} ${units[unitIndex]}`;
+};
+
 export const humanizeEnum = (value?: string | null) =>
   (value || '')
     .toLowerCase()
@@ -93,8 +110,12 @@ export const getTicketStatusClasses = (status?: TicketStatus | null) => {
   switch (status) {
     case 'RESOLVED':
       return 'bg-green-100 text-green-700';
+    case 'WAITING_ON_CUSTOMER':
+      return 'bg-amber-100 text-amber-700';
     case 'ESCALATED':
       return 'bg-purple-100 text-purple-700';
+    case 'REOPENED':
+      return 'bg-rose-100 text-rose-700';
     case 'IN_PROGRESS':
       return 'bg-blue-100 text-blue-700';
     case 'ASSIGNED':

@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import cors from 'cors';
 import express from 'express';
+import multer from 'multer';
 import { ZodError } from 'zod';
 
 import { env } from './config/env';
@@ -121,6 +122,13 @@ app.use((error: unknown, req: express.Request, res: express.Response, _next: exp
     return res.status(400).json({
       message: 'Validation failed.',
       details: error.flatten(),
+      requestId,
+    });
+  }
+
+  if (error instanceof multer.MulterError) {
+    return res.status(400).json({
+      message: error.code === 'LIMIT_FILE_SIZE' ? 'Attachment exceeds the 10 MB size limit.' : error.message,
       requestId,
     });
   }

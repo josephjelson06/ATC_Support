@@ -52,6 +52,14 @@ const escalateTicketSchema = z.object({
   note: z.string().trim().min(3).optional(),
 });
 
+const waitOnCustomerTicketSchema = z.object({
+  note: z.string().trim().min(3).optional(),
+});
+
+const reopenTicketSchema = z.object({
+  note: z.string().trim().min(3).optional(),
+});
+
 const resolveTicketSchema = z.object({
   resolutionSummary: z.string().trim().min(3),
 });
@@ -76,6 +84,16 @@ const detailInclude = {
     include: {
       user: {
         select: safeUserSelect,
+      },
+      attachments: {
+        include: {
+          uploadedBy: {
+            select: safeUserSelect,
+          },
+        },
+        orderBy: {
+          createdAt: 'asc',
+        },
       },
     },
     orderBy: {
@@ -425,6 +443,92 @@ router.post(
           fromAssigneeId: ticket.assignedToId,
           toAssigneeId: ticket.project.assignedToId,
           note: payload.note,
+        },
+      });
+
+      return nextTicket;
+    });
+
+    res.json(serializeTicket(updatedTicket));
+  }),
+);
+
+router.post(
+  '/:id/waiting-on-customer',
+  requireRole(Role.SE, Role.PL),
+  validate(waitOnCustomerTicketSchema),
+  asyncHandler(async (req, res) => {
+    const ticketId = parseId(req.params.id, 'ticket id');
+    await assertTicketAccess(req.user!, ticketId);
+    const payload = req.body as z.infer<typeof waitOnCustomerTicketSchema>;
+    const ticket = await getTicketForWorkflow(ticketId);
+
+    if (ticket.status === TicketStatus.RESOLVED) {
+      throw badRequest('Resolved tickets cannot be moved to waiting on customer.');
+    }
+
+    const updatedTicket = await prisma.$transaction(async (transaction) => {
+      const nextTicket = await transaction.ticket.update({
+        where: {
+          id: ticketId,
+        },
+        data: {
+          assignedToId: ticket.assignedToId ?? req.user!.id,
+          status: TicketStatus.WAITING_ON_CUSTOMER,
+        },
+        include: listInclude,
+      });
+
+      await transaction.ticketMessage.create({
+        data: {
+          ticketId,
+          userId: null,
+          type: MessageType.SYSTEM,
+          content: `ticket moved to WAITING_ON_CUSTOMER by ${req.user!.name}${payload.note ? `: ${payload.note}` : ''}`,
+        },
+      });
+
+      return nextTicket;
+    });
+
+    res.json(serializeTicket(updatedTicket));
+  }),
+);
+
+router.post(
+  '/:id/reopen',
+  requireRole(Role.SE, Role.PL),
+  validate(reopenTicketSchema),
+  asyncHandler(async (req, res) => {
+    const ticketId = parseId(req.params.id, 'ticket id');
+    await assertTicketAccess(req.user!, ticketId);
+    const payload = req.body as z.infer<typeof reopenTicketSchema>;
+    const ticket = await getTicketForWorkflow(ticketId);
+
+    if (ticket.status !== TicketStatus.RESOLVED) {
+      throw badRequest('Only resolved tickets can be reopened.');
+    }
+
+    const updatedTicket = await prisma.$transaction(async (transaction) => {
+      const nextTicket = await transaction.ticket.update({
+        where: {
+          id: ticketId,
+        },
+        data: {
+          assignedToId: ticket.assignedToId ?? req.user!.id,
+          status: TicketStatus.REOPENED,
+          resolutionSummary: null,
+          resolvedAt: null,
+        },
+        include: listInclude,
+      });
+
+      await transaction.ticketMessage.create({
+        data: {
+          ticketId,
+          userId: null,
+          type: MessageType.SYSTEM,
+          content: `ticket reopened by ${req.user!.name}${payload.note ? `: ${payload.note}` : ''}`,
         },
       });
 

@@ -102,6 +102,20 @@ export const serializeTicket = <T extends AnyRecord | null | undefined>(ticket: 
   return nextTicket;
 };
 
+export const serializeTicketAttachment = <T extends AnyRecord | null | undefined>(attachment: T) => {
+  if (!attachment) {
+    return null;
+  }
+
+  const nextAttachment: Record<string, unknown> = { ...attachment };
+
+  if ('uploadedBy' in attachment) {
+    nextAttachment.uploadedBy = serializeUser(attachment.uploadedBy as AnyRecord | null | undefined);
+  }
+
+  return nextAttachment;
+};
+
 export const serializeEscalationHistory = <T extends AnyRecord | null | undefined>(event: T) => {
   if (!event) {
     return null;
@@ -125,6 +139,10 @@ export const serializeTicketMessage = <T extends AnyRecord | null | undefined>(m
 
   if ('user' in message) {
     nextMessage.user = serializeUser(message.user as AnyRecord | null | undefined);
+  }
+
+  if ('attachments' in message && Array.isArray(message.attachments)) {
+    nextMessage.attachments = message.attachments.map((attachment) => serializeTicketAttachment(attachment as AnyRecord | null | undefined));
   }
 
   return nextMessage;

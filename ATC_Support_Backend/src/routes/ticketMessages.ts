@@ -1,18 +1,20 @@
+import { access } from 'fs/promises';
+
 import { MessageType, Role } from '@prisma/client';
 import { Router } from 'express';
 import { z } from 'zod';
 
 import { prisma } from '../lib/prisma';
 import { requireRole } from '../middleware/role';
-import { validate } from '../middleware/validate';
 import { assertTicketAccess } from '../utils/access';
-import { asyncHandler, parseId } from '../utils/http';
-import { serializeTicketMessage } from '../utils/serializers';
+import { asyncHandler, badRequest, notFound, parseId } from '../utils/http';
+import { serializeTicketAttachment, serializeTicketMessage } from '../utils/serializers';
+import { resolveTicketAttachmentPath, ticketAttachmentUpload } from '../utils/ticketAttachments';
 
 const router = Router();
 
 const createTicketMessageSchema = z.object({
-  content: z.string().trim().min(1),
+  content: z.string().trim().optional().default(''),
   type: z.enum([MessageType.REPLY, MessageType.INTERNAL_NOTE]).default(MessageType.REPLY),
 });
 
@@ -25,6 +27,22 @@ const safeUserSelect = {
   createdAt: true,
 } as const;
 
+const messageInclude = {
+  user: {
+    select: safeUserSelect,
+  },
+  attachments: {
+    include: {
+      uploadedBy: {
+        select: safeUserSelect,
+      },
+    },
+    orderBy: {
+      createdAt: 'asc',
+    },
+  },
+} as const;
+
 router.get(
   '/tickets/:id/messages',
   asyncHandler(async (req, res) => {
@@ -34,11 +52,7 @@ router.get(
       where: {
         ticketId,
       },
-      include: {
-        user: {
-          select: safeUserSelect,
-        },
-      },
+      include: messageInclude,
       orderBy: {
         createdAt: 'asc',
       },
@@ -51,26 +65,106 @@ router.get(
 router.post(
   '/tickets/:id/messages',
   requireRole(Role.SE, Role.PL),
-  validate(createTicketMessageSchema),
+  ticketAttachmentUpload.array('attachments', 5),
   asyncHandler(async (req, res) => {
     const ticketId = parseId(req.params.id, 'ticket id');
     await assertTicketAccess(req.user!, ticketId);
-    const payload = req.body as z.infer<typeof createTicketMessageSchema>;
-    const message = await prisma.ticketMessage.create({
-      data: {
-        ticketId,
-        userId: req.user!.id,
-        content: payload.content,
-        type: payload.type,
+    const payload = createTicketMessageSchema.parse(req.body);
+    const attachments = ((req.files as Express.Multer.File[] | undefined) ?? []).filter((file) => file.size > 0);
+
+    if (!payload.content && attachments.length === 0) {
+      throw badRequest('Message content or at least one attachment is required.');
+    }
+
+    const message = await prisma.$transaction(async (transaction) => {
+      const createdMessage = await transaction.ticketMessage.create({
+        data: {
+          ticketId,
+          userId: req.user!.id,
+          content: payload.content,
+          type: payload.type,
+        },
+      });
+
+      if (attachments.length > 0) {
+        await transaction.ticketAttachment.createMany({
+          data: attachments.map((file) => ({
+            ticketId,
+            ticketMessageId: createdMessage.id,
+            uploadedById: req.user!.id,
+            originalName: file.originalname,
+            storedName: file.filename,
+            mimeType: file.mimetype || 'application/octet-stream',
+            sizeBytes: file.size,
+          })),
+        });
+      }
+
+      return transaction.ticketMessage.findUnique({
+        where: {
+          id: createdMessage.id,
+        },
+        include: messageInclude,
+      });
+    });
+
+    res.status(201).json(serializeTicketMessage(message));
+  }),
+);
+
+router.get(
+  '/ticket-attachments/:attachmentId/download',
+  asyncHandler(async (req, res) => {
+    const attachmentId = parseId(req.params.attachmentId, 'attachment id');
+    const attachment = await prisma.ticketAttachment.findUnique({
+      where: {
+        id: attachmentId,
       },
       include: {
-        user: {
+        uploadedBy: {
           select: safeUserSelect,
         },
       },
     });
 
-    res.status(201).json(serializeTicketMessage(message));
+    if (!attachment) {
+      throw notFound('Attachment not found.');
+    }
+
+    await assertTicketAccess(req.user!, attachment.ticketId);
+
+    const attachmentPath = resolveTicketAttachmentPath(attachment.storedName);
+
+    try {
+      await access(attachmentPath);
+    } catch {
+      throw notFound('Attachment file not found.');
+    }
+
+    res.download(attachmentPath, attachment.originalName);
+  }),
+);
+
+router.get(
+  '/tickets/:id/attachments',
+  asyncHandler(async (req, res) => {
+    const ticketId = parseId(req.params.id, 'ticket id');
+    await assertTicketAccess(req.user!, ticketId);
+    const attachments = await prisma.ticketAttachment.findMany({
+      where: {
+        ticketId,
+      },
+      include: {
+        uploadedBy: {
+          select: safeUserSelect,
+        },
+      },
+      orderBy: {
+        createdAt: 'asc',
+      },
+    });
+
+    res.json(attachments.map((attachment: (typeof attachments)[number]) => serializeTicketAttachment(attachment)));
   }),
 );
 

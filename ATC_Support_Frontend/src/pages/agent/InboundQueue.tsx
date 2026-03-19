@@ -135,7 +135,9 @@ export default function InboundQueue() {
             <option value="NEW">New</option>
             <option value="ASSIGNED">Assigned</option>
             <option value="IN_PROGRESS">In Progress</option>
+            <option value="WAITING_ON_CUSTOMER">Waiting on Customer</option>
             <option value="ESCALATED">Escalated</option>
+            <option value="REOPENED">Reopened</option>
             <option value="RESOLVED">Resolved</option>
           </select>
         </div>

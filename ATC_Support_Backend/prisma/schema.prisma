@@ -48,7 +48,9 @@ enum TicketStatus {
   NEW
   ASSIGNED
   IN_PROGRESS
+  WAITING_ON_CUSTOMER
   ESCALATED
+  REOPENED
   RESOLVED
 }
 
@@ -75,19 +77,20 @@ enum KnowledgeStatus {
 }
 
 model User {
-  id               Int                 @id @default(autoincrement())
-  name             String
-  email            String              @unique
-  passwordHash     String
-  role             Role
-  status           UserStatus          @default(ACTIVE)
-  createdAt        DateTime            @default(now())
-  assignedProjects Project[]           @relation("ProjectLead")
-  assignedTickets  Ticket[]            @relation("TicketAssignee")
-  ticketMessages   TicketMessage[]
-  runbooks         Runbook[]           @relation("RunbookAuthor")
-  projectDocs      ProjectDoc[]        @relation("ProjectDocAuthor")
-  escalationEvents EscalationHistory[] @relation("EscalationActor")
+  id                      Int                 @id @default(autoincrement())
+  name                    String
+  email                   String              @unique
+  passwordHash            String
+  role                    Role
+  status                  UserStatus          @default(ACTIVE)
+  createdAt               DateTime            @default(now())
+  assignedProjects        Project[]           @relation("ProjectLead")
+  assignedTickets         Ticket[]            @relation("TicketAssignee")
+  ticketMessages          TicketMessage[]
+  ticketAttachments       TicketAttachment[]  @relation("TicketAttachmentUploader")
+  runbooks                Runbook[]           @relation("RunbookAuthor")
+  projectDocs             ProjectDoc[]        @relation("ProjectDocAuthor")
+  escalationEvents        EscalationHistory[] @relation("EscalationActor")
 
   @@index([role])
   @@index([status])
@@ -209,6 +212,7 @@ model Ticket {
   chatSession       ChatSession?        @relation(fields: [chatSessionId], references: [id], onDelete: SetNull)
   assignedTo        User?               @relation("TicketAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
   messages          TicketMessage[]
+  attachments       TicketAttachment[]
   escalationHistory EscalationHistory[]
 
   @@index([projectId])
@@ -218,18 +222,38 @@ model Ticket {
 }
 
 model TicketMessage {
-  id        Int         @id @default(autoincrement())
-  ticketId  Int
-  userId    Int?
-  content   String
-  type      MessageType @default(REPLY)
-  createdAt DateTime    @default(now())
-  ticket    Ticket      @relation(fields: [ticketId], references: [id], onDelete: Cascade)
-  user      User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  id          Int                @id @default(autoincrement())
+  ticketId    Int
+  userId      Int?
+  content     String
+  type        MessageType        @default(REPLY)
+  createdAt   DateTime           @default(now())
+  ticket      Ticket             @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  user        User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
+  attachments TicketAttachment[]
 
   @@index([ticketId])
   @@index([userId])
   @@index([type])
+}
+
+model TicketAttachment {
+  id              Int           @id @default(autoincrement())
+  ticketId        Int
+  ticketMessageId Int?
+  uploadedById    Int?
+  originalName    String
+  storedName      String
+  mimeType        String
+  sizeBytes       Int
+  createdAt       DateTime      @default(now())
+  ticket          Ticket        @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  ticketMessage   TicketMessage? @relation(fields: [ticketMessageId], references: [id], onDelete: SetNull)
+  uploadedBy      User?         @relation("TicketAttachmentUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([ticketId])
+  @@index([ticketMessageId])
+  @@index([uploadedById])
 }
 
 model ChatSession {

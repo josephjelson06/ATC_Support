@@ -28,7 +28,7 @@ const priorityColors: Record<TicketPriority, string> = {
   CRITICAL: '#ef4444',
 };
 
-const statusOrder: TicketStatus[] = ['NEW', 'ASSIGNED', 'IN_PROGRESS', 'ESCALATED', 'RESOLVED'];
+const statusOrder: TicketStatus[] = ['NEW', 'ASSIGNED', 'IN_PROGRESS', 'WAITING_ON_CUSTOMER', 'ESCALATED', 'REOPENED', 'RESOLVED'];
 
 const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ color?: string; name?: string; value?: number }>; label?: string }) => {
   if (!active || !payload?.length) {

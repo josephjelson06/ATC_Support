@@ -203,7 +203,7 @@ export default function TicketReport() {
               className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500 outline-none bg-white"
             >
               <option value="">All statuses</option>
-              {(['NEW', 'ASSIGNED', 'IN_PROGRESS', 'ESCALATED', 'RESOLVED'] as TicketStatus[]).map((status) => (
+              {(['NEW', 'ASSIGNED', 'IN_PROGRESS', 'WAITING_ON_CUSTOMER', 'ESCALATED', 'REOPENED', 'RESOLVED'] as TicketStatus[]).map((status) => (
                 <option key={status} value={status}>
                   {humanizeEnum(status)}
                 </option>

@@ -19,7 +19,9 @@ export default function ProjectLeadDashboard() {
     return <DashboardError message={statsQuery.error || ticketsQuery.error || projectsQuery.error || 'Unable to load dashboard.'} onRetry={() => { statsQuery.reload(); ticketsQuery.reload(); projectsQuery.reload(); }} />;
   }
 
-  const escalatedTickets = (ticketsQuery.data || []).filter((ticket) => ticket.status === 'ESCALATED' || ticket.status === 'IN_PROGRESS').slice(0, 5);
+  const escalatedTickets = (ticketsQuery.data || [])
+    .filter((ticket) => ['ESCALATED', 'IN_PROGRESS', 'WAITING_ON_CUSTOMER', 'REOPENED'].includes(ticket.status))
+    .slice(0, 5);
   const projects = (projectsQuery.data || []).slice(0, 5);
 
   return (

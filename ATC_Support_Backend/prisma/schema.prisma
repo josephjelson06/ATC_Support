@@ -1,0 +1,327 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  PM
+  PL
+  SE
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum ClientStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum ProjectStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum AmcStatus {
+  ACTIVE
+  EXPIRED
+  CANCELLED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum TicketSource {
+  WIDGET
+}
+
+enum TicketStatus {
+  NEW
+  ASSIGNED
+  IN_PROGRESS
+  ESCALATED
+  RESOLVED
+}
+
+enum MessageType {
+  REPLY
+  INTERNAL_NOTE
+  SYSTEM
+}
+
+enum ChatSessionStatus {
+  ACTIVE
+  ENDED
+  ESCALATED
+}
+
+enum ChatRole {
+  USER
+  JULIA
+}
+
+enum KnowledgeStatus {
+  DRAFT
+  PUBLISHED
+}
+
+model User {
+  id               Int                 @id @default(autoincrement())
+  name             String
+  email            String              @unique
+  passwordHash     String
+  role             Role
+  status           UserStatus          @default(ACTIVE)
+  createdAt        DateTime            @default(now())
+  assignedProjects Project[]           @relation("ProjectLead")
+  assignedTickets  Ticket[]            @relation("TicketAssignee")
+  ticketMessages   TicketMessage[]
+  runbooks         Runbook[]           @relation("RunbookAuthor")
+  projectDocs      ProjectDoc[]        @relation("ProjectDocAuthor")
+  escalationEvents EscalationHistory[] @relation("EscalationActor")
+
+  @@index([role])
+  @@index([status])
+}
+
+model Client {
+  id         Int             @id @default(autoincrement())
+  name       String
+  industry   String?
+  address    String?
+  city       String?
+  phone      String?
+  email      String?
+  website    String?
+  notes      String?
+  status     ClientStatus    @default(ACTIVE)
+  createdAt  DateTime        @default(now())
+  contacts   ClientContact[]
+  consignees Consignee[]
+  amcs       Amc[]
+  projects   Project[]
+
+  @@index([status])
+}
+
+model ClientContact {
+  id          Int     @id @default(autoincrement())
+  clientId    Int
+  name        String
+  email       String?
+  phone       String?
+  designation String?
+  isPrimary   Boolean @default(false)
+  client      Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+}
+
+model Consignee {
+  id       Int                @id @default(autoincrement())
+  clientId Int
+  name     String
+  address  String
+  client   Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  contacts ConsigneeContact[]
+
+  @@index([clientId])
+}
+
+model ConsigneeContact {
+  id          Int       @id @default(autoincrement())
+  consigneeId Int
+  name        String
+  email       String?
+  phone       String?
+  designation String?
+  consignee   Consignee @relation(fields: [consigneeId], references: [id], onDelete: Cascade)
+
+  @@index([consigneeId])
+}
+
+model Amc {
+  id            Int       @id @default(autoincrement())
+  clientId      Int
+  projectId     Int?
+  hoursIncluded Int
+  hoursUsed     Int       @default(0)
+  startDate     DateTime  @db.Date
+  endDate       DateTime  @db.Date
+  status        AmcStatus @default(ACTIVE)
+  client        Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  project       Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([clientId])
+  @@index([projectId])
+  @@index([status])
+}
+
+model Project {
+  id                   Int           @id @default(autoincrement())
+  clientId             Int
+  assignedToId         Int?
+  name                 String
+  description          String?
+  widgetKey            String        @unique
+  widgetEnabled        Boolean       @default(true)
+  juliaGreeting        String?
+  juliaFallbackMessage String?
+  juliaEscalationHint  String?
+  status               ProjectStatus @default(ACTIVE)
+  createdAt            DateTime      @default(now())
+  client               Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  assignedTo           User?         @relation("ProjectLead", fields: [assignedToId], references: [id], onDelete: SetNull)
+  amcs                 Amc[]
+  tickets              Ticket[]
+  faqs                 Faq[]
+  docs                 ProjectDoc[]
+  chatSessions         ChatSession[]
+
+  @@index([clientId])
+  @@index([assignedToId])
+  @@index([status])
+}
+
+model Ticket {
+  id                Int                 @id @default(autoincrement())
+  projectId         Int
+  chatSessionId     Int?                @unique
+  title             String
+  description       String?
+  source            TicketSource        @default(WIDGET)
+  priority          TicketPriority      @default(MEDIUM)
+  status            TicketStatus        @default(NEW)
+  assignedToId      Int?
+  resolutionSummary String?
+  createdAt         DateTime            @default(now())
+  resolvedAt        DateTime?
+  project           Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  chatSession       ChatSession?        @relation(fields: [chatSessionId], references: [id], onDelete: SetNull)
+  assignedTo        User?               @relation("TicketAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  messages          TicketMessage[]
+  escalationHistory EscalationHistory[]
+
+  @@index([projectId])
+  @@index([assignedToId])
+  @@index([status])
+  @@index([priority])
+}
+
+model TicketMessage {
+  id        Int         @id @default(autoincrement())
+  ticketId  Int
+  userId    Int?
+  content   String
+  type      MessageType @default(REPLY)
+  createdAt DateTime    @default(now())
+  ticket    Ticket      @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  user      User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([ticketId])
+  @@index([userId])
+  @@index([type])
+}
+
+model ChatSession {
+  id          Int               @id @default(autoincrement())
+  projectId   Int
+  clientName  String
+  clientEmail String
+  status      ChatSessionStatus @default(ACTIVE)
+  createdAt   DateTime          @default(now())
+  endedAt     DateTime?
+  project     Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  messages    ChatMessage[]
+  ticket      Ticket?
+
+  @@index([projectId])
+  @@index([status])
+}
+
+model ChatMessage {
+  id            Int         @id @default(autoincrement())
+  chatSessionId Int
+  role          ChatRole
+  content       String
+  sourceRefs    Json?
+  createdAt     DateTime    @default(now())
+  chatSession   ChatSession @relation(fields: [chatSessionId], references: [id], onDelete: Cascade)
+
+  @@index([chatSessionId])
+  @@index([role])
+}
+
+model Faq {
+  id        Int      @id @default(autoincrement())
+  projectId Int
+  question  String
+  answer    String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+model Runbook {
+  id          Int             @id @default(autoincrement())
+  title       String
+  content     String
+  category    String?
+  status      KnowledgeStatus @default(PUBLISHED)
+  publishedAt DateTime?
+  createdById Int?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  createdBy   User?           @relation("RunbookAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([createdById])
+  @@index([category])
+  @@index([status])
+}
+
+model ProjectDoc {
+  id          Int             @id @default(autoincrement())
+  projectId   Int
+  title       String
+  content     String
+  status      KnowledgeStatus @default(PUBLISHED)
+  publishedAt DateTime?
+  createdById Int?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  project     Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy   User?           @relation("ProjectDocAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([projectId])
+  @@index([createdById])
+  @@index([status])
+}
+
+model EscalationHistory {
+  id             Int          @id @default(autoincrement())
+  ticketId       Int
+  createdById    Int?
+  fromStatus     TicketStatus
+  toStatus       TicketStatus
+  fromAssigneeId Int?
+  toAssigneeId   Int?
+  note           String?
+  createdAt      DateTime     @default(now())
+  ticket         Ticket       @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  createdBy      User?        @relation("EscalationActor", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([ticketId])
+  @@index([createdById])
+  @@index([createdAt])
+}

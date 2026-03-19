@@ -1,0 +1,110 @@
+Repository Info
+Repository
+Backend.zip
+Generated At
+19/03/2026, 11:27:19
+Format
+markdown
+Pack Summary
+Total Files
+40 files
+Total Tokens
+28,122 tokens
+Total Size
+115,521 chars
+Top 10 Files
+Backend/prisma/migrations/20260316000000_init/migration.sql
+2,945
+tokens
+|
+11,059
+chars
+|
+10.5
+%
+Backend/prisma/seed.ts
+2,563
+tokens
+|
+11,009
+chars
+|
+9.1
+%
+Backend/src/routes/tickets.ts
+1,722
+tokens
+|
+7,625
+chars
+|
+6.1
+%
+Backend/prisma/schema.prisma
+1,810
+tokens
+|
+6,927
+chars
+|
+6.4
+%
+Backend/src/routes/amcs.ts
+1,318
+tokens
+|
+5,430
+chars
+|
+4.7
+%
+Backend/src/routes/clients.ts
+1,191
+tokens
+|
+5,299
+chars
+|
+4.2
+%
+Backend/src/routes/widget.ts
+1,180
+tokens
+|
+4,968
+chars
+|
+4.2
+%
+Backend/src/routes/projects.ts
+1,113
+tokens
+|
+4,703
+chars
+|
+4.0
+%
+Backend/src/index.ts
+940
+tokens
+|
+4,014
+chars
+|
+3.3
+%
+Backend/src/routes/projectDocs.ts
+808
+tokens
+|
+3,308
+chars
+|
+2.9
+%
+Security Alert
+The following files were excluded because they may contain sensitive information:
+
+Backend/.env.example
+found PostgreSQL connection string: postgresql://postgres:postgres@localhost:5432/atc_support_backend?schema=public"

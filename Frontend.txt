@@ -1,0 +1,105 @@
+Repository Info
+Repository
+Frontend.zip
+Generated At
+19/03/2026, 11:26:18
+Format
+markdown
+Pack Summary
+Total Files
+62 files
+Total Tokens
+110,489 tokens
+Total Size
+446,663 chars
+Top 10 Files
+Frontend/src/components/widget/ChatWidget.tsx
+5,697
+tokens
+|
+26,285
+chars
+|
+5.2
+%
+Frontend/src/pages/settings/UserManagement.tsx
+4,342
+tokens
+|
+18,126
+chars
+|
+3.9
+%
+Frontend/src/pages/agent/ClientDetail.tsx
+4,056
+tokens
+|
+16,903
+chars
+|
+3.7
+%
+Frontend/src/pages/agent/TicketDetail.tsx
+4,050
+tokens
+|
+16,711
+chars
+|
+3.7
+%
+Frontend/src/pages/agent/ProjectDetail.tsx
+4,061
+tokens
+|
+16,652
+chars
+|
+3.7
+%
+Frontend/src/pages/analytics/KBAnalytics.tsx
+4,047
+tokens
+|
+16,081
+chars
+|
+3.7
+%
+Frontend/src/pages/kb/RunbookLibrary.tsx
+3,883
+tokens
+|
+15,782
+chars
+|
+3.5
+%
+Frontend/src/pages/analytics/AnalyticsOverview.tsx
+3,799
+tokens
+|
+15,340
+chars
+|
+3.4
+%
+Frontend/src/pages/analytics/EngineerPerformance.tsx
+3,711
+tokens
+|
+15,151
+chars
+|
+3.4
+%
+Frontend/src/pages/agent/TicketReport.tsx
+3,601
+tokens
+|
+14,740
+chars
+|
+3.3
+%

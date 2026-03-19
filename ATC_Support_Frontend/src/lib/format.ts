@@ -1,0 +1,106 @@
+import type { BackendRole, TicketPriority, TicketStatus } from './types';
+
+const relativeTimeFormatter = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+
+export const formatDateTime = (value?: string | null) => {
+  if (!value) {
+    return '—';
+  }
+
+  return new Date(value).toLocaleString();
+};
+
+export const formatDate = (value?: string | null) => {
+  if (!value) {
+    return '—';
+  }
+
+  return new Date(value).toLocaleDateString();
+};
+
+export const formatRelativeTime = (value?: string | null) => {
+  if (!value) {
+    return '—';
+  }
+
+  const target = new Date(value).getTime();
+  const diffMs = target - Date.now();
+  const absMs = Math.abs(diffMs);
+  const minute = 60_000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+
+  if (absMs < hour) {
+    return relativeTimeFormatter.format(Math.round(diffMs / minute), 'minute');
+  }
+
+  if (absMs < day) {
+    return relativeTimeFormatter.format(Math.round(diffMs / hour), 'hour');
+  }
+
+  return relativeTimeFormatter.format(Math.round(diffMs / day), 'day');
+};
+
+export const humanizeEnum = (value?: string | null) =>
+  (value || '')
+    .toLowerCase()
+    .split('_')
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(' ');
+
+export const formatRoleLabel = (role?: BackendRole | null) => {
+  switch (role) {
+    case 'PM':
+      return 'Project Manager';
+    case 'PL':
+      return 'Project Lead';
+    case 'SE':
+      return 'Support Engineer';
+    default:
+      return 'User';
+  }
+};
+
+export const getRoleDesignation = (role?: BackendRole | null) => {
+  switch (role) {
+    case 'PM':
+      return 'Project Manager';
+    case 'PL':
+      return 'Project Lead';
+    case 'SE':
+      return 'Support Engineer';
+    default:
+      return 'Internal User';
+  }
+};
+
+export const getTicketPriorityClasses = (priority?: TicketPriority | null) => {
+  switch (priority) {
+    case 'CRITICAL':
+      return 'bg-red-100 text-red-700';
+    case 'HIGH':
+      return 'bg-orange-100 text-orange-700';
+    case 'MEDIUM':
+      return 'bg-amber-100 text-amber-700';
+    case 'LOW':
+    default:
+      return 'bg-slate-100 text-slate-700';
+  }
+};
+
+export const getTicketStatusClasses = (status?: TicketStatus | null) => {
+  switch (status) {
+    case 'RESOLVED':
+      return 'bg-green-100 text-green-700';
+    case 'ESCALATED':
+      return 'bg-purple-100 text-purple-700';
+    case 'IN_PROGRESS':
+      return 'bg-blue-100 text-blue-700';
+    case 'ASSIGNED':
+      return 'bg-orange-100 text-orange-700';
+    case 'NEW':
+    default:
+      return 'bg-slate-100 text-slate-700';
+  }
+};

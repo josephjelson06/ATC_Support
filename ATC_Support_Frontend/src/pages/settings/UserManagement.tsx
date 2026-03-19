@@ -1,13 +1,14 @@
-import { useMemo, useState } from 'react';
+import { useDeferredValue, useEffect, useState } from 'react';
 import { Pencil, Plus, Search, Shield, Trash2, User as UserIcon } from 'lucide-react';
 
+import { PaginationControls } from '../../components/layout/PaginationControls';
 import { useModal } from '../../contexts/ModalContext';
 import { useRole } from '../../contexts/RoleContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useAsyncData } from '../../hooks/useAsyncData';
 import { apiFetch } from '../../lib/api';
 import { formatDateTime, formatRoleLabel } from '../../lib/format';
-import type { ApiUser, BackendRole, BackendUserStatus } from '../../lib/types';
+import type { ApiUser, BackendRole, BackendUserStatus, PaginatedResponse } from '../../lib/types';
 
 type UserFormPayload = {
   name: string;
@@ -17,6 +18,8 @@ type UserFormPayload = {
   password?: string;
 };
 
+const PAGE_SIZE = 10;
+
 export default function UserManagement() {
   const { openModal, closeModal } = useModal();
   const { showToast } = useToast();
@@ -24,18 +27,34 @@ export default function UserManagement() {
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<'ALL' | BackendRole>('ALL');
   const [statusFilter, setStatusFilter] = useState<'ALL' | BackendUserStatus>('ALL');
+  const [page, setPage] = useState(1);
+  const deferredSearch = useDeferredValue(search);
 
-  const usersQuery = useAsyncData(() => apiFetch<ApiUser[]>('/users'), []);
-  const canManageUsers = backendRole === 'PM';
+  useEffect(() => {
+    setPage(1);
+  }, [deferredSearch, roleFilter, statusFilter]);
 
-  const filteredUsers = useMemo(() => {
-    return (usersQuery.data || []).filter((user) => {
-      const matchesSearch = `${user.displayId} ${user.name} ${user.email}`.toLowerCase().includes(search.toLowerCase());
-      const matchesRole = roleFilter === 'ALL' || user.role === roleFilter;
-      const matchesStatus = statusFilter === 'ALL' || user.status === statusFilter;
-      return matchesSearch && matchesRole && matchesStatus;
+  const usersQuery = useAsyncData(async () => {
+    const searchParams = new URLSearchParams({
+      page: String(page),
+      pageSize: String(PAGE_SIZE),
     });
-  }, [roleFilter, search, statusFilter, usersQuery.data]);
+
+    if (deferredSearch.trim()) {
+      searchParams.set('search', deferredSearch.trim());
+    }
+
+    if (roleFilter !== 'ALL') {
+      searchParams.set('role', roleFilter);
+    }
+
+    if (statusFilter !== 'ALL') {
+      searchParams.set('status', statusFilter);
+    }
+
+    return apiFetch<PaginatedResponse<ApiUser>>(`/users?${searchParams.toString()}`);
+  }, [page, deferredSearch, roleFilter, statusFilter]);
+  const canManageUsers = backendRole === 'PM';
 
   const handleCreate = async (payload: UserFormPayload) => {
     await apiFetch<ApiUser>('/users', {
@@ -130,6 +149,8 @@ export default function UserManagement() {
     return <ErrorState message={usersQuery.error} onRetry={usersQuery.reload} />;
   }
 
+  const userPage = usersQuery.data!;
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -198,14 +219,14 @@ export default function UserManagement() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredUsers.length === 0 ? (
+              {userPage.items.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-6 py-12 text-center text-sm text-slate-500">
                     No users matched the current filters.
                   </td>
                 </tr>
               ) : (
-                filteredUsers.map((user) => (
+                userPage.items.map((user) => (
                   <tr key={user.id} className="hover:bg-slate-50">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
@@ -258,6 +279,14 @@ export default function UserManagement() {
             </tbody>
           </table>
         </div>
+        <PaginationControls
+          page={userPage.page}
+          totalPages={userPage.totalPages}
+          totalItems={userPage.total}
+          itemLabel="users"
+          pageSize={userPage.pageSize}
+          onPageChange={setPage}
+        />
       </div>
     </div>
   );

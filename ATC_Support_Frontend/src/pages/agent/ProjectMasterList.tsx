@@ -1,14 +1,17 @@
-import { useMemo, useState } from 'react';
+import { useDeferredValue, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Briefcase, KeyRound, Plus, Search, Ticket, UserRoundCog } from 'lucide-react';
 
 import { ProjectCrudPanel } from '../../components/entities/ProjectCrudPanel';
+import { PaginationControls } from '../../components/layout/PaginationControls';
 import { useModal } from '../../contexts/ModalContext';
 import { useRole } from '../../contexts/RoleContext';
 import { useAsyncData } from '../../hooks/useAsyncData';
 import { apiFetch } from '../../lib/api';
 import { formatDate, humanizeEnum } from '../../lib/format';
-import type { ApiProject, ApiTicket, ProjectStatus } from '../../lib/types';
+import type { ApiProject, ApiTicket, PaginatedResponse, ProjectStatus } from '../../lib/types';
+
+const PAGE_SIZE = 8;
 
 export default function ProjectMasterList() {
   const navigate = useNavigate();
@@ -16,29 +19,39 @@ export default function ProjectMasterList() {
   const { role, backendRole } = useRole();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | ProjectStatus>('ALL');
+  const [page, setPage] = useState(1);
+  const deferredSearch = useDeferredValue(searchQuery);
+
+  useEffect(() => {
+    setPage(1);
+  }, [deferredSearch, statusFilter]);
+
   const projectsQuery = useAsyncData(
     async () => {
-      const [projects, tickets] = await Promise.all([apiFetch<ApiProject[]>('/projects'), apiFetch<ApiTicket[]>('/tickets')]);
+      const searchParams = new URLSearchParams({
+        page: String(page),
+        pageSize: String(PAGE_SIZE),
+      });
+
+      if (deferredSearch.trim()) {
+        searchParams.set('search', deferredSearch.trim());
+      }
+
+      if (statusFilter !== 'ALL') {
+        searchParams.set('status', statusFilter);
+      }
+
+      const [projects, tickets] = await Promise.all([
+        apiFetch<PaginatedResponse<ApiProject>>(`/projects?${searchParams.toString()}`),
+        apiFetch<ApiTicket[]>('/tickets'),
+      ]);
 
       return { projects, tickets };
     },
-    [],
+    [page, deferredSearch, statusFilter],
   );
 
   const canManageProjects = backendRole === 'PM';
-
-  const filteredProjects = useMemo(() => {
-    const projects = projectsQuery.data?.projects || [];
-
-    return projects.filter((project) => {
-      const matchesStatus = statusFilter === 'ALL' || project.status === statusFilter;
-      const matchesSearch = `${project.displayId} ${project.name} ${project.client?.name || ''} ${project.assignedTo?.name || ''} ${project.widgetKey || ''}`
-        .toLowerCase()
-        .includes(searchQuery.toLowerCase());
-
-      return matchesStatus && matchesSearch;
-    });
-  }, [projectsQuery.data?.projects, searchQuery, statusFilter]);
 
   const openCreateModal = () => {
     openModal({
@@ -64,7 +77,8 @@ export default function ProjectMasterList() {
     return <ProjectsError message={projectsQuery.error || 'Unable to load projects.'} onRetry={projectsQuery.reload} />;
   }
 
-  const openTicketCountByProject = projectsQuery.data.tickets.reduce<Record<number, number>>((counts, ticket) => {
+  const { projects: projectPage, tickets } = projectsQuery.data;
+  const openTicketCountByProject = tickets.reduce<Record<number, number>>((counts, ticket) => {
     if (!ticket.projectId || ticket.status === 'RESOLVED') {
       return counts;
     }
@@ -73,16 +87,16 @@ export default function ProjectMasterList() {
     return counts;
   }, {});
 
-  const activeProjects = projectsQuery.data.projects.filter((project) => project.status === 'ACTIVE').length;
-  const widgetEnabledProjects = projectsQuery.data.projects.filter((project) => project.widgetEnabled).length;
-  const totalOpenTickets = Object.values(openTicketCountByProject).reduce((sum, value) => sum + value, 0);
+  const activeProjectsOnPage = projectPage.items.filter((project) => project.status === 'ACTIVE').length;
+  const widgetEnabledProjectsOnPage = projectPage.items.filter((project) => project.widgetEnabled).length;
+  const totalOpenTicketsOnPage = projectPage.items.reduce((sum, project) => sum + (openTicketCountByProject[project.id] || 0), 0);
 
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">{role === 'Project Manager' ? 'Projects' : 'Accessible Projects'}</h1>
-          <p className="mt-1 text-sm text-slate-500">Projects are loaded from the backend with live client, widget, and ticket metadata.</p>
+          <p className="mt-1 text-sm text-slate-500">Projects are server-filtered and paginated with live client, widget, and ticket metadata.</p>
         </div>
         <button
           onClick={openCreateModal}
@@ -101,10 +115,10 @@ export default function ProjectMasterList() {
       ) : null}
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
-        <ProjectStat icon={Briefcase} label="Projects" value={String(projectsQuery.data.projects.length)} accent="orange" />
-        <ProjectStat icon={Ticket} label="Open Tickets" value={String(totalOpenTickets)} accent="blue" />
-        <ProjectStat icon={UserRoundCog} label="Active Projects" value={String(activeProjects)} accent="green" />
-        <ProjectStat icon={KeyRound} label="Widget Enabled" value={String(widgetEnabledProjects)} accent="blue" />
+        <ProjectStat icon={Briefcase} label="Projects" value={String(projectPage.total)} accent="orange" />
+        <ProjectStat icon={Ticket} label="Open Tickets on Page" value={String(totalOpenTicketsOnPage)} accent="blue" />
+        <ProjectStat icon={UserRoundCog} label="Active on Page" value={String(activeProjectsOnPage)} accent="green" />
+        <ProjectStat icon={KeyRound} label="Widget Enabled on Page" value={String(widgetEnabledProjectsOnPage)} accent="blue" />
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr),220px]">
@@ -144,14 +158,14 @@ export default function ProjectMasterList() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredProjects.length === 0 ? (
+              {projectPage.items.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-6 py-12 text-center text-sm text-slate-500">
                     No projects matched that search.
                   </td>
                 </tr>
               ) : (
-                filteredProjects.map((project) => (
+                projectPage.items.map((project) => (
                   <tr key={project.id} className="transition-colors hover:bg-slate-50">
                     <td className="px-6 py-4">
                       <Link to={`/agent/projects/${project.id}`} className="block group">
@@ -191,6 +205,14 @@ export default function ProjectMasterList() {
             </tbody>
           </table>
         </div>
+        <PaginationControls
+          page={projectPage.page}
+          totalPages={projectPage.totalPages}
+          totalItems={projectPage.total}
+          itemLabel="projects"
+          pageSize={projectPage.pageSize}
+          onPageChange={setPage}
+        />
       </div>
     </div>
   );

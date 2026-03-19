@@ -29,6 +29,14 @@ export interface AuthMeResponse {
   user: ApiUser;
 }
 
+export interface PaginatedResponse<T> {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
 export interface ApiClient {
   id: number;
   displayId: string;

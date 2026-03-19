@@ -1,6 +1,7 @@
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { BookOpenText, Bot, Briefcase, Copy, FileQuestion, FileText, KeyRound, Pencil, Ticket, Users } from 'lucide-react';
+import { BookOpenText, Bot, Briefcase, Copy, FileQuestion, FileText, KeyRound, Pencil, Plus, Ticket, Users } from 'lucide-react';
 
+import { FaqCrudPanel } from '../../components/entities/FaqCrudPanel';
 import { ProjectCrudPanel } from '../../components/entities/ProjectCrudPanel';
 import { useModal } from '../../contexts/ModalContext';
 import { useRole } from '../../contexts/RoleContext';
@@ -54,6 +55,7 @@ export default function ProjectDetail() {
   const resolvedTickets = tickets.filter((ticket) => ticket.status === 'RESOLVED');
   const activeAmc = (client?.amcs || []).find((amc) => amc.projectId === project.id);
   const canManageProjects = backendRole === 'PM';
+  const canManageFaqs = backendRole === 'PM' || backendRole === 'PL';
 
   const copyEmbedCode = async () => {
     if (!project.embedCode) {
@@ -77,6 +79,42 @@ export default function ProjectDetail() {
           }}
           onDeleted={async () => {
             navigate('/agent/projects');
+          }}
+        />
+      ),
+    });
+  };
+
+  const openCreateFaqModal = () => {
+    openModal({
+      title: `Add FAQ to ${project.name}`,
+      size: 'lg',
+      content: (
+        <FaqCrudPanel
+          mode="create"
+          projectId={project.id}
+          onCompleted={async () => {
+            projectQuery.reload();
+          }}
+        />
+      ),
+    });
+  };
+
+  const openEditFaqModal = (faq: ApiFaq) => {
+    openModal({
+      title: 'Edit FAQ',
+      size: 'lg',
+      content: (
+        <FaqCrudPanel
+          mode="edit"
+          projectId={project.id}
+          faq={faq}
+          onCompleted={async () => {
+            projectQuery.reload();
+          }}
+          onDeleted={async () => {
+            projectQuery.reload();
           }}
         />
       ),
@@ -287,8 +325,17 @@ export default function ProjectDetail() {
           </section>
 
           <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-100 p-5">
+            <div className="flex items-center justify-between border-b border-slate-100 p-5">
               <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">FAQs</h2>
+              {canManageFaqs ? (
+                <button
+                  onClick={openCreateFaqModal}
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold uppercase tracking-wider text-slate-700 transition-colors hover:bg-slate-50"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Add FAQ
+                </button>
+              ) : null}
             </div>
             <div className="space-y-4 p-5">
               {faqs.length === 0 ? (
@@ -297,12 +344,25 @@ export default function ProjectDetail() {
                 faqs.map((faq) => (
                   <div key={faq.id} className="rounded-2xl border border-slate-100 p-4">
                     <div className="flex items-center justify-between gap-3">
-                      <p className="font-bold text-slate-900">{faq.question}</p>
-                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-slate-500">
-                        Order {faq.sortOrder}
-                      </span>
+                      <div className="min-w-0">
+                        <p className="font-bold text-slate-900">{faq.question}</p>
+                        <p className="mt-2 text-sm text-slate-500">{faq.answer}</p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                          Order {faq.sortOrder}
+                        </span>
+                        {canManageFaqs ? (
+                          <button
+                            onClick={() => openEditFaqModal(faq)}
+                            className="rounded-lg border border-slate-200 bg-white p-2 text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700"
+                            aria-label={`Edit FAQ ${faq.question}`}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
-                    <p className="mt-2 text-sm text-slate-500">{faq.answer}</p>
                   </div>
                 ))
               )}

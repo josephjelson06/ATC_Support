@@ -1,4 +1,4 @@
-import { MessageType, Role, TicketPriority, TicketStatus } from '@prisma/client';
+import { MessageType, Prisma, Role, TicketPriority, TicketStatus } from '@prisma/client';
 import { Router } from 'express';
 import { z } from 'zod';
 
@@ -9,6 +9,7 @@ import { validate } from '../middleware/validate';
 import { createWidgetTicket } from '../services/tickets';
 import { assertTicketAccess, ticketScopeForUser } from '../utils/access';
 import { asyncHandler, badRequest, forbidden, notFound, parseId } from '../utils/http';
+import { createPaginatedResponse, getPaginationOptions } from '../utils/pagination';
 import { serializeChatSession, serializeEscalationHistory, serializeTicket, serializeTicketMessage } from '../utils/serializers';
 
 const router = Router();
@@ -163,24 +164,50 @@ router.get(
   '/',
   asyncHandler(async (req, res) => {
     const search = String(req.query.search || '').trim();
+    const normalizedSearch = search.toUpperCase().replace(/\s+/g, '_');
+    const matchedStatus = Object.values(TicketStatus).find((value) => value === normalizedSearch);
+    const matchedPriority = Object.values(TicketPriority).find((value) => value === normalizedSearch);
     const status = req.query.status ? String(req.query.status) : undefined;
     const projectId = req.query.projectId ? Number(req.query.projectId) : undefined;
+    const pagination = getPaginationOptions(req.query as Record<string, unknown>);
+    const where: Prisma.TicketWhereInput = {
+      ...ticketScopeForUser(req.user!),
+      ...(status ? { status: status as TicketStatus } : {}),
+      ...(projectId ? { projectId } : {}),
+      ...(search
+        ? {
+            OR: [
+              { title: { contains: search, mode: Prisma.QueryMode.insensitive } },
+              { description: { contains: search, mode: Prisma.QueryMode.insensitive } },
+              { project: { name: { contains: search, mode: Prisma.QueryMode.insensitive } } },
+              { project: { client: { name: { contains: search, mode: Prisma.QueryMode.insensitive } } } },
+              ...(matchedStatus ? [{ status: matchedStatus }] : []),
+              ...(matchedPriority ? [{ priority: matchedPriority }] : []),
+            ],
+          }
+        : {}),
+    };
+
+    if (pagination) {
+      const [tickets, total] = await prisma.$transaction([
+        prisma.ticket.findMany({
+          where,
+          include: listInclude,
+          orderBy: {
+            createdAt: 'desc',
+          },
+          skip: pagination.skip,
+          take: pagination.take,
+        }),
+        prisma.ticket.count({ where }),
+      ]);
+
+      res.json(createPaginatedResponse(tickets.map((ticket) => serializeTicket(ticket)), total, pagination));
+      return;
+    }
+
     const tickets = await prisma.ticket.findMany({
-      where: {
-        ...ticketScopeForUser(req.user!),
-        ...(status ? { status: status as TicketStatus } : {}),
-        ...(projectId ? { projectId } : {}),
-        ...(search
-          ? {
-              OR: [
-                { title: { contains: search, mode: 'insensitive' } },
-                { description: { contains: search, mode: 'insensitive' } },
-                { project: { name: { contains: search, mode: 'insensitive' } } },
-                { project: { client: { name: { contains: search, mode: 'insensitive' } } } },
-              ],
-            }
-          : {}),
-      },
+      where,
       include: listInclude,
       orderBy: {
         createdAt: 'desc',

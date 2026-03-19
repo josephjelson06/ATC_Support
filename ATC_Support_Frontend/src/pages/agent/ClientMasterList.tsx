@@ -1,14 +1,17 @@
-import { useMemo, useState } from 'react';
+import { useDeferredValue, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Briefcase, Building2, Plus, Search, ShieldCheck, Ticket } from 'lucide-react';
 
 import { ClientCrudPanel } from '../../components/entities/ClientCrudPanel';
+import { PaginationControls } from '../../components/layout/PaginationControls';
 import { useModal } from '../../contexts/ModalContext';
 import { useRole } from '../../contexts/RoleContext';
 import { useAsyncData } from '../../hooks/useAsyncData';
 import { apiFetch } from '../../lib/api';
 import { formatDate, humanizeEnum } from '../../lib/format';
-import type { ApiClient, ApiTicket, ClientStatus } from '../../lib/types';
+import type { ApiClient, ApiTicket, ClientStatus, PaginatedResponse } from '../../lib/types';
+
+const PAGE_SIZE = 8;
 
 export default function ClientMasterList() {
   const navigate = useNavigate();
@@ -16,29 +19,39 @@ export default function ClientMasterList() {
   const { backendRole } = useRole();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | ClientStatus>('ALL');
+  const [page, setPage] = useState(1);
+  const deferredSearch = useDeferredValue(searchQuery);
+
+  useEffect(() => {
+    setPage(1);
+  }, [deferredSearch, statusFilter]);
+
   const clientsQuery = useAsyncData(
     async () => {
-      const [clients, tickets] = await Promise.all([apiFetch<ApiClient[]>('/clients'), apiFetch<ApiTicket[]>('/tickets')]);
+      const searchParams = new URLSearchParams({
+        page: String(page),
+        pageSize: String(PAGE_SIZE),
+      });
+
+      if (deferredSearch.trim()) {
+        searchParams.set('search', deferredSearch.trim());
+      }
+
+      if (statusFilter !== 'ALL') {
+        searchParams.set('status', statusFilter);
+      }
+
+      const [clients, tickets] = await Promise.all([
+        apiFetch<PaginatedResponse<ApiClient>>(`/clients?${searchParams.toString()}`),
+        apiFetch<ApiTicket[]>('/tickets'),
+      ]);
 
       return { clients, tickets };
     },
-    [],
+    [page, deferredSearch, statusFilter],
   );
 
   const canManageClients = backendRole === 'PM';
-
-  const filteredClients = useMemo(() => {
-    const clients = clientsQuery.data?.clients || [];
-
-    return clients.filter((client) => {
-      const matchesStatus = statusFilter === 'ALL' || client.status === statusFilter;
-      const matchesSearch = `${client.displayId} ${client.name} ${client.industry || ''} ${client.city || ''} ${client.email || ''} ${client.phone || ''}`
-        .toLowerCase()
-        .includes(searchQuery.toLowerCase());
-
-      return matchesStatus && matchesSearch;
-    });
-  }, [clientsQuery.data?.clients, searchQuery, statusFilter]);
 
   const openCreateModal = () => {
     openModal({
@@ -64,7 +77,8 @@ export default function ClientMasterList() {
     return <ClientsError message={clientsQuery.error || 'Unable to load clients.'} onRetry={clientsQuery.reload} />;
   }
 
-  const openTicketCountByClient = clientsQuery.data.tickets.reduce<Record<number, number>>((counts, ticket) => {
+  const { clients: clientPage, tickets } = clientsQuery.data;
+  const openTicketCountByClient = tickets.reduce<Record<number, number>>((counts, ticket) => {
     const clientId = ticket.project?.client?.id;
 
     if (!clientId || ticket.status === 'RESOLVED') {
@@ -75,16 +89,16 @@ export default function ClientMasterList() {
     return counts;
   }, {});
 
-  const totalProjects = clientsQuery.data.clients.reduce((sum, client) => sum + (client._count?.projects || 0), 0);
-  const totalAmcs = clientsQuery.data.clients.reduce((sum, client) => sum + (client._count?.amcs || 0), 0);
-  const totalOpenTickets = Object.values(openTicketCountByClient).reduce((sum, value) => sum + value, 0);
+  const totalProjectsOnPage = clientPage.items.reduce((sum, client) => sum + (client._count?.projects || 0), 0);
+  const totalAmcsOnPage = clientPage.items.reduce((sum, client) => sum + (client._count?.amcs || 0), 0);
+  const totalOpenTicketsOnPage = clientPage.items.reduce((sum, client) => sum + (openTicketCountByClient[client.id] || 0), 0);
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Clients</h1>
-          <p className="mt-1 text-sm text-slate-500">Live client data from the backend, including business metadata and ticket activity.</p>
+          <p className="mt-1 text-sm text-slate-500">Server-filtered client data with pagination, business metadata, and ticket context.</p>
         </div>
         <button
           onClick={openCreateModal}
@@ -103,10 +117,10 @@ export default function ClientMasterList() {
       ) : null}
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
-        <SummaryCard icon={Building2} label="Clients" value={String(clientsQuery.data.clients.length)} accent="blue" />
-        <SummaryCard icon={Briefcase} label="Projects" value={String(totalProjects)} accent="orange" />
-        <SummaryCard icon={ShieldCheck} label="AMCs" value={String(totalAmcs)} accent="green" />
-        <SummaryCard icon={Ticket} label="Open Tickets" value={String(totalOpenTickets)} accent="orange" />
+        <SummaryCard icon={Building2} label="Clients" value={String(clientPage.total)} accent="blue" />
+        <SummaryCard icon={Briefcase} label="Projects on Page" value={String(totalProjectsOnPage)} accent="orange" />
+        <SummaryCard icon={ShieldCheck} label="AMCs on Page" value={String(totalAmcsOnPage)} accent="green" />
+        <SummaryCard icon={Ticket} label="Open Tickets on Page" value={String(totalOpenTicketsOnPage)} accent="orange" />
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr),220px]">
@@ -148,14 +162,14 @@ export default function ClientMasterList() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredClients.length === 0 ? (
+              {clientPage.items.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="px-6 py-12 text-center text-sm text-slate-500">
                     No clients matched that search.
                   </td>
                 </tr>
               ) : (
-                filteredClients.map((client) => (
+                clientPage.items.map((client) => (
                   <tr key={client.id} className="transition-colors hover:bg-slate-50">
                     <td className="px-6 py-4">
                       <Link to={`/agent/clients/${client.id}`} className="group flex items-center gap-3">
@@ -194,6 +208,14 @@ export default function ClientMasterList() {
             </tbody>
           </table>
         </div>
+        <PaginationControls
+          page={clientPage.page}
+          totalPages={clientPage.totalPages}
+          totalItems={clientPage.total}
+          itemLabel="clients"
+          pageSize={clientPage.pageSize}
+          onPageChange={setPage}
+        />
       </div>
     </div>
   );

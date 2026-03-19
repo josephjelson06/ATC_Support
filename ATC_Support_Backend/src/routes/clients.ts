@@ -1,4 +1,4 @@
-import { ClientStatus, Role } from '@prisma/client';
+import { ClientStatus, Prisma, Role } from '@prisma/client';
 import { Router } from 'express';
 import { z } from 'zod';
 
@@ -6,6 +6,7 @@ import { prisma } from '../lib/prisma';
 import { requireRole } from '../middleware/role';
 import { validate } from '../middleware/validate';
 import { asyncHandler, conflict, parseId, notFound } from '../utils/http';
+import { createPaginatedResponse, getPaginationOptions } from '../utils/pagination';
 import { serializeAmc, serializeClient, serializeProject } from '../utils/serializers';
 
 const router = Router();
@@ -31,41 +32,63 @@ router.get(
   asyncHandler(async (req, res) => {
     const search = String(req.query.search || '').trim();
     const status = req.query.status ? String(req.query.status) : undefined;
-    const clients = await prisma.client.findMany({
-      where: {
-        ...(status ? { status: status as ClientStatus } : {}),
-        ...(search
-          ? {
-              OR: [
-                { name: { contains: search, mode: 'insensitive' } },
-                { industry: { contains: search, mode: 'insensitive' } },
-                { city: { contains: search, mode: 'insensitive' } },
-                { email: { contains: search, mode: 'insensitive' } },
-              ],
-            }
-          : {}),
-      },
-      select: {
-        id: true,
-        name: true,
-        industry: true,
-        address: true,
-        city: true,
-        phone: true,
-        email: true,
-        website: true,
-        notes: true,
-        status: true,
-        createdAt: true,
-        _count: {
-          select: {
-            contacts: true,
-            consignees: true,
-            projects: true,
-            amcs: true,
-          },
+    const pagination = getPaginationOptions(req.query as Record<string, unknown>);
+    const where: Prisma.ClientWhereInput = {
+      ...(status ? { status: status as ClientStatus } : {}),
+      ...(search
+        ? {
+            OR: [
+              { name: { contains: search, mode: Prisma.QueryMode.insensitive } },
+              { industry: { contains: search, mode: Prisma.QueryMode.insensitive } },
+              { city: { contains: search, mode: Prisma.QueryMode.insensitive } },
+              { email: { contains: search, mode: Prisma.QueryMode.insensitive } },
+            ],
+          }
+        : {}),
+    };
+    const select = {
+      id: true,
+      name: true,
+      industry: true,
+      address: true,
+      city: true,
+      phone: true,
+      email: true,
+      website: true,
+      notes: true,
+      status: true,
+      createdAt: true,
+      _count: {
+        select: {
+          contacts: true,
+          consignees: true,
+          projects: true,
+          amcs: true,
         },
       },
+    } as const;
+
+    if (pagination) {
+      const [clients, total] = await prisma.$transaction([
+        prisma.client.findMany({
+          where,
+          select,
+          orderBy: {
+            id: 'asc',
+          },
+          skip: pagination.skip,
+          take: pagination.take,
+        }),
+        prisma.client.count({ where }),
+      ]);
+
+      res.json(createPaginatedResponse(clients.map((client) => serializeClient(client)), total, pagination));
+      return;
+    }
+
+    const clients = await prisma.client.findMany({
+      where,
+      select,
       orderBy: {
         id: 'asc',
       },

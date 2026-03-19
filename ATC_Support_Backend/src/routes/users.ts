@@ -1,5 +1,5 @@
 import bcrypt from 'bcrypt';
-import { Role, UserStatus } from '@prisma/client';
+import { Prisma, Role, UserStatus } from '@prisma/client';
 import { Router } from 'express';
 import { z } from 'zod';
 
@@ -7,6 +7,7 @@ import { prisma } from '../lib/prisma';
 import { requireRole } from '../middleware/role';
 import { validate } from '../middleware/validate';
 import { asyncHandler, parseId } from '../utils/http';
+import { createPaginatedResponse, getPaginationOptions } from '../utils/pagination';
 import { serializeUser } from '../utils/serializers';
 
 const router = Router();
@@ -46,19 +47,40 @@ router.get(
     const search = String(req.query.search || '').trim();
     const role = req.query.role ? String(req.query.role) : undefined;
     const status = req.query.status ? String(req.query.status) : undefined;
+    const pagination = getPaginationOptions(req.query as Record<string, unknown>);
+    const where: Prisma.UserWhereInput = {
+      ...(role ? { role: role as Role } : {}),
+      ...(status ? { status: status as UserStatus } : {}),
+      ...(search
+        ? {
+            OR: [
+              { name: { contains: search, mode: Prisma.QueryMode.insensitive } },
+              { email: { contains: search, mode: Prisma.QueryMode.insensitive } },
+            ],
+          }
+        : {}),
+    };
+
+    if (pagination) {
+      const [users, total] = await prisma.$transaction([
+        prisma.user.findMany({
+          where,
+          select: userSelect,
+          orderBy: {
+            id: 'asc',
+          },
+          skip: pagination.skip,
+          take: pagination.take,
+        }),
+        prisma.user.count({ where }),
+      ]);
+
+      res.json(createPaginatedResponse(users.map((user) => serializeUser(user)), total, pagination));
+      return;
+    }
+
     const users = await prisma.user.findMany({
-      where: {
-        ...(role ? { role: role as Role } : {}),
-        ...(status ? { status: status as UserStatus } : {}),
-        ...(search
-          ? {
-              OR: [
-                { name: { contains: search, mode: 'insensitive' } },
-                { email: { contains: search, mode: 'insensitive' } },
-              ],
-            }
-          : {}),
-      },
+      where,
       select: userSelect,
       orderBy: {
         id: 'asc',

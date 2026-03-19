@@ -1,4 +1,4 @@
-import { ProjectStatus, Role } from '@prisma/client';
+import { Prisma, ProjectStatus, Role } from '@prisma/client';
 import { Router } from 'express';
 import { z } from 'zod';
 
@@ -7,6 +7,7 @@ import { requireRole } from '../middleware/role';
 import { validate } from '../middleware/validate';
 import { assertProjectAccess, projectScopeForUser } from '../utils/access';
 import { asyncHandler, badRequest, conflict, parseId, notFound } from '../utils/http';
+import { createPaginatedResponse, getPaginationOptions } from '../utils/pagination';
 import { serializeProject } from '../utils/serializers';
 import { generateWidgetKey } from '../utils/widgetKey';
 
@@ -68,21 +69,42 @@ router.get(
     const search = String(req.query.search || '').trim();
     const status = req.query.status ? String(req.query.status) : undefined;
     const clientId = req.query.clientId ? Number(req.query.clientId) : undefined;
+    const pagination = getPaginationOptions(req.query as Record<string, unknown>);
+    const where: Prisma.ProjectWhereInput = {
+      ...projectScopeForUser(req.user!),
+      ...(status ? { status: status as ProjectStatus } : {}),
+      ...(clientId ? { clientId } : {}),
+      ...(search
+        ? {
+            OR: [
+              { name: { contains: search, mode: Prisma.QueryMode.insensitive } },
+              { description: { contains: search, mode: Prisma.QueryMode.insensitive } },
+              { client: { name: { contains: search, mode: Prisma.QueryMode.insensitive } } },
+            ],
+          }
+        : {}),
+    };
+
+    if (pagination) {
+      const [projects, total] = await prisma.$transaction([
+        prisma.project.findMany({
+          where,
+          include: projectInclude,
+          orderBy: {
+            id: 'asc',
+          },
+          skip: pagination.skip,
+          take: pagination.take,
+        }),
+        prisma.project.count({ where }),
+      ]);
+
+      res.json(createPaginatedResponse(projects.map((project) => serializeProject(project)), total, pagination));
+      return;
+    }
+
     const projects = await prisma.project.findMany({
-      where: {
-        ...projectScopeForUser(req.user!),
-        ...(status ? { status: status as ProjectStatus } : {}),
-        ...(clientId ? { clientId } : {}),
-        ...(search
-          ? {
-              OR: [
-                { name: { contains: search, mode: 'insensitive' } },
-                { description: { contains: search, mode: 'insensitive' } },
-                { client: { name: { contains: search, mode: 'insensitive' } } },
-              ],
-            }
-          : {}),
-      },
+      where,
       include: projectInclude,
       orderBy: {
         id: 'asc',

@@ -1,39 +1,61 @@
-import { useMemo, useState } from 'react';
-import { AlertTriangle, ArrowRight, Clock3, Search, UserPlus, X } from 'lucide-react';
+import { useDeferredValue, useEffect, useState } from 'react';
+import { AlertTriangle, ArrowRight, Search, UserPlus, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { clsx } from 'clsx';
 
+import { PaginationControls } from '../../components/layout/PaginationControls';
+import { useRole } from '../../contexts/RoleContext';
+import { useToast } from '../../contexts/ToastContext';
 import { useAsyncData } from '../../hooks/useAsyncData';
 import { apiFetch, getErrorMessage } from '../../lib/api';
 import { formatRelativeTime, getTicketPriorityClasses, getTicketStatusClasses, humanizeEnum } from '../../lib/format';
-import type { ApiTicket } from '../../lib/types';
-import { useRole } from '../../contexts/RoleContext';
-import { useToast } from '../../contexts/ToastContext';
+import type { ApiTicket, PaginatedResponse, TicketStatus } from '../../lib/types';
+
+const PAGE_SIZE = 10;
 
 export default function InboundQueue() {
   const { role, user } = useRole();
   const { showToast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | TicketStatus>('ALL');
+  const [page, setPage] = useState(1);
   const [selectedTicketId, setSelectedTicketId] = useState<number | null>(null);
   const [isAssigning, setIsAssigning] = useState(false);
-  const ticketsQuery = useAsyncData(() => apiFetch<ApiTicket[]>('/tickets'), []);
+  const deferredSearch = useDeferredValue(searchQuery);
 
-  const filteredTickets = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
+  useEffect(() => {
+    setPage(1);
+  }, [deferredSearch, statusFilter]);
 
-    if (!query) {
-      return ticketsQuery.data || [];
+  const ticketsQuery = useAsyncData(async () => {
+    const searchParams = new URLSearchParams({
+      page: String(page),
+      pageSize: String(PAGE_SIZE),
+    });
+
+    if (deferredSearch.trim()) {
+      searchParams.set('search', deferredSearch.trim());
     }
 
-    return (ticketsQuery.data || []).filter((ticket) =>
-      [ticket.displayId, ticket.title, ticket.project?.name, ticket.project?.client?.name, ticket.status, ticket.priority]
-        .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(query)),
-    );
-  }, [searchQuery, ticketsQuery.data]);
+    if (statusFilter !== 'ALL') {
+      searchParams.set('status', statusFilter);
+    }
 
-  const selectedTicket = filteredTickets.find((ticket) => ticket.id === selectedTicketId) || (ticketsQuery.data || []).find((ticket) => ticket.id === selectedTicketId) || null;
+    return apiFetch<PaginatedResponse<ApiTicket>>(`/tickets?${searchParams.toString()}`);
+  }, [page, deferredSearch, statusFilter]);
+
+  useEffect(() => {
+    if (!selectedTicketId || !ticketsQuery.data) {
+      return;
+    }
+
+    const isSelectedVisible = ticketsQuery.data.items.some((ticket) => ticket.id === selectedTicketId);
+
+    if (!isSelectedVisible) {
+      setSelectedTicketId(null);
+    }
+  }, [selectedTicketId, ticketsQuery.data]);
 
   const handleAssignToMe = async (ticketId: number) => {
     if (!user || role === 'Project Manager') {
@@ -63,84 +85,101 @@ export default function InboundQueue() {
     return <QueueSkeleton />;
   }
 
-  if (ticketsQuery.error) {
-    return <QueueError message={ticketsQuery.error} onRetry={ticketsQuery.reload} />;
+  if (ticketsQuery.error || !ticketsQuery.data) {
+    return <QueueError message={ticketsQuery.error || 'Unable to load the inbound queue.'} onRetry={ticketsQuery.reload} />;
   }
 
+  const ticketPage = ticketsQuery.data;
+  const visibleTickets = ticketPage.items;
+  const selectedTicket = visibleTickets.find((ticket) => ticket.id === selectedTicketId) || null;
+  const unassignedVisibleTickets = visibleTickets.filter((ticket) => !ticket.assignedTo && ticket.status !== 'RESOLVED').length;
+  const resolvedVisibleTickets = visibleTickets.filter((ticket) => ticket.status === 'RESOLVED').length;
+
   return (
-    <div className="relative h-[calc(100vh-64px)] overflow-hidden flex flex-col">
-      <div className="p-6 space-y-6 flex-1 overflow-y-auto">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+    <div className="relative flex h-[calc(100vh-64px)] flex-col overflow-hidden">
+      <div className="flex-1 space-y-6 overflow-y-auto p-6">
+        <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
           <div>
             <h1 className="text-2xl font-bold text-slate-900">Inbound Queue</h1>
-            <p className="text-sm text-slate-500 mt-1">Live ticket queue from the ATC Support backend.</p>
+            <p className="mt-1 text-sm text-slate-500">Live ticket queue from the ATC Support backend.</p>
           </div>
-          <div className="px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800 flex items-start gap-3 max-w-xl">
-            <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
+          <div className="flex max-w-xl items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
             <p>Tickets are created only through widget escalation. Manual internal ticket creation stays disabled.</p>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <SummaryCard label="Visible Tickets" value={String(ticketsQuery.data?.length ?? 0)} />
-          <SummaryCard label="Unassigned" value={String((ticketsQuery.data || []).filter((ticket) => !ticket.assignedTo && ticket.status !== 'RESOLVED').length)} />
-          <SummaryCard label="Resolved" value={String((ticketsQuery.data || []).filter((ticket) => ticket.status === 'RESOLVED').length)} />
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <SummaryCard label="Total Tickets" value={String(ticketPage.total)} />
+          <SummaryCard label="Unassigned on Page" value={String(unassignedVisibleTickets)} />
+          <SummaryCard label="Resolved on Page" value={String(resolvedVisibleTickets)} />
         </div>
 
-        <div className="relative max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="Search by ticket, client, project, status..."
-            className="w-full pl-9 pr-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 outline-none transition-all"
-          />
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr),220px]">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Search by title, client, project, or description..."
+              className="w-full rounded-lg border border-slate-200 bg-white py-2.5 pl-9 pr-4 text-sm outline-none transition-all focus:ring-2 focus:ring-orange-500"
+            />
+          </div>
+          <select
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value as 'ALL' | TicketStatus)}
+            className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 outline-none transition-all focus:ring-2 focus:ring-orange-500"
+          >
+            <option value="ALL">All Statuses</option>
+            <option value="NEW">New</option>
+            <option value="ASSIGNED">Assigned</option>
+            <option value="IN_PROGRESS">In Progress</option>
+            <option value="ESCALATED">Escalated</option>
+            <option value="RESOLVED">Resolved</option>
+          </select>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           <table className="w-full text-left">
-            <thead className="bg-slate-50 border-b border-slate-200">
+            <thead className="border-b border-slate-200 bg-slate-50">
               <tr>
                 {['Ticket', 'Client', 'Project', 'Priority', 'Status', 'Assigned To', 'Created'].map((heading) => (
-                  <th key={heading} className="px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  <th key={heading} className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-500">
                     {heading}
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredTickets.length === 0 ? (
+              {visibleTickets.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-500">
-                    No tickets match your current search.
+                    No tickets match your current filters.
                   </td>
                 </tr>
               ) : (
-                filteredTickets.map((ticket) => (
+                visibleTickets.map((ticket) => (
                   <tr
                     key={ticket.id}
                     onClick={() => setSelectedTicketId(ticket.id)}
-                    className={clsx(
-                      'hover:bg-slate-50 transition-colors cursor-pointer',
-                      selectedTicketId === ticket.id && 'bg-orange-50/60',
-                    )}
+                    className={clsx('cursor-pointer transition-colors hover:bg-slate-50', selectedTicketId === ticket.id && 'bg-orange-50/60')}
                   >
                     <td className="px-4 py-4">
                       <div>
                         <p className="font-bold text-slate-900">{ticket.title}</p>
-                        <p className="text-xs text-orange-600 font-mono mt-1">{ticket.displayId}</p>
+                        <p className="mt-1 font-mono text-xs text-orange-600">{ticket.displayId}</p>
                       </div>
                     </td>
-                    <td className="px-4 py-4 text-sm text-slate-700">{ticket.project?.client?.name || '—'}</td>
-                    <td className="px-4 py-4 text-sm text-slate-500">{ticket.project?.name || '—'}</td>
+                    <td className="px-4 py-4 text-sm text-slate-700">{ticket.project?.client?.name || '-'}</td>
+                    <td className="px-4 py-4 text-sm text-slate-500">{ticket.project?.name || '-'}</td>
                     <td className="px-4 py-4">
-                      <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${getTicketPriorityClasses(ticket.priority)}`}>
+                      <span className={`rounded px-2 py-1 text-[10px] font-bold uppercase ${getTicketPriorityClasses(ticket.priority)}`}>
                         {humanizeEnum(ticket.priority)}
                       </span>
                     </td>
                     <td className="px-4 py-4">
-                      <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${getTicketStatusClasses(ticket.status)}`}>
+                      <span className={`rounded px-2 py-1 text-[10px] font-bold uppercase ${getTicketStatusClasses(ticket.status)}`}>
                         {humanizeEnum(ticket.status)}
                       </span>
                     </td>
@@ -151,82 +190,87 @@ export default function InboundQueue() {
               )}
             </tbody>
           </table>
+          <PaginationControls
+            page={ticketPage.page}
+            totalPages={ticketPage.totalPages}
+            totalItems={ticketPage.total}
+            itemLabel="tickets"
+            pageSize={ticketPage.pageSize}
+            onPageChange={setPage}
+          />
         </div>
       </div>
 
       <AnimatePresence>
-        {selectedTicket && (
+        {selectedTicket ? (
           <>
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setSelectedTicketId(null)}
-              className="absolute inset-0 bg-black/20 backdrop-blur-[1px] z-40"
+              className="absolute inset-0 z-40 bg-black/20 backdrop-blur-[1px]"
             />
             <motion.div
               initial={{ x: '100%' }}
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-              className="absolute top-0 right-0 w-[500px] h-full bg-white shadow-2xl z-50 flex flex-col border-l border-slate-200"
+              className="absolute right-0 top-0 z-50 flex h-full w-[500px] flex-col border-l border-slate-200 bg-white shadow-2xl"
             >
-              <div className="p-6 border-b border-slate-100 flex items-start justify-between bg-slate-50/50">
+              <div className="flex items-start justify-between border-b border-slate-100 bg-slate-50/50 p-6">
                 <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-xs font-bold text-orange-600 uppercase tracking-wider">{selectedTicket.displayId}</span>
-                    <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${getTicketPriorityClasses(selectedTicket.priority)}`}>
+                  <div className="mb-2 flex items-center gap-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-orange-600">{selectedTicket.displayId}</span>
+                    <span className={`rounded px-2 py-1 text-[10px] font-bold uppercase ${getTicketPriorityClasses(selectedTicket.priority)}`}>
                       {humanizeEnum(selectedTicket.priority)}
                     </span>
                   </div>
                   <h2 className="text-lg font-bold text-slate-900">{selectedTicket.title}</h2>
                 </div>
-                <button onClick={() => setSelectedTicketId(null)} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
-                  <X className="w-5 h-5 text-slate-500" />
+                <button onClick={() => setSelectedTicketId(null)} className="rounded-full p-2 transition-colors hover:bg-slate-200">
+                  <X className="h-5 w-5 text-slate-500" />
                 </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              <div className="flex-1 space-y-6 overflow-y-auto p-6">
                 <section>
-                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Description</h3>
-                  <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap">
+                  <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">Description</h3>
+                  <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-600">
                     {selectedTicket.description || 'No description provided.'}
                   </p>
                 </section>
 
                 <section className="grid grid-cols-2 gap-4">
-                  <DetailStat label="Client" value={selectedTicket.project?.client?.name || '—'} />
-                  <DetailStat label="Project" value={selectedTicket.project?.name || '—'} />
+                  <DetailStat label="Client" value={selectedTicket.project?.client?.name || '-'} />
+                  <DetailStat label="Project" value={selectedTicket.project?.name || '-'} />
                   <DetailStat label="Status" value={humanizeEnum(selectedTicket.status)} />
                   <DetailStat label="Assigned To" value={selectedTicket.assignedTo?.name || 'Unassigned'} />
                 </section>
 
-                {selectedTicket.chatSessionId && <DetailStat label="Chat Session" value={`#${selectedTicket.chatSessionId}`} />}
+                {selectedTicket.chatSessionId ? <DetailStat label="Chat Session" value={`#${selectedTicket.chatSessionId}`} /> : null}
               </div>
 
-              <div className="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between gap-3">
-                <Link
-                  to={`/agent/ticket/${selectedTicket.id}`}
-                  className="flex items-center gap-2 text-sm font-bold text-orange-600 hover:underline"
-                >
+              <div className="flex items-center justify-between gap-3 border-t border-slate-100 bg-slate-50 p-4">
+                <Link to={`/agent/ticket/${selectedTicket.id}`} className="flex items-center gap-2 text-sm font-bold text-orange-600 hover:underline">
                   Open full detail
-                  <ArrowRight className="w-4 h-4" />
+                  <ArrowRight className="h-4 w-4" />
                 </Link>
 
-                {role !== 'Project Manager' && (
+                {role !== 'Project Manager' ? (
                   <button
                     onClick={() => void handleAssignToMe(selectedTicket.id)}
                     disabled={isAssigning}
-                    className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-bold hover:bg-orange-700 transition-colors disabled:opacity-60"
+                    className="flex items-center gap-2 rounded-lg bg-orange-600 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-orange-700 disabled:opacity-60"
                   >
-                    <UserPlus className="w-4 h-4" />
+                    <UserPlus className="h-4 w-4" />
                     Assign to me
                   </button>
-                )}
+                ) : null}
               </div>
             </motion.div>
           </>
-        )}
+        ) : null}
       </AnimatePresence>
     </div>
   );
@@ -234,33 +278,36 @@ export default function InboundQueue() {
 
 function SummaryCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
+    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{label}</p>
-      <p className="text-3xl font-black text-slate-900 mt-2">{value}</p>
+      <p className="mt-2 text-3xl font-black text-slate-900">{value}</p>
     </div>
   );
 }
 
 function DetailStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl">
+    <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
       <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</p>
-      <p className="text-sm font-semibold text-slate-900 mt-1">{value}</p>
+      <p className="mt-1 text-sm font-semibold text-slate-900">{value}</p>
     </div>
   );
 }
 
 function QueueSkeleton() {
   return (
-    <div className="p-6 space-y-6 animate-pulse">
-      <div className="h-8 w-56 bg-slate-200 rounded-xl" />
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div className="space-y-6 p-6 animate-pulse">
+      <div className="h-8 w-56 rounded-xl bg-slate-200" />
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         {Array.from({ length: 3 }).map((_, index) => (
-          <div key={index} className="h-24 bg-white border border-slate-200 rounded-xl shadow-sm" />
+          <div key={index} className="h-24 rounded-xl border border-slate-200 bg-white shadow-sm" />
         ))}
       </div>
-      <div className="h-12 w-full max-w-md bg-slate-200 rounded-xl" />
-      <div className="h-[480px] bg-white border border-slate-200 rounded-xl shadow-sm" />
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr),220px]">
+        <div className="h-12 rounded-xl bg-slate-200" />
+        <div className="h-12 rounded-xl bg-slate-200" />
+      </div>
+      <div className="h-[480px] rounded-xl border border-slate-200 bg-white shadow-sm" />
     </div>
   );
 }
@@ -268,10 +315,10 @@ function QueueSkeleton() {
 function QueueError({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
     <div className="p-6">
-      <div className="bg-white border border-red-200 rounded-2xl shadow-sm p-6 text-center">
+      <div className="rounded-2xl border border-red-200 bg-white p-6 text-center shadow-sm">
         <h1 className="text-xl font-bold text-slate-900">Queue unavailable</h1>
-        <p className="text-sm text-slate-500 mt-2">{message}</p>
-        <button onClick={onRetry} className="mt-4 px-4 py-2 bg-orange-600 text-white rounded-xl font-bold text-sm hover:bg-orange-700 transition-colors">
+        <p className="mt-2 text-sm text-slate-500">{message}</p>
+        <button onClick={onRetry} className="mt-4 rounded-xl bg-orange-600 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-orange-700">
           Retry
         </button>
       </div>

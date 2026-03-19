@@ -12,6 +12,7 @@ const supertest = require('supertest');
 
 process.env.NODE_ENV = process.env.NODE_ENV || 'test';
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'integration_test_jwt_secret_please_change';
+process.env.INBOUND_EMAIL_SECRET = process.env.INBOUND_EMAIL_SECRET || 'atc_dev_inbound_secret';
 
 const run = (command) => {
   execSync(command, {
@@ -228,6 +229,98 @@ test('ticket notifications can be listed and marked as read', async () => {
 
   assert.ok(plEscalationNotification);
   assert.equal(plNotificationsAfterEscalate.body.unreadCount, 1);
+});
+
+test('ticket email loop logs outbound messages and accepts inbound replies', async () => {
+  const seLogin = await request.post('/api/auth/login').send({ email: 'se@atc.com', password: 'password' }).expect(200);
+  const seToken = seLogin.body.token;
+  const seUser = seLogin.body.user;
+
+  const createdTicket = await request
+    .post('/api/widget/widget_warehouse_portal/escalate')
+    .send({
+      name: 'Email Tester',
+      email: 'integration-email@test.com',
+      title: 'Email loop ticket',
+      description: 'Ticket for outbound and inbound email loop integration test.',
+      priority: 'MEDIUM',
+    })
+    .expect(201);
+
+  const ticketId = createdTicket.body.id;
+  assert.ok(ticketId);
+  assert.equal(createdTicket.body.requesterEmail, 'integration-email@test.com');
+  assert.ok(createdTicket.body.emailThreadToken);
+
+  await request
+    .post(`/api/tickets/${ticketId}/assign`)
+    .set('Authorization', `Bearer ${seToken}`)
+    .send({ assignedToId: seUser.id })
+    .expect(200);
+
+  await request.post(`/api/tickets/${ticketId}/start`).set('Authorization', `Bearer ${seToken}`).expect(200);
+
+  await request
+    .post(`/api/tickets/${ticketId}/messages`)
+    .set('Authorization', `Bearer ${seToken}`)
+    .field('type', 'REPLY')
+    .field('content', 'Please confirm whether the issue still persists.')
+    .expect(201);
+
+  await request
+    .post(`/api/tickets/${ticketId}/waiting-on-customer`)
+    .set('Authorization', `Bearer ${seToken}`)
+    .send({ note: 'Need confirmation from the customer before proceeding.' })
+    .expect(200);
+
+  const ticketBeforeInbound = await request
+    .get(`/api/tickets/${ticketId}`)
+    .set('Authorization', `Bearer ${seToken}`)
+    .expect(200);
+
+  assert.equal(ticketBeforeInbound.body.requesterEmail, 'integration-email@test.com');
+  assert.ok(ticketBeforeInbound.body.emailThreadToken);
+  assert.equal(ticketBeforeInbound.body.status, 'WAITING_ON_CUSTOMER');
+
+  const outboundEmails = ticketBeforeInbound.body.emailEvents.filter((event) => event.direction === 'OUTBOUND');
+  assert.ok(outboundEmails.length >= 3);
+  assert.ok(outboundEmails.some((event) => event.subject.includes('[ATC:')));
+  assert.ok(outboundEmails.every((event) => event.status === 'LOGGED' || event.status === 'SENT'));
+
+  const inboundSubject = outboundEmails[0].subject;
+
+  const inboundResponse = await request
+    .post('/api/email/inbound')
+    .set('x-inbound-email-secret', process.env.INBOUND_EMAIL_SECRET)
+    .send({
+      fromEmail: 'integration-email@test.com',
+      fromName: 'Email Tester',
+      subject: inboundSubject,
+      text: 'The issue is still happening after the latest instructions.',
+    })
+    .expect(201);
+
+  assert.equal(inboundResponse.body.ticketId, ticketId);
+  assert.equal(inboundResponse.body.ticketStatus, 'IN_PROGRESS');
+
+  const ticketAfterInbound = await request
+    .get(`/api/tickets/${ticketId}`)
+    .set('Authorization', `Bearer ${seToken}`)
+    .expect(200);
+
+  assert.equal(ticketAfterInbound.body.status, 'IN_PROGRESS');
+
+  const customerReply = ticketAfterInbound.body.messages.find(
+    (message) => message.senderEmail === 'integration-email@test.com' && message.type === 'REPLY',
+  );
+  assert.ok(customerReply);
+  assert.match(customerReply.content, /still happening/i);
+
+  const inboundEmailEvent = ticketAfterInbound.body.emailEvents.find(
+    (event) => event.direction === 'INBOUND' && event.status === 'RECEIVED',
+  );
+  assert.ok(inboundEmailEvent);
+  assert.equal(inboundEmailEvent.fromEmail, 'integration-email@test.com');
 });
 
 test('ticket lifecycle: assign, start, escalate, resolve', async () => {

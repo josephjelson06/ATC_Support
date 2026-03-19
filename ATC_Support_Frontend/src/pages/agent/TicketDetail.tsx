@@ -7,6 +7,7 @@ import {
   Clock3,
   Download,
   Lock,
+  Mail,
   MessageSquare,
   Paperclip,
   PlayCircle,
@@ -43,6 +44,10 @@ export default function TicketDetail() {
     [ticketQuery.data?.messages],
   );
   const ticketAttachments = useMemo(() => timeline.flatMap((entry) => entry.attachments || []), [timeline]);
+  const emailEvents = useMemo(
+    () => (ticketQuery.data?.emailEvents || []).slice().sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()),
+    [ticketQuery.data?.emailEvents],
+  );
 
   const resetComposer = () => {
     setMessageText('');
@@ -205,6 +210,8 @@ export default function TicketDetail() {
   const ticket = ticketQuery.data;
   const canMoveToWaiting = !isReadOnly && ticket.status !== 'RESOLVED' && ticket.status !== 'WAITING_ON_CUSTOMER';
   const canReopen = !isReadOnly && ticket.status === 'RESOLVED';
+  const requesterName = ticket.requesterName || ticket.chatSession?.clientName || 'Unknown requester';
+  const requesterEmail = ticket.requesterEmail || ticket.chatSession?.clientEmail || null;
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 p-6">
@@ -289,7 +296,7 @@ export default function TicketDetail() {
                     <div className="flex items-center justify-between gap-4">
                       <div className="flex items-center gap-2">
                         {entry.type === 'INTERNAL_NOTE' ? <Lock className="h-4 w-4 text-amber-600" /> : <MessageSquare className="h-4 w-4 text-orange-600" />}
-                        <p className="text-sm font-bold text-slate-900">{entry.user?.name || 'System'}</p>
+                        <p className="text-sm font-bold text-slate-900">{entry.user?.name || entry.senderName || 'System'}</p>
                         <span
                           className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase ${
                             entry.type === 'INTERNAL_NOTE'
@@ -305,7 +312,9 @@ export default function TicketDetail() {
                       <p className="text-xs text-slate-400">{formatDateTime(entry.createdAt)}</p>
                     </div>
 
-                    {entry.content ? <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-slate-600">{entry.content}</p> : null}
+                    {entry.senderEmail && !entry.user ? <p className="mt-3 text-xs font-medium text-slate-400">{entry.senderEmail}</p> : null}
+
+                    {entry.content ? <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-600">{entry.content}</p> : null}
 
                     {entry.attachments?.length ? (
                       <div className="mt-4 space-y-2 rounded-2xl border border-slate-100 bg-slate-50 p-3">
@@ -383,6 +392,13 @@ export default function TicketDetail() {
               </div>
 
               <div className="p-4">
+                {interactionType === 'reply' ? (
+                  <div className="mb-4 rounded-2xl border border-orange-100 bg-orange-50 px-4 py-3 text-sm text-orange-900">
+                    <p className="font-semibold">This reply will be emailed to {requesterEmail || 'the requester on file when available'}.</p>
+                    <p className="mt-1 text-xs text-orange-700">Replies from the customer can be threaded back into this ticket through the email subject token.</p>
+                  </div>
+                ) : null}
+
                 <textarea
                   rows={4}
                   value={messageText}
@@ -439,6 +455,14 @@ export default function TicketDetail() {
         </div>
 
         <div className="space-y-6">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h3 className="mb-4 text-[10px] font-bold uppercase tracking-wider text-slate-400">Requester</h3>
+            <div className="space-y-3 text-sm">
+              <SnapshotRow label="Name" value={requesterName} />
+              <SnapshotRow label="Email" value={requesterEmail || 'Not available'} />
+            </div>
+          </div>
+
           <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Ticket Actions</h3>
             {!isReadOnly ? (
@@ -523,12 +547,44 @@ export default function TicketDetail() {
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h3 className="mb-4 text-[10px] font-bold uppercase tracking-wider text-slate-400">Email Activity</h3>
+            <div className="space-y-3">
+              {emailEvents.length === 0 ? (
+                <p className="text-sm text-slate-500">No email activity has been logged for this ticket yet.</p>
+              ) : (
+                emailEvents.map((emailEvent) => (
+                  <div key={emailEvent.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <Mail className="h-4 w-4 text-slate-500" />
+                          <p className="truncate text-sm font-semibold text-slate-900">{emailEvent.subject}</p>
+                        </div>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {humanizeEnum(emailEvent.direction)} | {humanizeEnum(emailEvent.status)}
+                        </p>
+                      </div>
+                      <p className="shrink-0 text-xs text-slate-400">{formatDateTime(emailEvent.createdAt)}</p>
+                    </div>
+                    <p className="mt-2 text-xs text-slate-500">
+                      {emailEvent.fromEmail} to {emailEvent.toEmail}
+                    </p>
+                    <p className="mt-2 whitespace-pre-wrap text-sm text-slate-600">{emailEvent.bodyText}</p>
+                    {emailEvent.errorMessage ? <p className="mt-2 text-xs text-rose-600">{emailEvent.errorMessage}</p> : null}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <h3 className="mb-4 text-[10px] font-bold uppercase tracking-wider text-slate-400">Ticket Snapshot</h3>
             <div className="space-y-3 text-sm">
               <SnapshotRow label="Ticket" value={ticket.displayId} />
               <SnapshotRow label="Source" value={ticket.source ? humanizeEnum(ticket.source) : 'Widget'} />
               <SnapshotRow label="Client" value={ticket.project?.client?.name || '-'} />
               <SnapshotRow label="Project" value={ticket.project?.name || '-'} />
+              <SnapshotRow label="Requester" value={requesterName} />
               <SnapshotRow label="Assigned To" value={ticket.assignedTo?.name || 'Unassigned'} />
               <SnapshotRow label="Created" value={formatDateTime(ticket.createdAt)} />
               <SnapshotRow label="Resolved" value={ticket.resolvedAt ? formatDateTime(ticket.resolvedAt) : 'Not resolved'} />

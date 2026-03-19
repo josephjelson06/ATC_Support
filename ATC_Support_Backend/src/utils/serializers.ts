@@ -124,6 +124,20 @@ export const serializeNotification = <T extends AnyRecord | null | undefined>(no
   return withDisplayId(notification, 'NTF');
 };
 
+export const serializeTicketEmail = <T extends AnyRecord | null | undefined>(email: T) => {
+  if (!email) {
+    return null;
+  }
+
+  const nextEmail: Record<string, unknown> = { ...email };
+
+  if ('createdBy' in email) {
+    nextEmail.createdBy = serializeUser(email.createdBy as AnyRecord | null | undefined);
+  }
+
+  return nextEmail;
+};
+
 export const serializeEscalationHistory = <T extends AnyRecord | null | undefined>(event: T) => {
   if (!event) {
     return null;

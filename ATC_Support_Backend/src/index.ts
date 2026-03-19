@@ -18,6 +18,7 @@ import clientsRouter from './routes/clients';
 import consigneeContactsRouter from './routes/consigneeContacts';
 import consigneesRouter from './routes/consignees';
 import dashboardRouter from './routes/dashboard';
+import emailRouter from './routes/email';
 import faqsRouter from './routes/faqs';
 import notificationsRouter from './routes/notifications';
 import projectDocsRouter from './routes/projectDocs';
@@ -54,6 +55,7 @@ app.get('/health', (_req, res) => {
 });
 
 app.use('/api/auth', authRouter);
+app.use('/api/email', emailRouter);
 app.use('/api/widget', widgetRouter);
 app.use('/api/tickets', ticketsRouter);
 app.use('/api/users', authMiddleware, usersRouter);

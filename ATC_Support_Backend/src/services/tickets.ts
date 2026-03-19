@@ -2,6 +2,7 @@ import { ChatSessionStatus, MessageType, TicketPriority, TicketStatus } from '@p
 
 import { prisma } from '../lib/prisma';
 import { notifyNewWidgetTicket } from './notifications';
+import { buildTicketThreadToken, sendTicketCreatedAcknowledgement } from './ticketEmails';
 import { badRequest, notFound } from '../utils/http';
 
 type CreateWidgetTicketInput = {
@@ -88,6 +89,9 @@ export const createWidgetTicket = async (input: CreateWidgetTicketInput) => {
       data: {
         projectId: project.id,
         chatSessionId: chatSession?.id,
+        requesterName: input.name,
+        requesterEmail: input.email.toLowerCase(),
+        emailThreadToken: buildTicketThreadToken(),
         title: input.title,
         description: input.description?.trim() || fallbackDescription || `Support request for ${project.name}.`,
         source: 'WIDGET',
@@ -120,6 +124,7 @@ export const createWidgetTicket = async (input: CreateWidgetTicketInput) => {
             createdAt: true,
           },
         },
+        chatSession: true,
       },
     });
 
@@ -140,6 +145,8 @@ export const createWidgetTicket = async (input: CreateWidgetTicketInput) => {
       clientName: input.name,
       projectLeadId: project.assignedToId,
     });
+
+    await sendTicketCreatedAcknowledgement(transaction, ticket);
 
     return ticket;
   });

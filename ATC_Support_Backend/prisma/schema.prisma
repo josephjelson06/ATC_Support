@@ -82,6 +82,19 @@ enum NotificationType {
   TICKET_ESCALATED
   TICKET_RESOLVED
   TICKET_REOPENED
+  TICKET_CUSTOMER_REPLIED
+}
+
+enum TicketEmailDirection {
+  OUTBOUND
+  INBOUND
+}
+
+enum TicketEmailStatus {
+  SENT
+  LOGGED
+  RECEIVED
+  FAILED
 }
 
 model User {
@@ -100,6 +113,7 @@ model User {
   projectDocs             ProjectDoc[]        @relation("ProjectDocAuthor")
   escalationEvents        EscalationHistory[] @relation("EscalationActor")
   notifications           Notification[]
+  ticketEmails            TicketEmail[]       @relation("TicketEmailActor")
 
   @@index([role])
   @@index([status])
@@ -208,6 +222,9 @@ model Ticket {
   id                Int                 @id @default(autoincrement())
   projectId         Int
   chatSessionId     Int?                @unique
+  requesterName     String?
+  requesterEmail    String?
+  emailThreadToken  String?             @unique
   title             String
   description       String?
   source            TicketSource        @default(WIDGET)
@@ -222,6 +239,7 @@ model Ticket {
   assignedTo        User?               @relation("TicketAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
   messages          TicketMessage[]
   attachments       TicketAttachment[]
+  emailEvents       TicketEmail[]
   escalationHistory EscalationHistory[]
 
   @@index([projectId])
@@ -234,12 +252,15 @@ model TicketMessage {
   id          Int                @id @default(autoincrement())
   ticketId    Int
   userId      Int?
+  senderName  String?
+  senderEmail String?
   content     String
   type        MessageType        @default(REPLY)
   createdAt   DateTime           @default(now())
   ticket      Ticket             @relation(fields: [ticketId], references: [id], onDelete: Cascade)
   user        User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
   attachments TicketAttachment[]
+  emailEvents TicketEmail[]
 
   @@index([ticketId])
   @@index([userId])
@@ -263,6 +284,34 @@ model TicketAttachment {
   @@index([ticketId])
   @@index([ticketMessageId])
   @@index([uploadedById])
+}
+
+model TicketEmail {
+  id                Int                @id @default(autoincrement())
+  ticketId          Int
+  ticketMessageId   Int?
+  createdById       Int?
+  direction         TicketEmailDirection
+  status            TicketEmailStatus
+  subject           String
+  bodyText          String
+  fromName          String?
+  fromEmail         String
+  toName            String?
+  toEmail           String
+  providerMessageId String?
+  errorMessage      String?
+  createdAt         DateTime           @default(now())
+  deliveredAt       DateTime?
+  ticket            Ticket             @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  ticketMessage     TicketMessage?     @relation(fields: [ticketMessageId], references: [id], onDelete: SetNull)
+  createdBy         User?              @relation("TicketEmailActor", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([ticketId])
+  @@index([ticketMessageId])
+  @@index([createdById])
+  @@index([status])
+  @@index([createdAt])
 }
 
 model Notification {

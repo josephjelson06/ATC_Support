@@ -6,6 +6,7 @@ import { z } from 'zod';
 
 import { prisma } from '../lib/prisma';
 import { requireRole } from '../middleware/role';
+import { sendTicketReplyEmail } from '../services/ticketEmails';
 import { assertTicketAccess } from '../utils/access';
 import { asyncHandler, badRequest, notFound, parseId } from '../utils/http';
 import { serializeTicketAttachment, serializeTicketMessage } from '../utils/serializers';
@@ -98,6 +99,32 @@ router.post(
             sizeBytes: file.size,
           })),
         });
+      }
+
+      if (payload.type === MessageType.REPLY) {
+        const ticket = await transaction.ticket.findUnique({
+          where: {
+            id: ticketId,
+          },
+          include: {
+            project: {
+              include: {
+                client: true,
+              },
+            },
+            chatSession: true,
+          },
+        });
+
+        if (ticket) {
+          await sendTicketReplyEmail(transaction, {
+            ticket,
+            message: createdMessage,
+            senderName: req.user!.name,
+            attachmentNames: attachments.map((file) => file.originalname),
+            createdById: req.user!.id,
+          });
+        }
       }
 
       return transaction.ticketMessage.findUnique({

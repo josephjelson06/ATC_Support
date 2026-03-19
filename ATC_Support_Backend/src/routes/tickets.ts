@@ -7,11 +7,12 @@ import { authMiddleware } from '../middleware/auth';
 import { requireRole } from '../middleware/role';
 import { validate } from '../middleware/validate';
 import { notifyTicketAssigned, notifyTicketEscalated, notifyTicketReopened, notifyTicketResolved } from '../services/notifications';
+import { sendReopenedTicketEmail, sendResolvedTicketEmail, sendWaitingOnCustomerEmail } from '../services/ticketEmails';
 import { createWidgetTicket } from '../services/tickets';
 import { assertTicketAccess, ticketScopeForUser } from '../utils/access';
 import { asyncHandler, badRequest, forbidden, notFound, parseId } from '../utils/http';
 import { createPaginatedResponse, getPaginationOptions } from '../utils/pagination';
-import { serializeChatSession, serializeEscalationHistory, serializeTicket, serializeTicketMessage } from '../utils/serializers';
+import { serializeChatSession, serializeEscalationHistory, serializeTicket, serializeTicketEmail, serializeTicketMessage } from '../utils/serializers';
 
 const router = Router();
 
@@ -128,6 +129,16 @@ const detailInclude = {
       createdAt: 'asc',
     },
   },
+  emailEvents: {
+    include: {
+      createdBy: {
+        select: safeUserSelect,
+      },
+    },
+    orderBy: {
+      createdAt: 'asc',
+    },
+  },
 } as const;
 
 const getTicketForWorkflow = async (ticketId: number) => {
@@ -147,6 +158,7 @@ const getTicketForWorkflow = async (ticketId: number) => {
       assignedTo: {
         select: safeUserSelect,
       },
+      chatSession: true,
     },
   });
 
@@ -258,6 +270,7 @@ router.get(
       messages: ticket.messages.map((message) => serializeTicketMessage(message)),
       chatSession: ticket.chatSession ? serializeChatSession(ticket.chatSession) : null,
       escalationHistory: ticket.escalationHistory.map((event) => serializeEscalationHistory(event)),
+      emailEvents: ticket.emailEvents.map((emailEvent) => serializeTicketEmail(emailEvent)),
     });
   }),
 );
@@ -505,6 +518,16 @@ router.post(
         },
       });
 
+      await sendWaitingOnCustomerEmail(transaction, {
+        ticket: {
+          ...ticket,
+          status: TicketStatus.WAITING_ON_CUSTOMER,
+        },
+        note: payload.note,
+        createdById: req.user!.id,
+        actorName: req.user!.name,
+      });
+
       return nextTicket;
     });
 
@@ -557,6 +580,17 @@ router.post(
         actorName: req.user!.name,
       });
 
+      await sendReopenedTicketEmail(transaction, {
+        ticket: {
+          ...ticket,
+          status: TicketStatus.REOPENED,
+          resolutionSummary: null,
+        },
+        note: payload.note,
+        createdById: req.user!.id,
+        actorName: req.user!.name,
+      });
+
       return nextTicket;
     });
 
@@ -602,6 +636,16 @@ router.post(
         ticketTitle: ticket.title,
         recipientUserIds: [ticket.assignedToId, ticket.project.assignedToId],
         actorUserId: req.user!.id,
+        actorName: req.user!.name,
+      });
+
+      await sendResolvedTicketEmail(transaction, {
+        ticket: {
+          ...ticket,
+          status: TicketStatus.RESOLVED,
+          resolutionSummary: payload.resolutionSummary,
+        },
+        createdById: req.user!.id,
         actorName: req.user!.name,
       });
 

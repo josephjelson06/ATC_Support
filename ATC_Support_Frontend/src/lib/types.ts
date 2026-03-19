@@ -9,7 +9,15 @@ export type ChatSessionStatus = 'ACTIVE' | 'ENDED' | 'ESCALATED';
 export type TicketMessageType = 'REPLY' | 'INTERNAL_NOTE' | 'SYSTEM';
 export type ChatRole = 'USER' | 'JULIA';
 export type KnowledgeStatus = 'DRAFT' | 'PUBLISHED';
-export type NotificationType = 'TICKET_CREATED' | 'TICKET_ASSIGNED' | 'TICKET_ESCALATED' | 'TICKET_RESOLVED' | 'TICKET_REOPENED';
+export type NotificationType =
+  | 'TICKET_CREATED'
+  | 'TICKET_ASSIGNED'
+  | 'TICKET_ESCALATED'
+  | 'TICKET_RESOLVED'
+  | 'TICKET_REOPENED'
+  | 'TICKET_CUSTOMER_REPLIED';
+export type TicketEmailDirection = 'OUTBOUND' | 'INBOUND';
+export type TicketEmailStatus = 'SENT' | 'LOGGED' | 'RECEIVED' | 'FAILED';
 
 export interface ApiUser {
   id: number;
@@ -134,6 +142,8 @@ export interface ApiTicketMessage {
   id: number;
   ticketId?: number;
   userId?: number | null;
+  senderName?: string | null;
+  senderEmail?: string | null;
   content: string;
   type?: TicketMessageType;
   createdAt: string;
@@ -179,6 +189,26 @@ export interface ApiEscalationHistory {
   createdBy?: ApiUser | null;
 }
 
+export interface ApiTicketEmail {
+  id: number;
+  ticketId: number;
+  ticketMessageId?: number | null;
+  createdById?: number | null;
+  direction: TicketEmailDirection;
+  status: TicketEmailStatus;
+  subject: string;
+  bodyText: string;
+  fromName?: string | null;
+  fromEmail: string;
+  toName?: string | null;
+  toEmail: string;
+  providerMessageId?: string | null;
+  errorMessage?: string | null;
+  createdAt: string;
+  deliveredAt?: string | null;
+  createdBy?: ApiUser | null;
+}
+
 export interface ApiChatMessage {
   id: number;
   chatSessionId?: number;
@@ -208,6 +238,9 @@ export interface ApiTicket {
   displayId: string;
   projectId?: number;
   chatSessionId?: number | null;
+  requesterName?: string | null;
+  requesterEmail?: string | null;
+  emailThreadToken?: string | null;
   title: string;
   description?: string | null;
   priority: TicketPriority;
@@ -221,6 +254,7 @@ export interface ApiTicket {
   assignedTo?: ApiUser | null;
   messages?: ApiTicketMessage[];
   chatSession?: ApiChatSession | null;
+  emailEvents?: ApiTicketEmail[];
   escalationHistory?: ApiEscalationHistory[];
 }
 

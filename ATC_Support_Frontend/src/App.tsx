@@ -1,6 +1,6 @@
 import { Suspense, lazy } from 'react';
 import type { ReactElement } from 'react';
-import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
+import { BrowserRouter, Link, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 
 import { ModalProvider } from './contexts/ModalContext';
 import { RoleProvider, useRole } from './contexts/RoleContext';
@@ -89,6 +89,26 @@ function RouteFallback() {
   );
 }
 
+function NotFoundPage() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-slate-50 p-6">
+      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+        <p className="text-xs font-black uppercase tracking-[0.35em] text-orange-600">404</p>
+        <h1 className="mt-3 text-2xl font-black text-slate-900">Page not found</h1>
+        <p className="mt-2 text-sm text-slate-500">That route does not exist in ATC Support.</p>
+        <div className="mt-6 flex justify-center">
+          <Link
+            to="/agent/dashboard"
+            className="inline-flex items-center justify-center rounded-xl bg-orange-600 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-orange-700"
+          >
+            Back to dashboard
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AppRoutes() {
   return (
     <Suspense fallback={<RouteFallback />}>
@@ -139,6 +159,8 @@ function AppRoutes() {
             </Route>
           </Route>
         </Route>
+
+        <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </Suspense>
   );

@@ -1,3 +1,5 @@
+import PageHeader from '../../components/layout/PageHeader';
+
 const roleDescriptions = [
   {
     role: 'Project Manager',
@@ -19,10 +21,10 @@ const roleDescriptions = [
 export default function RoleDirectory() {
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-6">
-      <div>
-        <h2 className="text-lg font-bold text-slate-900">Roles</h2>
-        <p className="mt-1 text-sm text-slate-500">Live role model for the current frontend refactor. This stays aligned to PM, PL, and SE.</p>
-      </div>
+      <PageHeader
+        title="Roles"
+        description="Live role model for the current frontend refactor. This stays aligned to PM, PL, and SE."
+      />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {roleDescriptions.map((role) => (

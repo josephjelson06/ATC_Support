@@ -14,7 +14,7 @@ type NotificationPayload = {
   excludeUserId?: number | null;
 };
 
-const buildTicketLink = (ticketId: number) => `/agent/ticket/${ticketId}`;
+const buildTicketLink = (ticketId: number) => `/agent/tickets/${ticketId}/summary`;
 
 const createNotifications = async (db: DbClient, payload: NotificationPayload) => {
   const recipientIds = Array.from(

@@ -30,7 +30,9 @@ import {
 } from '../../lib/analytics';
 import { apiFetch } from '../../lib/api';
 import { humanizeEnum } from '../../lib/format';
+import { appPaths } from '../../lib/navigation';
 import type { ApiProject, ApiRunbook, ApiTicket, ApiUser, TicketStatus } from '../../lib/types';
+import PageHeader from '../../components/layout/PageHeader';
 
 const ticketStatusOrder: TicketStatus[] = ['NEW', 'ASSIGNED', 'IN_PROGRESS', 'WAITING_ON_CUSTOMER', 'ESCALATED', 'REOPENED', 'RESOLVED'];
 
@@ -167,46 +169,46 @@ export default function AnalyticsOverview() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 p-6">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <h1 className="text-2xl font-black tracking-tight text-slate-900">Analytics Overview</h1>
-          <p className="mt-1 text-sm text-slate-500">Live roll-up of ticket throughput, knowledge assets, and team capacity.</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <select
-            value={period}
-            onChange={(event) => setPeriod(event.target.value as AnalyticsPeriod)}
-            className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 outline-none transition-all focus:ring-2 focus:ring-orange-500"
-          >
-            {analyticsPeriodOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          <button
-            onClick={overviewQuery.reload}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50"
-          >
-            <RefreshCw className="h-4 w-4" />
-            Refresh
-          </button>
-          <button
-            onClick={handleCopySummary}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50"
-          >
-            <Copy className="h-4 w-4" />
-            Copy Summary
-          </button>
-          <button
-            onClick={handleExport}
-            className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-slate-800"
-          >
-            <TrendingUp className="h-4 w-4" />
-            Export CSV
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Analytics Overview"
+        description="Live roll-up of ticket throughput, knowledge assets, and team capacity."
+        actions={
+          <>
+            <select
+              value={period}
+              onChange={(event) => setPeriod(event.target.value as AnalyticsPeriod)}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 outline-none transition-all focus:ring-2 focus:ring-orange-500"
+            >
+              {analyticsPeriodOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={overviewQuery.reload}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Refresh
+            </button>
+            <button
+              onClick={handleCopySummary}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50"
+            >
+              <Copy className="h-4 w-4" />
+              Copy Summary
+            </button>
+            <button
+              onClick={handleExport}
+              className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-slate-800"
+            >
+              <TrendingUp className="h-4 w-4" />
+              Export CSV
+            </button>
+          </>
+        }
+      />
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
         <SummaryCard icon={Ticket} label="Tickets In Range" value={String(filteredTickets.length)} hint={`${resolvedTickets} resolved`} iconClasses="bg-orange-50 text-orange-600 border-orange-100" />
@@ -278,9 +280,9 @@ export default function AnalyticsOverview() {
       </div>
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-        <AnalyticsLink to="/agent/analytics/tickets" title="Ticket Analytics" description="Drill into resolution time, backlog, and priority patterns." />
-        <AnalyticsLink to="/agent/analytics/kb" title="KB Analytics" description="Track runbook growth, draft opportunities, and category coverage." />
-        <AnalyticsLink to="/agent/analytics/performance" title="Engineer Performance" description="Compare resolved workload and live ownership across the team." />
+        <AnalyticsLink to={appPaths.analytics.tickets} title="Ticket Analytics" description="Drill into resolution time, backlog, and priority patterns." />
+        <AnalyticsLink to={appPaths.analytics.kb} title="KB Analytics" description="Track runbook growth, draft opportunities, and category coverage." />
+        <AnalyticsLink to={appPaths.analytics.performance} title="Engineer Performance" description="Compare resolved workload and live ownership across the team." />
       </div>
     </div>
   );

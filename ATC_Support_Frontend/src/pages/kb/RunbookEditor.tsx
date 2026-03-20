@@ -3,12 +3,14 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { BookOpenText, Eye, RefreshCw, Save, Trash2 } from 'lucide-react';
 import Markdown from 'react-markdown';
 
+import PageHeader from '../../components/layout/PageHeader';
 import { useModal } from '../../contexts/ModalContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useAsyncData } from '../../hooks/useAsyncData';
 import { apiFetch, getErrorMessage } from '../../lib/api';
 import { createDraftSuggestion } from '../../lib/drafts';
 import { formatDateTime, humanizeEnum } from '../../lib/format';
+import { appPaths } from '../../lib/navigation';
 import type { ApiRunbook, ApiTicket, KnowledgeStatus } from '../../lib/types';
 
 type FormState = {
@@ -159,7 +161,7 @@ export default function RunbookEditor() {
       showToast('success', isEditing ? 'Runbook updated successfully.' : 'Runbook created successfully.');
 
       if (!isEditing) {
-        navigate(`/agent/kb/edit/${savedRunbook.id}`, { replace: true });
+        navigate(appPaths.kb.edit(savedRunbook.id), { replace: true });
       }
     } catch (error) {
       showToast('error', getErrorMessage(error));
@@ -187,7 +189,7 @@ export default function RunbookEditor() {
           try {
             await apiFetch(`/runbooks/${id}`, { method: 'DELETE' });
             showToast('success', 'Runbook deleted.');
-            navigate('/agent/kb');
+            navigate(appPaths.kb.library);
           } catch (error) {
             showToast('error', getErrorMessage(error));
             throw error;
@@ -211,52 +213,49 @@ export default function RunbookEditor() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
-      <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
-        <div>
-          <Link to="/agent/kb" className="text-sm font-medium text-slate-500 hover:text-slate-800">
-            {'<-'} Back to Knowledge Base
-          </Link>
-          <h1 className="mt-3 text-2xl font-bold text-slate-900">{isEditing ? 'Edit Runbook' : 'Create Runbook'}</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            {sourceTicket
-              ? `This runbook is prefilled from resolved ticket ${sourceTicket.displayId}.`
-              : 'Create or update a shared runbook with an explicit draft or published state.'}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            onClick={() => editorQuery.reload()}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 transition-colors"
-          >
-            <RefreshCw className="w-4 h-4" />
-            Reload
-          </button>
-          <button
-            onClick={handlePreview}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 transition-colors"
-          >
-            <Eye className="w-4 h-4" />
-            Preview
-          </button>
-          {isEditing ? (
+      <PageHeader
+        title={isEditing ? 'Edit Runbook' : 'Create Runbook'}
+        description={
+          sourceTicket
+            ? `This runbook is prefilled from resolved ticket ${sourceTicket.displayId}.`
+            : 'Create or update a shared runbook with an explicit draft or published state.'
+        }
+        actions={
+          <>
             <button
-              onClick={handleDelete}
-              className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-white px-4 py-2.5 text-sm font-bold text-red-600 hover:bg-red-50 transition-colors"
+              onClick={() => editorQuery.reload()}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 transition-colors"
             >
-              <Trash2 className="w-4 h-4" />
-              Delete
+              <RefreshCw className="w-4 h-4" />
+              Reload
             </button>
-          ) : null}
-          <button
-            onClick={() => void handleSave()}
-            disabled={isSaving}
-            className="inline-flex items-center gap-2 rounded-xl bg-orange-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-orange-700 transition-colors disabled:opacity-60"
-          >
-            <Save className="w-4 h-4" />
-            {isSaving ? 'Saving...' : isEditing ? 'Save Changes' : 'Create Runbook'}
-          </button>
-        </div>
-      </div>
+            <button
+              onClick={handlePreview}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 transition-colors"
+            >
+              <Eye className="w-4 h-4" />
+              Preview
+            </button>
+            {isEditing ? (
+              <button
+                onClick={handleDelete}
+                className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-white px-4 py-2.5 text-sm font-bold text-red-600 hover:bg-red-50 transition-colors"
+              >
+                <Trash2 className="w-4 h-4" />
+                Delete
+              </button>
+            ) : null}
+            <button
+              onClick={() => void handleSave()}
+              disabled={isSaving}
+              className="inline-flex items-center gap-2 rounded-xl bg-orange-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-orange-700 transition-colors disabled:opacity-60"
+            >
+              <Save className="w-4 h-4" />
+              {isSaving ? 'Saving...' : isEditing ? 'Save Changes' : 'Create Runbook'}
+            </button>
+          </>
+        }
+      />
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.15fr_0.85fr]">
         <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
@@ -355,7 +354,7 @@ export default function RunbookEditor() {
               <p className="text-xs font-bold uppercase tracking-wider text-purple-700">Draft Source Ticket</p>
               <p className="text-lg font-bold text-slate-900">{sourceTicket.title}</p>
               <p className="text-sm text-slate-600">{sourceTicket.description || 'No ticket description provided.'}</p>
-              <Link to={`/agent/ticket/${sourceTicket.id}`} className="inline-flex text-sm font-bold text-purple-700 hover:text-purple-800">
+              <Link to={appPaths.tickets.detail(sourceTicket.id)} className="inline-flex text-sm font-bold text-purple-700 hover:text-purple-800">
                 Open {sourceTicket.displayId}
               </Link>
             </div>

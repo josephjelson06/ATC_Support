@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { ArrowLeft, Copy, Download, RefreshCw } from 'lucide-react';
+import { Copy, Download, RefreshCw } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
+import PageHeader from '../../components/layout/PageHeader';
 import { useToast } from '../../contexts/ToastContext';
 import { useAsyncData } from '../../hooks/useAsyncData';
 import {
@@ -136,7 +136,7 @@ export default function EngineerPerformance() {
         row.resolved,
         row.open,
         row.criticalOwned,
-        row.averageResolutionHours === null ? '—' : `${row.averageResolutionHours.toFixed(1)}h`,
+        row.averageResolutionHours === null ? '-' : `${row.averageResolutionHours.toFixed(1)}h`,
         formatDateTime(row.user.createdAt),
       ]),
     );
@@ -153,60 +153,55 @@ export default function EngineerPerformance() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 p-6">
-      <Link to="/agent/analytics" className="inline-flex items-center gap-1 text-xs font-black uppercase tracking-widest text-slate-500 transition-colors hover:text-orange-600">
-        <ArrowLeft className="h-4 w-4" />
-        Back To Overview
-      </Link>
-
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <h1 className="text-2xl font-black tracking-tight text-slate-900">Engineer Performance</h1>
-          <p className="mt-1 text-sm text-slate-500">Resolved load, active backlog, and ownership across support contributors.</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <select
-            value={period}
-            onChange={(event) => setPeriod(event.target.value as AnalyticsPeriod)}
-            className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 outline-none transition-all focus:ring-2 focus:ring-orange-500"
-          >
-            {analyticsPeriodOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          <select
-            value={roleFilter}
-            onChange={(event) => setRoleFilter(event.target.value as 'ALL' | BackendRole)}
-            className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 outline-none transition-all focus:ring-2 focus:ring-orange-500"
-          >
-            <option value="ALL">All Roles</option>
-            <option value="SE">Support Engineers</option>
-            <option value="PL">Project Leads</option>
-          </select>
-          <button
-            onClick={performanceQuery.reload}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50"
-          >
-            <RefreshCw className="h-4 w-4" />
-            Refresh
-          </button>
-          <button
-            onClick={handleCopySummary}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50"
-          >
-            <Copy className="h-4 w-4" />
-            Copy Summary
-          </button>
-          <button
-            onClick={handleExport}
-            className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-slate-800"
-          >
-            <Download className="h-4 w-4" />
-            Export CSV
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Engineer Performance"
+        description="Resolved load, active backlog, and ownership across support contributors."
+        actions={
+          <>
+            <select
+              value={period}
+              onChange={(event) => setPeriod(event.target.value as AnalyticsPeriod)}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 outline-none transition-all focus:ring-2 focus:ring-orange-500"
+            >
+              {analyticsPeriodOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <select
+              value={roleFilter}
+              onChange={(event) => setRoleFilter(event.target.value as 'ALL' | BackendRole)}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 outline-none transition-all focus:ring-2 focus:ring-orange-500"
+            >
+              <option value="ALL">All Roles</option>
+              <option value="SE">Support Engineers</option>
+              <option value="PL">Project Leads</option>
+            </select>
+            <button
+              onClick={performanceQuery.reload}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Refresh
+            </button>
+            <button
+              onClick={handleCopySummary}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50"
+            >
+              <Copy className="h-4 w-4" />
+              Copy Summary
+            </button>
+            <button
+              onClick={handleExport}
+              className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-slate-800"
+            >
+              <Download className="h-4 w-4" />
+              Export CSV
+            </button>
+          </>
+        }
+      />
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
         <SummaryCard label="Active Contributors" value={String(activeContributors)} hint="Users with active status" />

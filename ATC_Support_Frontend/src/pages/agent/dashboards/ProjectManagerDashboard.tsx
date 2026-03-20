@@ -1,9 +1,11 @@
 import { Link } from 'react-router-dom';
 import { Briefcase, CheckCircle2, Ticket, Users } from 'lucide-react';
 
+import PageHeader from '../../../components/layout/PageHeader';
 import { useAsyncData } from '../../../hooks/useAsyncData';
 import { apiFetch } from '../../../lib/api';
 import { formatRelativeTime, getTicketPriorityClasses, getTicketStatusClasses, humanizeEnum } from '../../../lib/format';
+import { appPaths } from '../../../lib/navigation';
 import type { ApiClient, ApiTicket, DashboardStats } from '../../../lib/types';
 
 export default function ProjectManagerDashboard() {
@@ -24,9 +26,10 @@ export default function ProjectManagerDashboard() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-slate-900">Project Manager Dashboard</h1>
-      </div>
+      <PageHeader
+        title="Project Manager Dashboard"
+        description="Portfolio-level overview of clients, projects, and the live support queue."
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
         <StatCard label="Clients" value={String(statsQuery.data?.totalClients ?? 0)} icon={Users} accent="blue" />
@@ -40,7 +43,7 @@ export default function ProjectManagerDashboard() {
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="p-6 border-b border-slate-100 flex items-center justify-between">
             <h2 className="text-lg font-bold text-slate-900">Open Ticket Queue</h2>
-            <Link to="/agent/queue" className="text-sm font-bold text-orange-600 hover:text-orange-700">
+            <Link to={appPaths.tickets.queue} className="text-sm font-bold text-orange-600 hover:text-orange-700">
               Open Queue
             </Link>
           </div>
@@ -49,7 +52,7 @@ export default function ProjectManagerDashboard() {
               <div className="p-6 text-sm text-slate-500">No open tickets right now.</div>
             ) : (
               openTickets.map((ticket) => (
-                <Link key={ticket.id} to={`/agent/ticket/${ticket.id}`} className="block p-4 hover:bg-slate-50 transition-colors">
+                <Link key={ticket.id} to={appPaths.tickets.detail(ticket.id)} className="block p-4 hover:bg-slate-50 transition-colors">
                   <p className="font-bold text-slate-900">{ticket.title}</p>
                   <div className="flex flex-wrap items-center gap-2 mt-2 text-xs text-slate-500">
                     <span className="font-mono font-bold text-orange-600">{ticket.displayId}</span>
@@ -72,7 +75,7 @@ export default function ProjectManagerDashboard() {
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="p-6 border-b border-slate-100 flex items-center justify-between">
             <h2 className="text-lg font-bold text-slate-900">Active Clients</h2>
-            <Link to="/agent/clients" className="text-sm font-bold text-orange-600 hover:text-orange-700">
+            <Link to={appPaths.clients.list} className="text-sm font-bold text-orange-600 hover:text-orange-700">
               View Clients
             </Link>
           </div>
@@ -81,7 +84,7 @@ export default function ProjectManagerDashboard() {
               <div className="p-6 text-sm text-slate-500">No clients found.</div>
             ) : (
               activeClients.map((client) => (
-                <Link key={client.id} to={`/agent/clients/${client.id}`} className="block p-4 hover:bg-slate-50 transition-colors">
+                <Link key={client.id} to={appPaths.clients.detail(client.id)} className="block p-4 hover:bg-slate-50 transition-colors">
                   <p className="font-bold text-slate-900">{client.name}</p>
                   <div className="flex flex-wrap items-center gap-2 mt-2 text-xs text-slate-500">
                     <span className="font-mono font-bold text-orange-600">{client.displayId}</span>

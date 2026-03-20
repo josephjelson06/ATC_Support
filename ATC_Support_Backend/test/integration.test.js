@@ -164,7 +164,7 @@ test('ticket notifications can be listed and marked as read', async () => {
     .expect(200);
 
   const seCreatedNotification = seNotifications.body.items.find(
-    (notification) => notification.type === 'TICKET_CREATED' && notification.link === `/agent/ticket/${ticketId}`,
+    (notification) => notification.type === 'TICKET_CREATED' && notification.link === `/agent/tickets/${ticketId}/summary`,
   );
 
   assert.ok(seCreatedNotification);
@@ -191,7 +191,7 @@ test('ticket notifications can be listed and marked as read', async () => {
     .expect(200);
 
   const plCreatedNotification = plNotifications.body.items.find(
-    (notification) => notification.type === 'TICKET_CREATED' && notification.link === `/agent/ticket/${ticketId}`,
+    (notification) => notification.type === 'TICKET_CREATED' && notification.link === `/agent/tickets/${ticketId}/summary`,
   );
 
   assert.ok(plCreatedNotification);
@@ -224,7 +224,7 @@ test('ticket notifications can be listed and marked as read', async () => {
     .expect(200);
 
   const plEscalationNotification = plNotificationsAfterEscalate.body.items.find(
-    (notification) => notification.type === 'TICKET_ESCALATED' && notification.link === `/agent/ticket/${ticketId}`,
+    (notification) => notification.type === 'TICKET_ESCALATED' && notification.link === `/agent/tickets/${ticketId}/summary`,
   );
 
   assert.ok(plEscalationNotification);

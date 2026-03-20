@@ -3,11 +3,13 @@ import { Link } from 'react-router-dom';
 import { BookOpenText, FileText, Plus, RefreshCw, Search, Trash2 } from 'lucide-react';
 import Markdown from 'react-markdown';
 
+import PageHeader from '../../components/layout/PageHeader';
 import { useModal } from '../../contexts/ModalContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useAsyncData } from '../../hooks/useAsyncData';
 import { apiFetch, getErrorMessage } from '../../lib/api';
 import { formatDateTime, formatRelativeTime, humanizeEnum } from '../../lib/format';
+import { appPaths } from '../../lib/navigation';
 import type { ApiProject, ApiProjectDoc, ApiRunbook, KnowledgeStatus } from '../../lib/types';
 
 type ActiveTab = 'runbooks' | 'project-docs';
@@ -163,28 +165,28 @@ export default function RunbookLibrary() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Knowledge Base</h1>
-          <p className="mt-1 text-sm text-slate-500">Runbooks and project docs are loaded live from the backend with draft and publish state.</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <Link
-            to="/agent/kb/new"
-            className="inline-flex items-center gap-2 rounded-2xl bg-orange-600 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-orange-700"
-          >
-            <Plus className="h-4 w-4" />
-            New Runbook
-          </Link>
-          <button
-            onClick={libraryQuery.reload}
-            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition-colors hover:bg-slate-50"
-          >
-            <RefreshCw className="h-4 w-4" />
-            Refresh
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Knowledge Base Library"
+        description="Runbooks and project docs are loaded live from the backend with draft and publish state."
+        actions={
+          <>
+            <Link
+              to={appPaths.kb.new}
+              className="inline-flex items-center gap-2 rounded-2xl bg-orange-600 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-orange-700"
+            >
+              <Plus className="h-4 w-4" />
+              New Runbook
+            </Link>
+            <button
+              onClick={libraryQuery.reload}
+              className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition-colors hover:bg-slate-50"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Refresh
+            </button>
+          </>
+        }
+      />
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
         <MetricCard icon={BookOpenText} label="Runbooks" value={String(libraryQuery.data.runbooks.length)} accent="orange" />
@@ -273,7 +275,7 @@ export default function RunbookLibrary() {
                   <span className="text-xs text-slate-400">Created {formatDateTime(runbook.createdAt)}</span>
                   <div className="flex items-center gap-3">
                     <Link
-                      to={`/agent/kb/edit/${runbook.id}`}
+                      to={appPaths.kb.edit(runbook.id)}
                       className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50"
                     >
                       Edit

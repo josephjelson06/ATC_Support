@@ -1,14 +1,15 @@
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import { Settings, Users, FileCode } from 'lucide-react';
 import { clsx } from 'clsx';
+import { appPaths } from '../../lib/navigation';
 
 export default function SettingsLayout() {
   const location = useLocation();
 
   const navItems = [
-    { name: 'General', path: '/agent/settings', icon: Settings, exact: true },
-    { name: 'User Management', path: '/agent/settings/users', icon: Users },
-    { name: 'AMC Coverage', path: '/agent/settings/service-codes', icon: FileCode },
+    { name: 'General', path: appPaths.admin.settings.general, icon: Settings, exact: true },
+    { name: 'User Management', path: appPaths.admin.users, icon: Users },
+    { name: 'AMC Coverage', path: appPaths.admin.masters.serviceCodes, icon: FileCode },
   ];
 
   return (

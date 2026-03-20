@@ -3,12 +3,14 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Briefcase, KeyRound, Plus, Search, Ticket, UserRoundCog } from 'lucide-react';
 
 import { ProjectCrudPanel } from '../../components/entities/ProjectCrudPanel';
+import PageHeader from '../../components/layout/PageHeader';
 import { PaginationControls } from '../../components/layout/PaginationControls';
 import { useModal } from '../../contexts/ModalContext';
 import { useRole } from '../../contexts/RoleContext';
 import { useAsyncData } from '../../hooks/useAsyncData';
 import { apiFetch } from '../../lib/api';
 import { formatDate, humanizeEnum } from '../../lib/format';
+import { appPaths } from '../../lib/navigation';
 import type { ApiProject, ApiTicket, PaginatedResponse, ProjectStatus } from '../../lib/types';
 
 const PAGE_SIZE = 8;
@@ -62,7 +64,7 @@ export default function ProjectMasterList() {
           mode="create"
           onCompleted={async (project) => {
             projectsQuery.reload();
-            navigate(`/agent/projects/${project.id}`);
+            navigate(appPaths.projects.detail(project.id));
           }}
         />
       ),
@@ -93,20 +95,21 @@ export default function ProjectMasterList() {
 
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">{role === 'Project Manager' ? 'Projects' : 'Accessible Projects'}</h1>
-          <p className="mt-1 text-sm text-slate-500">Projects are server-filtered and paginated with live client, widget, and ticket metadata.</p>
-        </div>
-        <button
-          onClick={openCreateModal}
-          disabled={!canManageProjects}
-          className="inline-flex items-center gap-2 rounded-xl bg-orange-600 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-orange-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-        >
-          <Plus className="h-4 w-4" />
-          New Project
-        </button>
-      </div>
+      <PageHeader
+        title={role === 'Project Manager' ? 'Projects' : 'Accessible Projects'}
+        description="Projects are server-filtered and paginated with live client, widget, and ticket metadata."
+        breadcrumbs={[{ label: 'Operations' }, { label: 'Projects' }]}
+        actions={
+          <button
+            onClick={openCreateModal}
+            disabled={!canManageProjects}
+            className="inline-flex items-center gap-2 rounded-xl bg-orange-600 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-orange-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+          >
+            <Plus className="h-4 w-4" />
+            New Project
+          </button>
+        }
+      />
 
       {!canManageProjects ? (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900">
@@ -168,7 +171,7 @@ export default function ProjectMasterList() {
                 projectPage.items.map((project) => (
                   <tr key={project.id} className="transition-colors hover:bg-slate-50">
                     <td className="px-6 py-4">
-                      <Link to={`/agent/projects/${project.id}`} className="block group">
+                      <Link to={appPaths.projects.detail(project.id)} className="block group">
                         <p className="font-bold text-slate-900 transition-colors group-hover:text-orange-600">{project.name}</p>
                         <p className="mt-1 font-mono text-xs text-slate-500">{project.displayId}</p>
                       </Link>

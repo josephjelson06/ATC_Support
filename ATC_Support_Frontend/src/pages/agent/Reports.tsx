@@ -1,9 +1,11 @@
 import { Link } from 'react-router-dom';
 import { BarChart3, BookOpenText, FileText, Ticket } from 'lucide-react';
 
+import PageHeader from '../../components/layout/PageHeader';
 import { useAsyncData } from '../../hooks/useAsyncData';
 import { apiFetch } from '../../lib/api';
 import { humanizeEnum } from '../../lib/format';
+import { appPaths } from '../../lib/navigation';
 import type { ApiProject, ApiRunbook, ApiTicket } from '../../lib/types';
 
 export default function Reports() {
@@ -38,12 +40,10 @@ export default function Reports() {
 
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Reports & Analytics</h1>
-          <p className="text-sm text-slate-500 mt-1">Live summaries from the backend to help you jump into reporting workflows.</p>
-        </div>
-      </div>
+      <PageHeader
+        title="Reports Overview"
+        description="Live summaries from the backend to help you jump into reporting workflows."
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <MetricCard icon={Ticket} label="Open Tickets" value={String(openTickets)} accent="orange" />
@@ -54,7 +54,7 @@ export default function Reports() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Link
-          to="/agent/reports/tickets"
+          to={appPaths.reports.tickets}
           className="bg-white border border-slate-200 rounded-2xl p-6 hover:shadow-md hover:border-orange-300 transition-all group"
         >
           <div className="flex items-start justify-between gap-4">
@@ -80,7 +80,7 @@ export default function Reports() {
         </Link>
 
         <Link
-          to="/agent/kb"
+          to={appPaths.kb.library}
           className="bg-white border border-slate-200 rounded-2xl p-6 hover:shadow-md hover:border-blue-300 transition-all group"
         >
           <div className="flex items-start justify-between gap-4">

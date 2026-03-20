@@ -3,12 +3,14 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Briefcase, Building2, Plus, Search, ShieldCheck, Ticket } from 'lucide-react';
 
 import { ClientCrudPanel } from '../../components/entities/ClientCrudPanel';
+import PageHeader from '../../components/layout/PageHeader';
 import { PaginationControls } from '../../components/layout/PaginationControls';
 import { useModal } from '../../contexts/ModalContext';
 import { useRole } from '../../contexts/RoleContext';
 import { useAsyncData } from '../../hooks/useAsyncData';
 import { apiFetch } from '../../lib/api';
 import { formatDate, humanizeEnum } from '../../lib/format';
+import { appPaths } from '../../lib/navigation';
 import type { ApiClient, ApiTicket, ClientStatus, PaginatedResponse } from '../../lib/types';
 
 const PAGE_SIZE = 8;
@@ -62,7 +64,7 @@ export default function ClientMasterList() {
           mode="create"
           onCompleted={async (client) => {
             clientsQuery.reload();
-            navigate(`/agent/clients/${client.id}`);
+            navigate(appPaths.clients.detail(client.id));
           }}
         />
       ),
@@ -95,20 +97,21 @@ export default function ClientMasterList() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Clients</h1>
-          <p className="mt-1 text-sm text-slate-500">Server-filtered client data with pagination, business metadata, and ticket context.</p>
-        </div>
-        <button
-          onClick={openCreateModal}
-          disabled={!canManageClients}
-          className="inline-flex items-center gap-2 rounded-xl bg-orange-600 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-orange-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-        >
-          <Plus className="h-4 w-4" />
-          New Client
-        </button>
-      </div>
+      <PageHeader
+        title="Clients"
+        description="Server-filtered client data with pagination, business metadata, and quick ticket context."
+        breadcrumbs={[{ label: 'Operations' }, { label: 'Clients' }]}
+        actions={
+          <button
+            onClick={openCreateModal}
+            disabled={!canManageClients}
+            className="inline-flex items-center gap-2 rounded-xl bg-orange-600 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-orange-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+          >
+            <Plus className="h-4 w-4" />
+            New Client
+          </button>
+        }
+      />
 
       {!canManageClients ? (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900">
@@ -172,7 +175,7 @@ export default function ClientMasterList() {
                 clientPage.items.map((client) => (
                   <tr key={client.id} className="transition-colors hover:bg-slate-50">
                     <td className="px-6 py-4">
-                      <Link to={`/agent/clients/${client.id}`} className="group flex items-center gap-3">
+                      <Link to={appPaths.clients.detail(client.id)} className="group flex items-center gap-3">
                         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-500">
                           <Building2 className="h-5 w-5" />
                         </div>

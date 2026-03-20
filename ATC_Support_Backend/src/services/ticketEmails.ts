@@ -384,7 +384,7 @@ export const handleInboundTicketEmail = async (
           type: NotificationType.TICKET_REOPENED,
           title: `Ticket reopened by customer reply: ${ticket.title}`,
           body: `${input.fromName?.trim() || input.fromEmail} replied by email and the ticket was reopened.`,
-          link: `/agent/ticket/${ticket.id}`,
+          link: `/agent/tickets/${ticket.id}/summary`,
         })),
       });
     } else if (shouldNotifyReply && recipientUserIds.length > 0) {
@@ -394,7 +394,7 @@ export const handleInboundTicketEmail = async (
           type: NotificationType.TICKET_CUSTOMER_REPLIED,
           title: `Customer replied: ${ticket.title}`,
           body: `${input.fromName?.trim() || input.fromEmail} sent a reply by email.`,
-          link: `/agent/ticket/${ticket.id}`,
+          link: `/agent/tickets/${ticket.id}/summary`,
         })),
       });
     }

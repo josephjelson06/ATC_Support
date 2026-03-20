@@ -1,9 +1,11 @@
 import { Link } from 'react-router-dom';
 import { BookOpen, Briefcase, CheckCircle2, Ticket } from 'lucide-react';
 
+import PageHeader from '../../../components/layout/PageHeader';
 import { useAsyncData } from '../../../hooks/useAsyncData';
 import { apiFetch } from '../../../lib/api';
 import { formatRelativeTime, getTicketPriorityClasses, getTicketStatusClasses, humanizeEnum } from '../../../lib/format';
+import { appPaths } from '../../../lib/navigation';
 import type { ApiProject, ApiTicket, DashboardStats } from '../../../lib/types';
 
 export default function ProjectLeadDashboard() {
@@ -26,9 +28,10 @@ export default function ProjectLeadDashboard() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-slate-900">Project Lead Dashboard</h1>
-      </div>
+      <PageHeader
+        title="Project Lead Dashboard"
+        description="Escalation-focused queue visibility plus fast access to the projects that need your attention."
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <StatCard label="Open Tickets" value={String(statsQuery.data?.openTickets ?? 0)} icon={Ticket} accent="orange" />
@@ -41,7 +44,7 @@ export default function ProjectLeadDashboard() {
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="p-6 border-b border-slate-100 flex items-center justify-between">
             <h2 className="text-lg font-bold text-slate-900">Tickets Needing My Input</h2>
-            <Link to="/agent/queue" className="text-sm font-bold text-orange-600 hover:text-orange-700">
+            <Link to={appPaths.tickets.escalated} className="text-sm font-bold text-orange-600 hover:text-orange-700">
               Open Queue
             </Link>
           </div>
@@ -50,7 +53,7 @@ export default function ProjectLeadDashboard() {
               <div className="p-6 text-sm text-slate-500">No escalated tickets right now.</div>
             ) : (
               escalatedTickets.map((ticket) => (
-                <Link key={ticket.id} to={`/agent/ticket/${ticket.id}`} className="block p-4 hover:bg-slate-50 transition-colors">
+                <Link key={ticket.id} to={appPaths.tickets.detail(ticket.id)} className="block p-4 hover:bg-slate-50 transition-colors">
                   <p className="font-bold text-slate-900">{ticket.title}</p>
                   <div className="flex flex-wrap items-center gap-2 mt-2 text-xs text-slate-500">
                     <span className="font-mono font-bold text-orange-600">{ticket.displayId}</span>
@@ -73,7 +76,7 @@ export default function ProjectLeadDashboard() {
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="p-6 border-b border-slate-100 flex items-center justify-between">
             <h2 className="text-lg font-bold text-slate-900">My Projects</h2>
-            <Link to="/agent/projects" className="text-sm font-bold text-orange-600 hover:text-orange-700">
+            <Link to={appPaths.projects.list} className="text-sm font-bold text-orange-600 hover:text-orange-700">
               View Projects
             </Link>
           </div>
@@ -82,7 +85,7 @@ export default function ProjectLeadDashboard() {
               <div className="p-6 text-sm text-slate-500">No projects assigned.</div>
             ) : (
               projects.map((project) => (
-                <Link key={project.id} to={`/agent/projects/${project.id}`} className="block p-4 hover:bg-slate-50 transition-colors">
+                <Link key={project.id} to={appPaths.projects.detail(project.id)} className="block p-4 hover:bg-slate-50 transition-colors">
                   <p className="font-bold text-slate-900">{project.name}</p>
                   <div className="flex flex-wrap items-center gap-2 mt-2 text-xs text-slate-500">
                     <span className="font-mono font-bold text-orange-600">{project.displayId}</span>

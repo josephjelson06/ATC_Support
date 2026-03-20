@@ -1,6 +1,7 @@
 import { useDeferredValue, useEffect, useState } from 'react';
 import { Pencil, Plus, Search, Shield, Trash2, User as UserIcon } from 'lucide-react';
 
+import PageHeader from '../../components/layout/PageHeader';
 import { PaginationControls } from '../../components/layout/PaginationControls';
 import { useModal } from '../../contexts/ModalContext';
 import { useRole } from '../../contexts/RoleContext';
@@ -153,20 +154,20 @@ export default function UserManagement() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-lg font-bold text-slate-900">User Management</h2>
-          <p className="mt-1 text-sm text-slate-500">Live user directory with PM-only create, update, and delete controls.</p>
-        </div>
-        <button
-          onClick={openCreateModal}
-          disabled={!canManageUsers}
-          className="inline-flex items-center gap-2 rounded-xl bg-orange-600 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-orange-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-        >
-          <Plus className="h-4 w-4" />
-          Add User
-        </button>
-      </div>
+      <PageHeader
+        title="Users"
+        description="Live user directory with PM-only create, update, and delete controls."
+        actions={
+          <button
+            onClick={openCreateModal}
+            disabled={!canManageUsers}
+            className="inline-flex items-center gap-2 rounded-xl bg-orange-600 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-orange-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+          >
+            <Plus className="h-4 w-4" />
+            Add User
+          </button>
+        }
+      />
 
       {!canManageUsers ? (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900">

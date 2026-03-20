@@ -1,3 +1,5 @@
+import PageHeader from '../../components/layout/PageHeader';
+
 const matrixRows = [
   { capability: 'View ticket queue', se: 'Yes', pl: 'Yes', pm: 'Yes' },
   { capability: 'Assign / start / resolve tickets', se: 'Yes', pl: 'Yes', pm: 'View only' },
@@ -11,10 +13,10 @@ const matrixRows = [
 export default function PermissionMatrix() {
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-6">
-      <div>
-        <h2 className="text-lg font-bold text-slate-900">Permission Matrix</h2>
-        <p className="mt-1 text-sm text-slate-500">Operator-first permission summary used by the refactored IA and route visibility rules.</p>
-      </div>
+      <PageHeader
+        title="Permission Matrix"
+        description="Operator-first permission summary used by the refactored IA and route visibility rules."
+      />
 
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="overflow-x-auto">

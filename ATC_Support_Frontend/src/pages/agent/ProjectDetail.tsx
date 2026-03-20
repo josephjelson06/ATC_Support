@@ -94,7 +94,7 @@ export default function ProjectDetail() {
             projectQuery.reload();
           }}
           onDeleted={async () => {
-            navigate('/agent/projects');
+            navigate(appPaths.projects.list);
           }}
         />
       ),

@@ -2,12 +2,14 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Check, Clock, ExternalLink, FileEdit, MessageSquare, Sparkles, Ticket, Trash2 } from 'lucide-react';
 import Markdown from 'react-markdown';
 
+import PageHeader from '../../components/layout/PageHeader';
 import { useModal } from '../../contexts/ModalContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useAsyncData } from '../../hooks/useAsyncData';
 import { apiFetch, getErrorMessage } from '../../lib/api';
 import { createDraftSuggestion, dismissDraftIds } from '../../lib/drafts';
 import { formatDateTime, humanizeEnum } from '../../lib/format';
+import { appPaths } from '../../lib/navigation';
 import type { ApiRunbook, ApiTicket, KnowledgeStatus } from '../../lib/types';
 
 export default function AutoDraftDetail() {
@@ -60,7 +62,7 @@ export default function AutoDraftDetail() {
 
             dismissDraftIds([draftQuery.data!.ticket.id]);
             showToast('success', status === 'PUBLISHED' ? 'Runbook published to the knowledge base.' : 'Runbook saved as draft.');
-            navigate(status === 'PUBLISHED' ? '/agent/kb' : `/agent/kb/edit/${savedRunbook.id}`);
+            navigate(status === 'PUBLISHED' ? appPaths.kb.library : appPaths.kb.edit(savedRunbook.id));
           } catch (error) {
             showToast('error', getErrorMessage(error));
             throw error;
@@ -92,7 +94,7 @@ export default function AutoDraftDetail() {
         onClick: () => {
           dismissDraftIds([draftQuery.data!.ticket.id]);
           showToast('success', 'Draft suggestion dismissed.');
-          navigate('/agent/kb/review');
+          navigate(appPaths.kb.review);
         },
       },
       secondaryAction: {
@@ -116,47 +118,47 @@ export default function AutoDraftDetail() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <div>
-          <Link to="/agent/kb/review" className="text-sm font-medium text-slate-500 hover:text-slate-800">
-            {'<-'} Back to Review Queue
-          </Link>
-          <h1 className="text-2xl font-bold text-slate-900 mt-3 flex items-center gap-2">
-            <Sparkles className="w-6 h-6 text-purple-600" />
-            Review Draft Suggestion
-          </h1>
-          <p className="text-sm text-slate-500 mt-1">This runbook draft is generated from a resolved support ticket.</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <Link
-            to={`/agent/kb/new?draftTicketId=${ticket.id}`}
-            className="px-4 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-50 transition-colors"
-          >
-            Edit Manually
-          </Link>
-          <button
-            onClick={handleReject}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-red-200 text-red-600 rounded-xl text-sm font-bold hover:bg-red-50 transition-colors"
-          >
-            <Trash2 className="w-4 h-4" />
-            Dismiss
-          </button>
-          <button
-            onClick={() => persistRunbook('DRAFT')}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-purple-200 text-purple-700 rounded-xl text-sm font-bold hover:bg-purple-50 transition-colors"
-          >
-            <FileEdit className="w-4 h-4" />
-            Save as Draft
-          </button>
-          <button
-            onClick={() => persistRunbook('PUBLISHED')}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-purple-600 text-white rounded-xl text-sm font-bold hover:bg-purple-700 transition-colors"
-          >
-            <Check className="w-4 h-4" />
-            Publish Runbook
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Review Draft Suggestion"
+        description="This runbook draft is generated from a resolved support ticket."
+        badges={
+          <span className="inline-flex items-center gap-2 rounded-full bg-purple-50 px-3 py-1 text-xs font-black uppercase tracking-widest text-purple-700">
+            <Sparkles className="h-3.5 w-3.5" />
+            Auto Draft
+          </span>
+        }
+        actions={
+          <>
+            <Link
+              to={`${appPaths.kb.new}?draftTicketId=${ticket.id}`}
+              className="px-4 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-50 transition-colors"
+            >
+              Edit Manually
+            </Link>
+            <button
+              onClick={handleReject}
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-red-200 text-red-600 rounded-xl text-sm font-bold hover:bg-red-50 transition-colors"
+            >
+              <Trash2 className="w-4 h-4" />
+              Dismiss
+            </button>
+            <button
+              onClick={() => persistRunbook('DRAFT')}
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-purple-200 text-purple-700 rounded-xl text-sm font-bold hover:bg-purple-50 transition-colors"
+            >
+              <FileEdit className="w-4 h-4" />
+              Save as Draft
+            </button>
+            <button
+              onClick={() => persistRunbook('PUBLISHED')}
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-purple-600 text-white rounded-xl text-sm font-bold hover:bg-purple-700 transition-colors"
+            >
+              <Check className="w-4 h-4" />
+              Publish Runbook
+            </button>
+          </>
+        }
+      />
 
       <div className="grid grid-cols-1 xl:grid-cols-[0.95fr_1.05fr] gap-6">
         <div className="space-y-6">
@@ -169,7 +171,7 @@ export default function AutoDraftDetail() {
             </div>
             <div className="p-6 space-y-4">
               <div className="flex flex-wrap items-center gap-2">
-                <Link to={`/agent/ticket/${ticket.id}`} className="font-mono font-bold text-orange-600 hover:text-orange-700 inline-flex items-center gap-1">
+                <Link to={appPaths.tickets.detail(ticket.id)} className="font-mono font-bold text-orange-600 hover:text-orange-700 inline-flex items-center gap-1">
                   {ticket.displayId}
                   <ExternalLink className="w-3.5 h-3.5" />
                 </Link>

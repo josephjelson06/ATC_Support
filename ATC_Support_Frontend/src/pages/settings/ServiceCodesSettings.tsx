@@ -2,9 +2,11 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Info, RefreshCw, Search } from 'lucide-react';
 
+import PageHeader from '../../components/layout/PageHeader';
 import { useAsyncData } from '../../hooks/useAsyncData';
 import { apiFetch } from '../../lib/api';
 import { formatDate, formatDateTime } from '../../lib/format';
+import { appPaths } from '../../lib/navigation';
 import type { ApiAmc, ApiClient, ApiClientDetail } from '../../lib/types';
 
 type CoverageRow = ApiAmc & {
@@ -66,19 +68,19 @@ export default function ServiceCodesSettings() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-lg font-bold text-slate-900">Service Codes & Reference Data</h2>
-          <p className="mt-1 text-sm text-slate-500">Reference-data placeholder view. Until service-code entities land in the backend, this uses live AMC coverage as the operational stand-in.</p>
-        </div>
-        <button
-          onClick={coverageQuery.reload}
-          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50"
-        >
-          <RefreshCw className="h-4 w-4" />
-          Refresh
-        </button>
-      </div>
+      <PageHeader
+        title="Service Codes & Reference Data"
+        description="Reference-data placeholder view. Until service-code entities land in the backend, this uses live AMC coverage as the operational stand-in."
+        actions={
+          <button
+            onClick={coverageQuery.reload}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50"
+          >
+            <RefreshCw className="h-4 w-4" />
+            Refresh
+          </button>
+        }
+      />
 
       <div className="rounded-2xl border border-blue-200 bg-blue-50 px-5 py-4 text-sm text-blue-900">
         <div className="flex items-start gap-3">
@@ -186,10 +188,7 @@ export default function ServiceCodesSettings() {
                         </span>
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <Link
-                          to={`/agent/clients/${row.clientId}`}
-                          className="text-xs font-black uppercase tracking-widest text-orange-600 transition-colors hover:text-orange-700"
-                        >
+                        <Link to={appPaths.clients.detail(row.clientId)} className="text-xs font-black uppercase tracking-widest text-orange-600 transition-colors hover:text-orange-700">
                           View Client
                         </Link>
                       </td>

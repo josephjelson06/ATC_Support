@@ -69,7 +69,7 @@ export default function ClientDetail() {
             clientQuery.reload();
           }}
           onDeleted={async () => {
-            navigate('/agent/clients');
+            navigate(appPaths.clients.list);
           }}
         />
       ),

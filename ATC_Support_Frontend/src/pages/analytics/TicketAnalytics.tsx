@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { ArrowLeft, Download, RefreshCw } from 'lucide-react';
+import { Download, RefreshCw } from 'lucide-react';
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
+import PageHeader from '../../components/layout/PageHeader';
 import { useToast } from '../../contexts/ToastContext';
 import { useAsyncData } from '../../hooks/useAsyncData';
 import {
@@ -121,13 +121,13 @@ export default function TicketAnalytics() {
       filteredTickets.map((ticket) => [
         ticket.displayId,
         ticket.title,
-        ticket.project?.client?.name || '—',
-        ticket.project?.name || '—',
+        ticket.project?.client?.name || '-',
+        ticket.project?.name || '-',
         humanizeEnum(ticket.priority),
         humanizeEnum(ticket.status),
         ticket.assignedTo?.name || 'Unassigned',
         formatDateTime(ticket.createdAt),
-        ticket.resolvedAt ? formatDateTime(ticket.resolvedAt) : '—',
+        ticket.resolvedAt ? formatDateTime(ticket.resolvedAt) : '-',
       ]),
     );
     showToast('success', 'Ticket analytics exported as CSV.');
@@ -143,56 +143,51 @@ export default function TicketAnalytics() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 p-6">
-      <Link to="/agent/analytics" className="inline-flex items-center gap-1 text-xs font-black uppercase tracking-widest text-slate-500 transition-colors hover:text-orange-600">
-        <ArrowLeft className="h-4 w-4" />
-        Back To Overview
-      </Link>
-
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <h1 className="text-2xl font-black tracking-tight text-slate-900">Ticket Analytics</h1>
-          <p className="mt-1 text-sm text-slate-500">Resolution speed, backlog health, and priority distribution from live tickets.</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <select
-            value={period}
-            onChange={(event) => setPeriod(event.target.value as AnalyticsPeriod)}
-            className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 outline-none transition-all focus:ring-2 focus:ring-orange-500"
-          >
-            {analyticsPeriodOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          <select
-            value={projectId}
-            onChange={(event) => setProjectId(event.target.value)}
-            className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 outline-none transition-all focus:ring-2 focus:ring-orange-500"
-          >
-            <option value="">All Projects</option>
-            {projects.map((project) => (
-              <option key={project.id} value={String(project.id)}>
-                {project.name}
-              </option>
-            ))}
-          </select>
-          <button
-            onClick={analyticsQuery.reload}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50"
-          >
-            <RefreshCw className="h-4 w-4" />
-            Refresh
-          </button>
-          <button
-            onClick={handleExport}
-            className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-slate-800"
-          >
-            <Download className="h-4 w-4" />
-            Export CSV
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Ticket Analytics"
+        description="Resolution speed, backlog health, and priority distribution from live tickets."
+        actions={
+          <>
+            <select
+              value={period}
+              onChange={(event) => setPeriod(event.target.value as AnalyticsPeriod)}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 outline-none transition-all focus:ring-2 focus:ring-orange-500"
+            >
+              {analyticsPeriodOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <select
+              value={projectId}
+              onChange={(event) => setProjectId(event.target.value)}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 outline-none transition-all focus:ring-2 focus:ring-orange-500"
+            >
+              <option value="">All Projects</option>
+              {projects.map((project) => (
+                <option key={project.id} value={String(project.id)}>
+                  {project.name}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={analyticsQuery.reload}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Refresh
+            </button>
+            <button
+              onClick={handleExport}
+              className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-slate-800"
+            >
+              <Download className="h-4 w-4" />
+              Export CSV
+            </button>
+          </>
+        }
+      />
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
         <SummaryCard label="Avg Resolution" value={formatAnalyticsHours(averageResolution)} hint="Resolved tickets only" />

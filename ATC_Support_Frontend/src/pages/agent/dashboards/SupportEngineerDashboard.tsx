@@ -1,9 +1,11 @@
 import { Link } from 'react-router-dom';
 import { AlertTriangle, CheckCircle2, Clock3, Ticket } from 'lucide-react';
 
+import PageHeader from '../../../components/layout/PageHeader';
 import { useAsyncData } from '../../../hooks/useAsyncData';
 import { apiFetch } from '../../../lib/api';
 import { formatRelativeTime, getTicketPriorityClasses, getTicketStatusClasses, humanizeEnum } from '../../../lib/format';
+import { appPaths } from '../../../lib/navigation';
 import type { ApiTicket, DashboardStats } from '../../../lib/types';
 import { useRole } from '../../../contexts/RoleContext';
 
@@ -29,9 +31,10 @@ export default function SupportEngineerDashboard() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-slate-900">Support Engineer Dashboard</h1>
-      </div>
+      <PageHeader
+        title="Support Engineer Dashboard"
+        description="Your working view of unassigned work, owned tickets, and the next queue actions."
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <StatCard label="Unassigned Tickets" value={String(statsQuery.data?.unassignedTickets ?? 0)} icon={AlertTriangle} accent="orange" />
@@ -52,7 +55,7 @@ function TicketListCard({ title, tickets, emptyText }: { title: string; tickets:
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
       <div className="p-6 border-b border-slate-100 flex items-center justify-between">
         <h2 className="text-lg font-bold text-slate-900">{title}</h2>
-        <Link to="/agent/queue" className="text-sm font-bold text-orange-600 hover:text-orange-700">
+        <Link to={appPaths.tickets.queue} className="text-sm font-bold text-orange-600 hover:text-orange-700">
           Open Queue
         </Link>
       </div>
@@ -61,7 +64,7 @@ function TicketListCard({ title, tickets, emptyText }: { title: string; tickets:
           <div className="p-6 text-sm text-slate-500">{emptyText}</div>
         ) : (
           tickets.map((ticket) => (
-            <Link key={ticket.id} to={`/agent/ticket/${ticket.id}`} className="block p-4 hover:bg-slate-50 transition-colors">
+            <Link key={ticket.id} to={appPaths.tickets.detail(ticket.id)} className="block p-4 hover:bg-slate-50 transition-colors">
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="font-bold text-slate-900">{ticket.title}</p>

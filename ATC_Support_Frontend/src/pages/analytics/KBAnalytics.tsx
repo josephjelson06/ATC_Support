@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, BookOpen, Download, RefreshCw, Sparkles } from 'lucide-react';
+import { BookOpen, Download, RefreshCw, Sparkles } from 'lucide-react';
 import { Bar, CartesianGrid, Cell, ComposedChart, Line, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
+import PageHeader from '../../components/layout/PageHeader';
 import { useToast } from '../../contexts/ToastContext';
 import { useAsyncData } from '../../hooks/useAsyncData';
 import {
@@ -16,6 +17,7 @@ import {
 import { apiFetch } from '../../lib/api';
 import { buildDraftQueue } from '../../lib/drafts';
 import { formatDateTime } from '../../lib/format';
+import { appPaths } from '../../lib/navigation';
 import type { ApiRunbook, ApiTicket } from '../../lib/types';
 
 const categoryPalette = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#14b8a6'];
@@ -121,44 +123,39 @@ export default function KBAnalytics() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 p-6">
-      <Link to="/agent/analytics" className="inline-flex items-center gap-1 text-xs font-black uppercase tracking-widest text-slate-500 transition-colors hover:text-orange-600">
-        <ArrowLeft className="h-4 w-4" />
-        Back To Overview
-      </Link>
-
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <h1 className="text-2xl font-black tracking-tight text-slate-900">Knowledge Base Analytics</h1>
-          <p className="mt-1 text-sm text-slate-500">Live visibility into runbook growth and unresolved documentation opportunities.</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <select
-            value={period}
-            onChange={(event) => setPeriod(event.target.value as AnalyticsPeriod)}
-            className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 outline-none transition-all focus:ring-2 focus:ring-purple-500"
-          >
-            {analyticsPeriodOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          <button
-            onClick={kbQuery.reload}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50"
-          >
-            <RefreshCw className="h-4 w-4" />
-            Refresh
-          </button>
-          <button
-            onClick={handleExport}
-            className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-slate-800"
-          >
-            <Download className="h-4 w-4" />
-            Export CSV
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Knowledge Base Analytics"
+        description="Live visibility into runbook growth and unresolved documentation opportunities."
+        actions={
+          <>
+            <select
+              value={period}
+              onChange={(event) => setPeriod(event.target.value as AnalyticsPeriod)}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 outline-none transition-all focus:ring-2 focus:ring-purple-500"
+            >
+              {analyticsPeriodOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={kbQuery.reload}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Refresh
+            </button>
+            <button
+              onClick={handleExport}
+              className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-slate-800"
+            >
+              <Download className="h-4 w-4" />
+              Export CSV
+            </button>
+          </>
+        }
+      />
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
         <SummaryCard icon={BookOpen} label="Total Runbooks" value={String(runbooks.length)} hint={`${runbooksInPeriod.length} created in range`} iconClasses="bg-blue-50 text-blue-600 border-blue-100" />
@@ -241,10 +238,10 @@ export default function KBAnalytics() {
                     <div>
                       <p className="font-bold text-slate-900">{runbook.title}</p>
                       <p className="mt-1 text-xs text-slate-500">
-                        {runbook.displayId} • {runbook.category || 'Uncategorized'} • Updated {formatDateTime(runbook.updatedAt)}
+                        {runbook.displayId} | {runbook.category || 'Uncategorized'} | Updated {formatDateTime(runbook.updatedAt)}
                       </p>
                     </div>
-                    <Link to={`/agent/kb/edit/${runbook.id}`} className="text-xs font-black uppercase tracking-widest text-orange-600 transition-colors hover:text-orange-700">
+                    <Link to={appPaths.kb.edit(runbook.id)} className="text-xs font-black uppercase tracking-widest text-orange-600 transition-colors hover:text-orange-700">
                       Open
                     </Link>
                   </div>
@@ -261,7 +258,7 @@ export default function KBAnalytics() {
                 <h2 className="text-lg font-black tracking-tight text-slate-900">Draft Queue Signals</h2>
                 <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Resolved tickets that still need documentation</p>
               </div>
-              <Link to="/agent/kb/review" className="text-xs font-black uppercase tracking-widest text-orange-600 transition-colors hover:text-orange-700">
+              <Link to={appPaths.kb.review} className="text-xs font-black uppercase tracking-widest text-orange-600 transition-colors hover:text-orange-700">
                 Review Queue
               </Link>
             </div>
@@ -274,9 +271,9 @@ export default function KBAnalytics() {
                 <div key={draft.ticketId} className="px-6 py-4">
                   <p className="font-bold text-slate-900">{draft.title}</p>
                   <p className="mt-1 text-xs text-slate-500">
-                    Ticket {draft.ticketDisplayId} • Confidence {Math.round(draft.confidence * 100)}% • {draft.category}
+                    Ticket {draft.ticketDisplayId} | Confidence {Math.round(draft.confidence * 100)}% | {draft.category}
                   </p>
-                  <Link to={`/agent/kb/auto-draft/${draft.ticketId}`} className="mt-2 inline-block text-xs font-black uppercase tracking-widest text-orange-600 transition-colors hover:text-orange-700">
+                  <Link to={appPaths.kb.autoDraft(draft.ticketId)} className="mt-2 inline-block text-xs font-black uppercase tracking-widest text-orange-600 transition-colors hover:text-orange-700">
                     Open Draft
                   </Link>
                 </div>

@@ -68,8 +68,8 @@ export default function ServiceCodesSettings() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-lg font-bold text-slate-900">AMC Coverage</h2>
-          <p className="mt-1 text-sm text-slate-500">Live AMC records from the backend, used as a practical stand-in until billing/service codes are added.</p>
+          <h2 className="text-lg font-bold text-slate-900">Service Codes & Reference Data</h2>
+          <p className="mt-1 text-sm text-slate-500">Reference-data placeholder view. Until service-code entities land in the backend, this uses live AMC coverage as the operational stand-in.</p>
         </div>
         <button
           onClick={coverageQuery.reload}
@@ -86,7 +86,7 @@ export default function ServiceCodesSettings() {
           <div>
             <p className="font-bold">Why this replaced service codes</p>
             <p className="mt-1 text-blue-800">
-              Service-code billing is out of scope in the current backend spec. We are showing real AMC coverage here instead so the page still provides useful operational data.
+              Service-code billing is out of scope in the current backend spec. We are surfacing real AMC coverage here so the Masters area still carries practical reference data.
             </p>
           </div>
         </div>

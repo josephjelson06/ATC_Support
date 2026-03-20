@@ -1,19 +1,25 @@
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Briefcase, Building2, Clock3, Globe, Mail, MapPin, Pencil, Phone, ShieldCheck, Ticket, Users } from 'lucide-react';
 
+import PageHeader from '../../components/layout/PageHeader';
+import SectionTabs from '../../components/layout/SectionTabs';
 import { ClientCrudPanel } from '../../components/entities/ClientCrudPanel';
 import { useModal } from '../../contexts/ModalContext';
 import { useRole } from '../../contexts/RoleContext';
 import { useAsyncData } from '../../hooks/useAsyncData';
 import { apiFetch } from '../../lib/api';
 import { formatDate, formatRelativeTime, getTicketPriorityClasses, getTicketStatusClasses, humanizeEnum } from '../../lib/format';
-import type { ApiClientDetail, ApiTicket } from '../../lib/types';
+import { appPaths } from '../../lib/navigation';
+import type { ApiClientDetail, ApiTicket, ClientDetailTab } from '../../lib/types';
+
+const detailTabs: ClientDetailTab[] = ['overview', 'projects', 'contacts', 'consignees', 'amcs', 'tickets'];
 
 export default function ClientDetail() {
   const navigate = useNavigate();
   const { openModal } = useModal();
   const { backendRole } = useRole();
-  const { id } = useParams();
+  const { id, tab } = useParams();
+  const currentTab = detailTabs.includes((tab as ClientDetailTab) || 'overview') ? ((tab as ClientDetailTab) || 'overview') : 'overview';
   const clientQuery = useAsyncData(
     async () => {
       if (!id) {
@@ -42,6 +48,14 @@ export default function ClientDetail() {
   const openTickets = tickets.filter((ticket) => ticket.status !== 'RESOLVED');
   const activeAmcs = client.amcs.filter((amc) => amc.status === 'ACTIVE');
   const canManageClients = backendRole === 'PM';
+  const clientTabs = [
+    { label: 'Overview', to: appPaths.clients.detail(client.id, 'overview') },
+    { label: 'Projects', to: appPaths.clients.detail(client.id, 'projects') },
+    { label: 'Contacts', to: appPaths.clients.detail(client.id, 'contacts') },
+    { label: 'Consignees', to: appPaths.clients.detail(client.id, 'consignees') },
+    { label: 'AMCs', to: appPaths.clients.detail(client.id, 'amcs') },
+    { label: 'Tickets', to: appPaths.clients.detail(client.id, 'tickets') },
+  ];
 
   const openEditModal = () => {
     openModal({
@@ -64,11 +78,30 @@ export default function ClientDetail() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
-      <div className="flex items-center gap-4">
-        <Link to="/agent/clients" className="text-sm font-medium text-slate-500 hover:text-slate-800">
-          {'<-'} Back to Clients
-        </Link>
-      </div>
+      <PageHeader
+        title={client.name}
+        description="Client profile, linked delivery records, and operational context."
+        breadcrumbs={[
+          { label: 'Operations', to: appPaths.clients.list },
+          { label: 'Clients', to: appPaths.clients.list },
+          { label: client.name },
+          { label: humanizeEnum(currentTab) },
+        ]}
+        badges={
+          <>
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-mono font-bold text-slate-700">{client.displayId}</span>
+            <span
+              className={`rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wider ${
+                client.status === 'ACTIVE' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
+              }`}
+            >
+              {humanizeEnum(client.status)}
+            </span>
+          </>
+        }
+      />
+
+      <SectionTabs tabs={clientTabs} role={backendRole} />
 
       <div className="flex flex-col items-start gap-6 rounded-3xl border border-slate-200 bg-white p-8 shadow-sm md:flex-row">
         <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-3xl border border-slate-200 bg-slate-100">
@@ -78,15 +111,7 @@ export default function ClientDetail() {
           <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
             <div>
               <div className="flex flex-wrap items-center gap-3">
-                <h1 className="text-3xl font-bold text-slate-900">{client.name}</h1>
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-mono font-bold text-slate-700">{client.displayId}</span>
-                <span
-                  className={`rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wider ${
-                    client.status === 'ACTIVE' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
-                  }`}
-                >
-                  {humanizeEnum(client.status)}
-                </span>
+                <h2 className="text-3xl font-bold text-slate-900">{client.name}</h2>
               </div>
               <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-slate-500">
                 {client.industry ? <span>{client.industry}</span> : null}
@@ -122,8 +147,10 @@ export default function ClientDetail() {
         <DetailStat icon={ShieldCheck} label="Active AMCs" value={String(activeAmcs.length)} accent="green" />
       </div>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+      <div className={`grid grid-cols-1 gap-6 ${currentTab === 'overview' ? 'xl:grid-cols-[1.1fr_0.9fr]' : ''}`}>
+        {currentTab === 'overview' || currentTab === 'projects' || currentTab === 'tickets' ? (
         <div className="space-y-6">
+          {currentTab === 'overview' || currentTab === 'projects' ? (
           <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="flex items-center justify-between border-b border-slate-100 p-6">
               <h2 className="text-lg font-bold text-slate-900">Projects</h2>
@@ -134,7 +161,7 @@ export default function ClientDetail() {
                 <div className="p-6 text-sm text-slate-500">No projects linked to this client yet.</div>
               ) : (
                 client.projects.map((project) => (
-                  <Link key={project.id} to={`/agent/projects/${project.id}`} className="block p-5 transition-colors hover:bg-slate-50">
+                  <Link key={project.id} to={appPaths.projects.detail(project.id)} className="block p-5 transition-colors hover:bg-slate-50">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
                         <p className="font-bold text-slate-900">{project.name}</p>
@@ -162,11 +189,13 @@ export default function ClientDetail() {
               )}
             </div>
           </section>
+          ) : null}
 
+          {currentTab === 'overview' || currentTab === 'tickets' ? (
           <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="flex items-center justify-between border-b border-slate-100 p-6">
-              <h2 className="text-lg font-bold text-slate-900">Recent Tickets</h2>
-              <Link to="/agent/queue" className="text-sm font-bold text-orange-600 hover:text-orange-700">
+              <h2 className="text-lg font-bold text-slate-900">{currentTab === 'tickets' ? 'Tickets' : 'Recent Tickets'}</h2>
+              <Link to={appPaths.tickets.queue} className="text-sm font-bold text-orange-600 hover:text-orange-700">
                 Open queue
               </Link>
             </div>
@@ -175,7 +204,7 @@ export default function ClientDetail() {
                 <div className="p-6 text-sm text-slate-500">No tickets are currently linked to this client.</div>
               ) : (
                 tickets.slice(0, 6).map((ticket) => (
-                  <Link key={ticket.id} to={`/agent/ticket/${ticket.id}`} className="block p-5 transition-colors hover:bg-slate-50">
+                  <Link key={ticket.id} to={appPaths.tickets.detail(ticket.id)} className="block p-5 transition-colors hover:bg-slate-50">
                     <p className="font-bold text-slate-900">{ticket.title}</p>
                     <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
                       <span className="font-mono font-bold text-orange-600">{ticket.displayId}</span>
@@ -194,9 +223,13 @@ export default function ClientDetail() {
               )}
             </div>
           </section>
+          ) : null}
         </div>
+        ) : null}
 
+        {currentTab === 'overview' || currentTab === 'contacts' || currentTab === 'consignees' || currentTab === 'amcs' ? (
         <div className="space-y-6">
+          {currentTab === 'overview' ? (
           <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-100 p-5">
               <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">Business Profile</h2>
@@ -216,7 +249,9 @@ export default function ClientDetail() {
               </div>
             </div>
           </section>
+          ) : null}
 
+          {currentTab === 'overview' || currentTab === 'contacts' ? (
           <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-100 p-5">
               <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">Client Contacts</h2>
@@ -245,7 +280,9 @@ export default function ClientDetail() {
               )}
             </div>
           </section>
+          ) : null}
 
+          {currentTab === 'overview' || currentTab === 'consignees' ? (
           <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-100 p-5">
               <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">Consignees</h2>
@@ -273,7 +310,9 @@ export default function ClientDetail() {
               )}
             </div>
           </section>
+          ) : null}
 
+          {currentTab === 'overview' || currentTab === 'amcs' ? (
           <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-100 p-5">
               <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">AMC Coverage</h2>
@@ -319,7 +358,9 @@ export default function ClientDetail() {
               )}
             </div>
           </section>
+          ) : null}
         </div>
+        ) : null}
       </div>
     </div>
   );

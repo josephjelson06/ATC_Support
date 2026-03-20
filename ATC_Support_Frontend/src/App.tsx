@@ -1,10 +1,21 @@
 import { Suspense, lazy } from 'react';
 import type { ReactElement } from 'react';
-import { BrowserRouter, Link, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
+import { BrowserRouter, Link, Navigate, Outlet, Route, Routes, useLocation, useParams } from 'react-router-dom';
 
 import { ModalProvider } from './contexts/ModalContext';
 import { RoleProvider, useRole } from './contexts/RoleContext';
 import { ToastProvider } from './contexts/ToastContext';
+import SectionRouteLayout from './layouts/SectionRouteLayout';
+import {
+  adminPrimaryTabs,
+  analyticsTabs,
+  appPaths,
+  knowledgeBaseTabs,
+  reportTabs,
+  settingsTabs,
+  ticketModuleTabs,
+  userAccessTabs,
+} from './lib/navigation';
 
 const AgentLayout = lazy(() => import('./layouts/AgentLayout'));
 const ClientLayout = lazy(() => import('./layouts/ClientLayout'));
@@ -35,10 +46,18 @@ const TicketAnalytics = lazy(() => import('./pages/analytics/TicketAnalytics'));
 const KBAnalytics = lazy(() => import('./pages/analytics/KBAnalytics'));
 const EngineerPerformance = lazy(() => import('./pages/analytics/EngineerPerformance'));
 
-const SettingsLayout = lazy(() => import('./pages/settings/SettingsLayout'));
 const GeneralSettings = lazy(() => import('./pages/settings/GeneralSettings'));
 const UserManagement = lazy(() => import('./pages/settings/UserManagement'));
 const ServiceCodesSettings = lazy(() => import('./pages/settings/ServiceCodesSettings'));
+const AccountPage = lazy(() => import('./pages/settings/AccountPage'));
+const RoleDirectory = lazy(() => import('./pages/settings/RoleDirectory'));
+const PermissionMatrix = lazy(() => import('./pages/settings/PermissionMatrix'));
+const NotificationSettings = lazy(() => import('./pages/settings/NotificationSettings'));
+const EmailSettings = lazy(() => import('./pages/settings/EmailSettings'));
+const WidgetDefaultsSettings = lazy(() => import('./pages/settings/WidgetDefaultsSettings'));
+const JuliaDefaultsSettings = lazy(() => import('./pages/settings/JuliaDefaultsSettings'));
+const SecuritySettings = lazy(() => import('./pages/settings/SecuritySettings'));
+const Integrations = lazy(() => import('./pages/settings/Integrations'));
 
 function RequireAuth() {
   const location = useLocation();
@@ -109,6 +128,16 @@ function NotFoundPage() {
   );
 }
 
+function LegacyTicketRedirect() {
+  const { id } = useParams();
+  return <Navigate to={appPaths.tickets.detail(id || '')} replace />;
+}
+
+function LegacyRunbookEditRedirect() {
+  const { id } = useParams();
+  return <Navigate to={appPaths.kb.edit(id || '')} replace />;
+}
+
 function AppRoutes() {
   return (
     <Suspense fallback={<RouteFallback />}>
@@ -132,30 +161,103 @@ function AppRoutes() {
           <Route path="/agent" element={<AgentLayout />}>
             <Route index element={<Navigate to="/agent/dashboard" replace />} />
             <Route path="dashboard" element={<Dashboard />} />
-            <Route path="queue" element={<InboundQueue />} />
-            <Route path="ticket/:id" element={<TicketDetail />} />
+            <Route path="queue" element={<Navigate to={appPaths.tickets.queue} replace />} />
+            <Route path="ticket/:id" element={<LegacyTicketRedirect />} />
+
+            <Route
+              path="tickets"
+              element={<SectionRouteLayout breadcrumbs={[{ label: 'Operations' }, { label: 'Tickets' }]} tabs={ticketModuleTabs} />}
+            >
+              <Route index element={<Navigate to="queue" replace />} />
+              <Route path="queue" element={<InboundQueue />} />
+              <Route path="mine" element={<InboundQueue />} />
+              <Route path="escalated" element={<InboundQueue />} />
+              <Route path="waiting" element={<InboundQueue />} />
+              <Route path="resolved" element={<InboundQueue />} />
+              <Route path=":id" element={<Navigate to="summary" replace />} />
+              <Route path=":id/:tab" element={<TicketDetail />} />
+            </Route>
+
             <Route path="clients" element={<ClientMasterList />} />
-            <Route path="clients/:id" element={<ClientDetail />} />
+            <Route path="clients/:id" element={<Navigate to="overview" replace />} />
+            <Route path="clients/:id/:tab" element={<ClientDetail />} />
+
             <Route path="projects" element={<ProjectMasterList />} />
-            <Route path="projects/:id" element={<ProjectDetail />} />
-            <Route path="reports" element={<Reports />} />
-            <Route path="reports/tickets" element={<TicketReport />} />
+            <Route path="projects/:id" element={<Navigate to="overview" replace />} />
+            <Route path="projects/:id/:tab" element={<ProjectDetail />} />
 
-            <Route path="kb" element={<RunbookLibrary />} />
-            <Route path="kb/new" element={<RunbookEditor />} />
-            <Route path="kb/edit/:id" element={<RunbookEditor />} />
-            <Route path="kb/review" element={<ReviewQueue />} />
-            <Route path="kb/auto-draft/:id" element={<AutoDraftDetail />} />
+            <Route path="reports" element={<Navigate to={appPaths.reports.overview} replace />} />
+            <Route
+              path="reports"
+              element={<SectionRouteLayout breadcrumbs={[{ label: 'Insights' }, { label: 'Reports' }]} tabs={reportTabs} />}
+            >
+              <Route index element={<Navigate to="overview" replace />} />
+              <Route path="overview" element={<Reports />} />
+              <Route path="tickets" element={<TicketReport />} />
+            </Route>
 
-            <Route path="analytics" element={<AnalyticsOverview />} />
-            <Route path="analytics/tickets" element={<TicketAnalytics />} />
-            <Route path="analytics/kb" element={<KBAnalytics />} />
-            <Route path="analytics/performance" element={<EngineerPerformance />} />
+            <Route path="kb" element={<Navigate to={appPaths.kb.library} replace />} />
+            <Route
+              path="kb"
+              element={<SectionRouteLayout breadcrumbs={[{ label: 'Operations' }, { label: 'Knowledge Base' }]} tabs={knowledgeBaseTabs} />}
+            >
+              <Route index element={<Navigate to="library" replace />} />
+              <Route path="library" element={<RunbookLibrary />} />
+              <Route path="review" element={<ReviewQueue />} />
+              <Route path="auto-drafts" element={<ReviewQueue />} />
+              <Route path="new" element={<RunbookEditor />} />
+              <Route path="edit/:id" element={<LegacyRunbookEditRedirect />} />
+              <Route path=":id/edit" element={<RunbookEditor />} />
+              <Route path="auto-draft/:id" element={<AutoDraftDetail />} />
+            </Route>
 
-            <Route path="settings" element={<SettingsLayout />}>
-              <Route index element={<GeneralSettings />} />
-              <Route path="users" element={<UserManagement />} />
-              <Route path="service-codes" element={<ServiceCodesSettings />} />
+            <Route path="analytics" element={<Navigate to={appPaths.analytics.overview} replace />} />
+            <Route
+              path="analytics"
+              element={<SectionRouteLayout breadcrumbs={[{ label: 'Insights' }, { label: 'Analytics' }]} tabs={analyticsTabs} />}
+            >
+              <Route index element={<Navigate to="overview" replace />} />
+              <Route path="overview" element={<AnalyticsOverview />} />
+              <Route path="tickets" element={<TicketAnalytics />} />
+              <Route path="kb" element={<KBAnalytics />} />
+              <Route path="performance" element={<EngineerPerformance />} />
+            </Route>
+
+            <Route path="settings" element={<Navigate to={appPaths.admin.settings.general} replace />} />
+            <Route path="settings/users" element={<Navigate to={appPaths.admin.users} replace />} />
+            <Route path="settings/service-codes" element={<Navigate to={appPaths.admin.masters.serviceCodes} replace />} />
+
+            <Route path="account" element={<AccountPage />} />
+
+            <Route
+              path="admin"
+              element={<SectionRouteLayout breadcrumbs={[{ label: 'Administration' }]} tabs={adminPrimaryTabs} />}
+            >
+              <Route index element={<Navigate to="users" replace />} />
+
+              <Route
+                element={<SectionRouteLayout breadcrumbs={[{ label: 'Administration' }, { label: 'Users & Access' }]} tabs={userAccessTabs} />}
+              >
+                <Route path="users" element={<UserManagement />} />
+                <Route path="roles" element={<RoleDirectory />} />
+                <Route path="permissions" element={<PermissionMatrix />} />
+              </Route>
+
+              <Route path="masters/service-codes" element={<ServiceCodesSettings />} />
+
+              <Route
+                path="settings"
+                element={<SectionRouteLayout breadcrumbs={[{ label: 'Administration' }, { label: 'Settings' }]} tabs={settingsTabs} />}
+              >
+                <Route index element={<Navigate to="general" replace />} />
+                <Route path="general" element={<GeneralSettings />} />
+                <Route path="notifications" element={<NotificationSettings />} />
+                <Route path="email" element={<EmailSettings />} />
+                <Route path="widget" element={<WidgetDefaultsSettings />} />
+                <Route path="julia" element={<JuliaDefaultsSettings />} />
+                <Route path="security" element={<SecuritySettings />} />
+                <Route path="integrations" element={<Integrations />} />
+              </Route>
             </Route>
           </Route>
         </Route>

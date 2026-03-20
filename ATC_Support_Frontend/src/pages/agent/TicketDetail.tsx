@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   AlertCircle,
-  ArrowLeft,
   CheckCircle2,
   Clock3,
   Download,
@@ -19,17 +18,24 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
+import EmptyState from '../../components/layout/EmptyState';
+import PageHeader from '../../components/layout/PageHeader';
+import SectionTabs from '../../components/layout/SectionTabs';
 import { useAsyncData } from '../../hooks/useAsyncData';
 import { apiDownloadFile, apiFetch, getErrorMessage } from '../../lib/api';
 import { formatBytes, formatDateTime, formatRelativeTime, getTicketPriorityClasses, getTicketStatusClasses, humanizeEnum } from '../../lib/format';
-import type { ApiTicket, TicketMessageType } from '../../lib/types';
+import { appPaths } from '../../lib/navigation';
+import type { ApiTicket, TicketDetailTab, TicketMessageType } from '../../lib/types';
 import { useRole } from '../../contexts/RoleContext';
 import { useToast } from '../../contexts/ToastContext';
 
+const detailTabs: TicketDetailTab[] = ['summary', 'conversation', 'attachments', 'email', 'history'];
+
 export default function TicketDetail() {
-  const { id } = useParams();
+  const { id, tab } = useParams();
   const ticketId = Number(id);
-  const { role, user } = useRole();
+  const currentTab = detailTabs.includes((tab as TicketDetailTab) || 'summary') ? ((tab as TicketDetailTab) || 'summary') : 'summary';
+  const { role, user, backendRole } = useRole();
   const { showToast } = useToast();
   const [interactionType, setInteractionType] = useState<'reply' | 'note'>('reply');
   const [messageText, setMessageText] = useState('');
@@ -48,6 +54,7 @@ export default function TicketDetail() {
     () => (ticketQuery.data?.emailEvents || []).slice().sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()),
     [ticketQuery.data?.emailEvents],
   );
+  const systemTimeline = useMemo(() => timeline.filter((entry) => entry.type === 'SYSTEM'), [timeline]);
 
   const resetComposer = () => {
     setMessageText('');
@@ -212,46 +219,62 @@ export default function TicketDetail() {
   const canReopen = !isReadOnly && ticket.status === 'RESOLVED';
   const requesterName = ticket.requesterName || ticket.chatSession?.clientName || 'Unknown requester';
   const requesterEmail = ticket.requesterEmail || ticket.chatSession?.clientEmail || null;
+  const ticketTabs = [
+    { label: 'Summary', to: appPaths.tickets.detail(ticketId, 'summary') },
+    { label: 'Conversation', to: appPaths.tickets.detail(ticketId, 'conversation') },
+    { label: 'Attachments', to: appPaths.tickets.detail(ticketId, 'attachments') },
+    { label: 'Email Activity', to: appPaths.tickets.detail(ticketId, 'email') },
+    { label: 'History', to: appPaths.tickets.detail(ticketId, 'history') },
+  ];
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 p-6">
-      <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
-        <div className="flex flex-wrap items-center gap-4">
-          <Link to="/agent/queue" className="group flex items-center gap-2 text-sm font-bold text-slate-500 transition-colors hover:text-orange-600">
-            <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-1" />
-            Back to Queue
-          </Link>
-          <div className="hidden h-6 w-px bg-slate-200 md:block" />
-          <h1 className="text-2xl font-bold text-slate-900">{ticket.displayId}</h1>
-          <span className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider ${getTicketStatusClasses(ticket.status)}`}>
-            {humanizeEnum(ticket.status)}
-          </span>
-          <span className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider ${getTicketPriorityClasses(ticket.priority)}`}>
-            {humanizeEnum(ticket.priority)}
-          </span>
-        </div>
-        <div className="flex items-center gap-2 text-sm text-slate-500">
-          <Clock3 className="h-4 w-4" />
-          Created {formatRelativeTime(ticket.createdAt)}
-        </div>
-      </div>
+      <PageHeader
+        title={ticket.title}
+        description={ticket.description || 'Ticket detail with full conversation, context, and lifecycle actions.'}
+        breadcrumbs={[
+          { label: 'Operations', to: appPaths.tickets.queue },
+          { label: 'Tickets', to: appPaths.tickets.queue },
+          { label: ticket.displayId },
+          { label: humanizeEnum(currentTab) },
+        ]}
+        badges={
+          <>
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-mono font-bold text-slate-700">{ticket.displayId}</span>
+            <span className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider ${getTicketStatusClasses(ticket.status)}`}>
+              {humanizeEnum(ticket.status)}
+            </span>
+            <span className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider ${getTicketPriorityClasses(ticket.priority)}`}>
+              {humanizeEnum(ticket.priority)}
+            </span>
+            <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+              <Clock3 className="h-3.5 w-3.5" />
+              Created {formatRelativeTime(ticket.createdAt)}
+            </span>
+          </>
+        }
+      />
+
+      <SectionTabs tabs={ticketTabs} role={backendRole} />
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         <div className="space-y-6 xl:col-span-2">
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="text-xl font-bold text-slate-900">{ticket.title}</h2>
-            <p className="mt-4 whitespace-pre-wrap text-sm leading-relaxed text-slate-600">
-              {ticket.description || 'No description provided.'}
-            </p>
-            {ticket.resolutionSummary ? (
-              <div className="mt-5 rounded-2xl border border-green-200 bg-green-50 px-4 py-4">
-                <p className="text-xs font-black uppercase tracking-widest text-green-700">Resolution Summary</p>
-                <p className="mt-2 whitespace-pre-wrap text-sm text-green-900">{ticket.resolutionSummary}</p>
-              </div>
-            ) : null}
-          </div>
+          {currentTab === 'summary' ? (
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+              <h2 className="text-xl font-bold text-slate-900">Issue Summary</h2>
+              <p className="mt-4 whitespace-pre-wrap text-sm leading-relaxed text-slate-600">
+                {ticket.description || 'No description provided.'}
+              </p>
+              {ticket.resolutionSummary ? (
+                <div className="mt-5 rounded-2xl border border-green-200 bg-green-50 px-4 py-4">
+                  <p className="text-xs font-black uppercase tracking-widest text-green-700">Resolution Summary</p>
+                  <p className="mt-2 whitespace-pre-wrap text-sm text-green-900">{ticket.resolutionSummary}</p>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
 
-          {ticket.chatSession?.messages?.length ? (
+          {currentTab === 'conversation' && ticket.chatSession?.messages?.length ? (
             <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
               <div className="border-b border-slate-100 p-5">
                 <h3 className="text-lg font-bold text-slate-900">Original Chat Transcript</h3>
@@ -279,94 +302,174 @@ export default function TicketDetail() {
             </div>
           ) : null}
 
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">Timeline</h3>
-              <span className="text-xs text-slate-400">{timeline.length} entries</span>
-            </div>
-
-            <div className="space-y-4">
-              {timeline.length === 0 ? (
-                <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
-                  No internal timeline entries yet.
-                </div>
-              ) : (
-                timeline.map((entry) => (
-                  <div key={entry.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="flex items-center gap-2">
-                        {entry.type === 'INTERNAL_NOTE' ? <Lock className="h-4 w-4 text-amber-600" /> : <MessageSquare className="h-4 w-4 text-orange-600" />}
-                        <p className="text-sm font-bold text-slate-900">{entry.user?.name || entry.senderName || 'System'}</p>
-                        <span
-                          className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase ${
-                            entry.type === 'INTERNAL_NOTE'
-                              ? 'bg-amber-100 text-amber-700'
-                              : entry.type === 'SYSTEM'
-                                ? 'bg-slate-100 text-slate-700'
-                                : 'bg-orange-100 text-orange-700'
-                          }`}
-                        >
-                          {humanizeEnum(entry.type || 'SYSTEM')}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-400">{formatDateTime(entry.createdAt)}</p>
-                    </div>
-
-                    {entry.senderEmail && !entry.user ? <p className="mt-3 text-xs font-medium text-slate-400">{entry.senderEmail}</p> : null}
-
-                    {entry.content ? <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-600">{entry.content}</p> : null}
-
-                    {entry.attachments?.length ? (
-                      <div className="mt-4 space-y-2 rounded-2xl border border-slate-100 bg-slate-50 p-3">
-                        {entry.attachments.map((attachment) => (
-                          <button
-                            key={attachment.id}
-                            onClick={() => void handleDownloadAttachment(attachment.id, attachment.originalName)}
-                            className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-left transition-colors hover:bg-slate-50"
-                          >
-                            <div className="min-w-0">
-                              <p className="truncate text-sm font-semibold text-slate-900">{attachment.originalName}</p>
-                              <p className="mt-1 text-xs text-slate-500">
-                                {formatBytes(attachment.sizeBytes)} | {attachment.uploadedBy?.name || 'Unknown uploader'}
-                              </p>
-                            </div>
-                            <Download className="h-4 w-4 shrink-0 text-slate-500" />
-                          </button>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          {ticket.escalationHistory?.length ? (
+          {currentTab === 'conversation' ? (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">Escalation History</h3>
-                <span className="text-xs text-slate-400">
-                  {ticket.escalationHistory.length} event{ticket.escalationHistory.length === 1 ? '' : 's'}
-                </span>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">Timeline</h3>
+                <span className="text-xs text-slate-400">{timeline.length} entries</span>
               </div>
+
               <div className="space-y-4">
-                {ticket.escalationHistory.map((event) => (
-                  <div key={event.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                    <div className="flex items-center justify-between gap-4">
-                      <p className="text-sm font-bold text-slate-900">{event.createdBy?.name || 'System'} escalated the ticket</p>
-                      <p className="text-xs text-slate-400">{formatDateTime(event.createdAt)}</p>
+                {timeline.length === 0 ? (
+                  <EmptyState title="No conversation entries yet" message="Replies, internal notes, and system events will appear here." />
+                ) : (
+                  timeline.map((entry) => (
+                    <div key={entry.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-2">
+                          {entry.type === 'INTERNAL_NOTE' ? <Lock className="h-4 w-4 text-amber-600" /> : <MessageSquare className="h-4 w-4 text-orange-600" />}
+                          <p className="text-sm font-bold text-slate-900">{entry.user?.name || entry.senderName || 'System'}</p>
+                          <span
+                            className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase ${
+                              entry.type === 'INTERNAL_NOTE'
+                                ? 'bg-amber-100 text-amber-700'
+                                : entry.type === 'SYSTEM'
+                                  ? 'bg-slate-100 text-slate-700'
+                                  : 'bg-orange-100 text-orange-700'
+                            }`}
+                          >
+                            {humanizeEnum(entry.type || 'SYSTEM')}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-400">{formatDateTime(entry.createdAt)}</p>
+                      </div>
+
+                      {entry.senderEmail && !entry.user ? <p className="mt-3 text-xs font-medium text-slate-400">{entry.senderEmail}</p> : null}
+
+                      {entry.content ? <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-600">{entry.content}</p> : null}
+
+                      {entry.attachments?.length ? (
+                        <div className="mt-4 space-y-2 rounded-2xl border border-slate-100 bg-slate-50 p-3">
+                          {entry.attachments.map((attachment) => (
+                            <button
+                              key={attachment.id}
+                              onClick={() => void handleDownloadAttachment(attachment.id, attachment.originalName)}
+                              className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-left transition-colors hover:bg-slate-50"
+                            >
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-semibold text-slate-900">{attachment.originalName}</p>
+                                <p className="mt-1 text-xs text-slate-500">
+                                  {formatBytes(attachment.sizeBytes)} | {attachment.uploadedBy?.name || 'Unknown uploader'}
+                                </p>
+                              </div>
+                              <Download className="h-4 w-4 shrink-0 text-slate-500" />
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
-                    <p className="mt-2 text-sm text-slate-600">
-                      {humanizeEnum(event.fromStatus)} to {humanizeEnum(event.toStatus)}
-                    </p>
-                    {event.note ? <p className="mt-2 whitespace-pre-wrap text-sm text-slate-500">{event.note}</p> : null}
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </div>
           ) : null}
 
-          {!isReadOnly ? (
+          {currentTab === 'history' ? (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">Escalation History</h3>
+                <span className="text-xs text-slate-400">
+                  {(ticket.escalationHistory || []).length} event{(ticket.escalationHistory || []).length === 1 ? '' : 's'}
+                </span>
+              </div>
+              <div className="space-y-4">
+                {ticket.escalationHistory?.length ? (
+                  ticket.escalationHistory.map((event) => (
+                    <div key={event.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                      <div className="flex items-center justify-between gap-4">
+                        <p className="text-sm font-bold text-slate-900">{event.createdBy?.name || 'System'} escalated the ticket</p>
+                        <p className="text-xs text-slate-400">{formatDateTime(event.createdAt)}</p>
+                      </div>
+                      <p className="mt-2 text-sm text-slate-600">
+                        {humanizeEnum(event.fromStatus)} to {humanizeEnum(event.toStatus)}
+                      </p>
+                      {event.note ? <p className="mt-2 whitespace-pre-wrap text-sm text-slate-500">{event.note}</p> : null}
+                    </div>
+                  ))
+                ) : (
+                  <EmptyState title="No escalation history" message="Escalation events will appear here when the ticket is handed to the project lead." />
+                )}
+              </div>
+            </div>
+          ) : null}
+
+          {currentTab === 'history' ? (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">System Activity</h3>
+                <span className="text-xs text-slate-400">{systemTimeline.length} entries</span>
+              </div>
+              {systemTimeline.length === 0 ? (
+                <EmptyState title="No system activity yet" message="Workflow-generated state changes will show here." />
+              ) : (
+                systemTimeline.map((entry) => (
+                  <div key={entry.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <div className="flex items-center justify-between gap-4">
+                      <p className="text-sm font-bold text-slate-900">{entry.user?.name || entry.senderName || 'System'}</p>
+                      <p className="text-xs text-slate-400">{formatDateTime(entry.createdAt)}</p>
+                    </div>
+                    <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-600">{entry.content}</p>
+                  </div>
+                ))
+              )}
+            </div>
+          ) : null}
+
+          {currentTab === 'attachments' ? (
+            <div className="space-y-4">
+              {ticketAttachments.length === 0 ? (
+                <EmptyState title="No attachments yet" message="Files added to replies and notes will appear here." />
+              ) : (
+                ticketAttachments.map((attachment) => (
+                  <button
+                    key={attachment.id}
+                    onClick={() => void handleDownloadAttachment(attachment.id, attachment.originalName)}
+                    className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white px-5 py-4 text-left shadow-sm transition-colors hover:bg-slate-50"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-900">{attachment.originalName}</p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {formatBytes(attachment.sizeBytes)} | {formatDateTime(attachment.createdAt)}
+                      </p>
+                    </div>
+                    <Download className="h-4 w-4 shrink-0 text-slate-500" />
+                  </button>
+                ))
+              )}
+            </div>
+          ) : null}
+
+          {currentTab === 'email' ? (
+            <div className="space-y-4">
+              {emailEvents.length === 0 ? (
+                <EmptyState title="No email activity yet" message="Outbound updates and inbound customer replies will show here." />
+              ) : (
+                emailEvents.map((emailEvent) => (
+                  <div key={emailEvent.id} className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <Mail className="h-4 w-4 text-slate-500" />
+                          <p className="truncate text-sm font-semibold text-slate-900">{emailEvent.subject}</p>
+                        </div>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {humanizeEnum(emailEvent.direction)} | {humanizeEnum(emailEvent.status)}
+                        </p>
+                      </div>
+                      <p className="shrink-0 text-xs text-slate-400">{formatDateTime(emailEvent.createdAt)}</p>
+                    </div>
+                    <p className="mt-2 text-xs text-slate-500">
+                      {emailEvent.fromEmail} to {emailEvent.toEmail}
+                    </p>
+                    <p className="mt-2 whitespace-pre-wrap text-sm text-slate-600">{emailEvent.bodyText}</p>
+                    {emailEvent.errorMessage ? <p className="mt-2 text-xs text-rose-600">{emailEvent.errorMessage}</p> : null}
+                  </div>
+                ))
+              )}
+            </div>
+          ) : null}
+
+          {currentTab === 'conversation' && !isReadOnly ? (
             <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
               <div className="flex border-b border-slate-200 bg-slate-50/50">
                 <button
@@ -456,129 +559,9 @@ export default function TicketDetail() {
 
         <div className="space-y-6">
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h3 className="mb-4 text-[10px] font-bold uppercase tracking-wider text-slate-400">Requester</h3>
-            <div className="space-y-3 text-sm">
-              <SnapshotRow label="Name" value={requesterName} />
-              <SnapshotRow label="Email" value={requesterEmail || 'Not available'} />
-            </div>
-          </div>
-
-          <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Ticket Actions</h3>
-            {!isReadOnly ? (
-              <>
-                <button
-                  onClick={() => void handleAssignToMe()}
-                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-slate-100 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-200"
-                >
-                  <UserPlus className="h-4 w-4" />
-                  Assign to Me
-                </button>
-                <button
-                  onClick={() => void handleStartWork()}
-                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50"
-                >
-                  <PlayCircle className="h-4 w-4" />
-                  Start Work
-                </button>
-                {canMoveToWaiting ? (
-                  <button
-                    onClick={() => void handleWaitingOnCustomer()}
-                    className="flex w-full items-center justify-center gap-2 rounded-lg border border-amber-200 bg-amber-50 py-2.5 text-sm font-bold text-amber-800 transition-colors hover:bg-amber-100"
-                  >
-                    <Users className="h-4 w-4" />
-                    Waiting on Customer
-                  </button>
-                ) : null}
-                <button
-                  onClick={() => void handleResolve()}
-                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-orange-600 py-2.5 text-sm font-bold text-white transition-colors hover:bg-orange-700"
-                >
-                  <CheckCircle2 className="h-4 w-4" />
-                  Mark as Resolved
-                </button>
-                {canReopen ? (
-                  <button
-                    onClick={() => void handleReopen()}
-                    className="flex w-full items-center justify-center gap-2 rounded-lg border border-rose-200 bg-rose-50 py-2.5 text-sm font-bold text-rose-700 transition-colors hover:bg-rose-100"
-                  >
-                    <RotateCcw className="h-4 w-4" />
-                    Reopen Ticket
-                  </button>
-                ) : null}
-                {role === 'Support Engineer' ? (
-                  <button
-                    onClick={() => void handleEscalate()}
-                    className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50"
-                  >
-                    <AlertCircle className="h-4 w-4" />
-                    Escalate to Project Lead
-                  </button>
-                ) : null}
-              </>
-            ) : (
-              <p className="text-sm text-slate-500">Project managers can review tickets here but cannot reply or change ticket state.</p>
-            )}
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h3 className="mb-4 text-[10px] font-bold uppercase tracking-wider text-slate-400">Attachments</h3>
-            <div className="space-y-3">
-              {ticketAttachments.length === 0 ? (
-                <p className="text-sm text-slate-500">No ticket attachments yet.</p>
-              ) : (
-                ticketAttachments.map((attachment) => (
-                  <button
-                    key={attachment.id}
-                    onClick={() => void handleDownloadAttachment(attachment.id, attachment.originalName)}
-                    className="flex w-full items-center justify-between rounded-xl border border-slate-200 px-3 py-3 text-left transition-colors hover:bg-slate-50"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-slate-900">{attachment.originalName}</p>
-                      <p className="mt-1 text-xs text-slate-500">
-                        {formatBytes(attachment.sizeBytes)} | {formatDateTime(attachment.createdAt)}
-                      </p>
-                    </div>
-                    <Download className="h-4 w-4 shrink-0 text-slate-500" />
-                  </button>
-                ))
-              )}
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h3 className="mb-4 text-[10px] font-bold uppercase tracking-wider text-slate-400">Email Activity</h3>
-            <div className="space-y-3">
-              {emailEvents.length === 0 ? (
-                <p className="text-sm text-slate-500">No email activity has been logged for this ticket yet.</p>
-              ) : (
-                emailEvents.map((emailEvent) => (
-                  <div key={emailEvent.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <Mail className="h-4 w-4 text-slate-500" />
-                          <p className="truncate text-sm font-semibold text-slate-900">{emailEvent.subject}</p>
-                        </div>
-                        <p className="mt-1 text-xs text-slate-500">
-                          {humanizeEnum(emailEvent.direction)} | {humanizeEnum(emailEvent.status)}
-                        </p>
-                      </div>
-                      <p className="shrink-0 text-xs text-slate-400">{formatDateTime(emailEvent.createdAt)}</p>
-                    </div>
-                    <p className="mt-2 text-xs text-slate-500">
-                      {emailEvent.fromEmail} to {emailEvent.toEmail}
-                    </p>
-                    <p className="mt-2 whitespace-pre-wrap text-sm text-slate-600">{emailEvent.bodyText}</p>
-                    {emailEvent.errorMessage ? <p className="mt-2 text-xs text-rose-600">{emailEvent.errorMessage}</p> : null}
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h3 className="mb-4 text-[10px] font-bold uppercase tracking-wider text-slate-400">Ticket Snapshot</h3>
+            <h3 className="mb-4 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              {currentTab === 'email' ? 'Email Snapshot' : currentTab === 'attachments' ? 'Attachment Snapshot' : currentTab === 'history' ? 'History Snapshot' : 'Ticket Snapshot'}
+            </h3>
             <div className="space-y-3 text-sm">
               <SnapshotRow label="Ticket" value={ticket.displayId} />
               <SnapshotRow label="Source" value={ticket.source ? humanizeEnum(ticket.source) : 'Widget'} />
@@ -590,6 +573,98 @@ export default function TicketDetail() {
               <SnapshotRow label="Resolved" value={ticket.resolvedAt ? formatDateTime(ticket.resolvedAt) : 'Not resolved'} />
             </div>
           </div>
+
+          {currentTab === 'summary' || currentTab === 'conversation' ? (
+            <>
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h3 className="mb-4 text-[10px] font-bold uppercase tracking-wider text-slate-400">Requester</h3>
+                <div className="space-y-3 text-sm">
+                  <SnapshotRow label="Name" value={requesterName} />
+                  <SnapshotRow label="Email" value={requesterEmail || 'Not available'} />
+                </div>
+              </div>
+
+              <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Ticket Actions</h3>
+                {!isReadOnly ? (
+                  <>
+                    <button
+                      onClick={() => void handleAssignToMe()}
+                      className="flex w-full items-center justify-center gap-2 rounded-lg bg-slate-100 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-200"
+                    >
+                      <UserPlus className="h-4 w-4" />
+                      Assign to Me
+                    </button>
+                    <button
+                      onClick={() => void handleStartWork()}
+                      className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50"
+                    >
+                      <PlayCircle className="h-4 w-4" />
+                      Start Work
+                    </button>
+                    {canMoveToWaiting ? (
+                      <button
+                        onClick={() => void handleWaitingOnCustomer()}
+                        className="flex w-full items-center justify-center gap-2 rounded-lg border border-amber-200 bg-amber-50 py-2.5 text-sm font-bold text-amber-800 transition-colors hover:bg-amber-100"
+                      >
+                        <Users className="h-4 w-4" />
+                        Waiting on Customer
+                      </button>
+                    ) : null}
+                    <button
+                      onClick={() => void handleResolve()}
+                      className="flex w-full items-center justify-center gap-2 rounded-lg bg-orange-600 py-2.5 text-sm font-bold text-white transition-colors hover:bg-orange-700"
+                    >
+                      <CheckCircle2 className="h-4 w-4" />
+                      Mark as Resolved
+                    </button>
+                    {canReopen ? (
+                      <button
+                        onClick={() => void handleReopen()}
+                        className="flex w-full items-center justify-center gap-2 rounded-lg border border-rose-200 bg-rose-50 py-2.5 text-sm font-bold text-rose-700 transition-colors hover:bg-rose-100"
+                      >
+                        <RotateCcw className="h-4 w-4" />
+                        Reopen Ticket
+                      </button>
+                    ) : null}
+                    {role === 'Support Engineer' ? (
+                      <button
+                        onClick={() => void handleEscalate()}
+                        className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50"
+                      >
+                        <AlertCircle className="h-4 w-4" />
+                        Escalate to Project Lead
+                      </button>
+                    ) : null}
+                  </>
+                ) : (
+                  <p className="text-sm text-slate-500">Project managers can review tickets here but cannot reply or change ticket state.</p>
+                )}
+              </div>
+
+              {ticket.project?.client?.id ? (
+                <Link
+                  to={appPaths.clients.detail(ticket.project.client.id)}
+                  className="block rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-colors hover:bg-slate-50"
+                >
+                  <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">Client Context</p>
+                  <p className="mt-3 text-lg font-bold text-slate-900">{ticket.project.client.name}</p>
+                  <p className="mt-1 text-sm text-slate-500">Open the client record for contacts, linked projects, and AMC coverage.</p>
+                </Link>
+              ) : null}
+
+              {ticket.project?.id ? (
+                <Link
+                  to={appPaths.projects.detail(ticket.project.id)}
+                  className="block rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-colors hover:bg-slate-50"
+                >
+                  <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">Project Context</p>
+                  <p className="mt-3 text-lg font-bold text-slate-900">{ticket.project.name}</p>
+                  <p className="mt-1 text-sm text-slate-500">Jump into project docs, FAQs, widget status, and Julia configuration.</p>
+                </Link>
+              ) : null}
+            </>
+          ) : null}
         </div>
       </div>
     </div>

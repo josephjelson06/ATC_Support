@@ -1,6 +1,6 @@
 import { useDeferredValue, useEffect, useState } from 'react';
 import { AlertTriangle, ArrowRight, Search, UserPlus, X } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { clsx } from 'clsx';
 
@@ -10,11 +10,48 @@ import { useToast } from '../../contexts/ToastContext';
 import { useAsyncData } from '../../hooks/useAsyncData';
 import { apiFetch, getErrorMessage } from '../../lib/api';
 import { formatRelativeTime, getTicketPriorityClasses, getTicketStatusClasses, humanizeEnum } from '../../lib/format';
+import { appPaths } from '../../lib/navigation';
 import type { ApiTicket, PaginatedResponse, TicketStatus } from '../../lib/types';
 
 const PAGE_SIZE = 10;
 
+const ticketViewConfig: Record<
+  string,
+  {
+    title: string;
+    description: string;
+    fixedStatus?: TicketStatus;
+    assignedToMe?: boolean;
+  }
+> = {
+  queue: {
+    title: 'Tickets Queue',
+    description: 'Live operational queue across all accessible tickets.',
+  },
+  mine: {
+    title: 'My Tickets',
+    description: 'Tickets currently assigned to you, optimized for fast engineer turnaround.',
+    assignedToMe: true,
+  },
+  escalated: {
+    title: 'Escalated Tickets',
+    description: 'High-attention escalations awaiting project-lead visibility or action.',
+    fixedStatus: 'ESCALATED',
+  },
+  waiting: {
+    title: 'Waiting on Customer',
+    description: 'Tickets paused until the requester sends the next update or confirmation.',
+    fixedStatus: 'WAITING_ON_CUSTOMER',
+  },
+  resolved: {
+    title: 'Resolved Tickets',
+    description: 'Closed work for review, reporting, and knowledge capture.',
+    fixedStatus: 'RESOLVED',
+  },
+};
+
 export default function InboundQueue() {
+  const { view = 'queue' } = useParams();
   const { role, user } = useRole();
   const { showToast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
@@ -23,12 +60,49 @@ export default function InboundQueue() {
   const [selectedTicketId, setSelectedTicketId] = useState<number | null>(null);
   const [isAssigning, setIsAssigning] = useState(false);
   const deferredSearch = useDeferredValue(searchQuery);
+  const currentView = ticketViewConfig[view] || ticketViewConfig.queue;
 
   useEffect(() => {
     setPage(1);
   }, [deferredSearch, statusFilter]);
 
+  useEffect(() => {
+    setStatusFilter(currentView.fixedStatus || 'ALL');
+    setSelectedTicketId(null);
+    setPage(1);
+  }, [currentView.fixedStatus, view]);
+
   const ticketsQuery = useAsyncData(async () => {
+    if (currentView.assignedToMe) {
+      const tickets = await apiFetch<ApiTicket[]>('/tickets');
+      const filteredTickets = tickets
+        .filter((ticket) => ticket.assignedTo?.id === user?.id)
+        .filter((ticket) => {
+          if (statusFilter !== 'ALL' && ticket.status !== statusFilter) {
+            return false;
+          }
+
+          if (!deferredSearch.trim()) {
+            return true;
+          }
+
+          const haystack = `${ticket.displayId} ${ticket.title} ${ticket.description || ''} ${ticket.project?.name || ''} ${ticket.project?.client?.name || ''}`.toLowerCase();
+          return haystack.includes(deferredSearch.trim().toLowerCase());
+        });
+
+      const total = filteredTickets.length;
+      const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+      const startIndex = (page - 1) * PAGE_SIZE;
+
+      return {
+        items: filteredTickets.slice(startIndex, startIndex + PAGE_SIZE),
+        total,
+        page,
+        pageSize: PAGE_SIZE,
+        totalPages,
+      } satisfies PaginatedResponse<ApiTicket>;
+    }
+
     const searchParams = new URLSearchParams({
       page: String(page),
       pageSize: String(PAGE_SIZE),
@@ -38,12 +112,14 @@ export default function InboundQueue() {
       searchParams.set('search', deferredSearch.trim());
     }
 
-    if (statusFilter !== 'ALL') {
-      searchParams.set('status', statusFilter);
+    const effectiveStatus = currentView.fixedStatus || (statusFilter !== 'ALL' ? statusFilter : undefined);
+
+    if (effectiveStatus) {
+      searchParams.set('status', effectiveStatus);
     }
 
     return apiFetch<PaginatedResponse<ApiTicket>>(`/tickets?${searchParams.toString()}`);
-  }, [page, deferredSearch, statusFilter]);
+  }, [currentView.assignedToMe, currentView.fixedStatus, deferredSearch, page, statusFilter, user?.id]);
 
   useEffect(() => {
     if (!selectedTicketId || !ticketsQuery.data) {
@@ -100,8 +176,8 @@ export default function InboundQueue() {
       <div className="flex-1 space-y-6 overflow-y-auto p-6">
         <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">Inbound Queue</h1>
-            <p className="mt-1 text-sm text-slate-500">Live ticket queue from the ATC Support backend.</p>
+            <h1 className="text-2xl font-bold text-slate-900">{currentView.title}</h1>
+            <p className="mt-1 text-sm text-slate-500">{currentView.description}</p>
           </div>
           <div className="flex max-w-xl items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
             <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
@@ -254,7 +330,7 @@ export default function InboundQueue() {
               </div>
 
               <div className="flex items-center justify-between gap-3 border-t border-slate-100 bg-slate-50 p-4">
-                <Link to={`/agent/ticket/${selectedTicket.id}`} className="flex items-center gap-2 text-sm font-bold text-orange-600 hover:underline">
+                <Link to={appPaths.tickets.detail(selectedTicket.id)} className="flex items-center gap-2 text-sm font-bold text-orange-600 hover:underline">
                   Open full detail
                   <ArrowRight className="h-4 w-4" />
                 </Link>

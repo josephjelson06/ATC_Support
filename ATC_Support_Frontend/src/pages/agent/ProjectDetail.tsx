@@ -1,6 +1,8 @@
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { BookOpenText, Bot, Briefcase, Copy, FileQuestion, FileText, KeyRound, Pencil, Plus, Ticket, Users } from 'lucide-react';
 
+import PageHeader from '../../components/layout/PageHeader';
+import SectionTabs from '../../components/layout/SectionTabs';
 import { FaqCrudPanel } from '../../components/entities/FaqCrudPanel';
 import { ProjectCrudPanel } from '../../components/entities/ProjectCrudPanel';
 import { useModal } from '../../contexts/ModalContext';
@@ -9,14 +11,18 @@ import { useToast } from '../../contexts/ToastContext';
 import { useAsyncData } from '../../hooks/useAsyncData';
 import { apiFetch } from '../../lib/api';
 import { formatDate, formatRelativeTime, getTicketPriorityClasses, getTicketStatusClasses, humanizeEnum } from '../../lib/format';
-import type { ApiClientDetail, ApiFaq, ApiProject, ApiProjectDoc, ApiTicket } from '../../lib/types';
+import { appPaths } from '../../lib/navigation';
+import type { ApiClientDetail, ApiFaq, ApiProject, ApiProjectDoc, ApiTicket, ProjectDetailTab } from '../../lib/types';
+
+const detailTabs: ProjectDetailTab[] = ['overview', 'tickets', 'faqs', 'docs', 'widget', 'julia', 'client', 'amc'];
 
 export default function ProjectDetail() {
   const navigate = useNavigate();
   const { openModal } = useModal();
   const { backendRole } = useRole();
   const { showToast } = useToast();
-  const { id } = useParams();
+  const { id, tab } = useParams();
+  const currentTab = detailTabs.includes((tab as ProjectDetailTab) || 'overview') ? ((tab as ProjectDetailTab) || 'overview') : 'overview';
   const projectQuery = useAsyncData(
     async () => {
       if (!id) {
@@ -56,6 +62,16 @@ export default function ProjectDetail() {
   const activeAmc = (client?.amcs || []).find((amc) => amc.projectId === project.id);
   const canManageProjects = backendRole === 'PM';
   const canManageFaqs = backendRole === 'PM' || backendRole === 'PL';
+  const projectTabs = [
+    { label: 'Overview', to: appPaths.projects.detail(project.id, 'overview') },
+    { label: 'Tickets', to: appPaths.projects.detail(project.id, 'tickets') },
+    { label: 'FAQs', to: appPaths.projects.detail(project.id, 'faqs') },
+    { label: 'Docs', to: appPaths.projects.detail(project.id, 'docs') },
+    { label: 'Widget', to: appPaths.projects.detail(project.id, 'widget') },
+    { label: 'Julia', to: appPaths.projects.detail(project.id, 'julia') },
+    { label: 'Client Context', to: appPaths.projects.detail(project.id, 'client') },
+    { label: 'AMC', to: appPaths.projects.detail(project.id, 'amc') },
+  ];
 
   const copyEmbedCode = async () => {
     if (!project.embedCode) {
@@ -123,11 +139,33 @@ export default function ProjectDetail() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
-      <div className="flex items-center gap-4">
-        <Link to="/agent/projects" className="text-sm font-medium text-slate-500 hover:text-slate-800">
-          {'<-'} Back to Projects
-        </Link>
-      </div>
+      <PageHeader
+        title={project.name}
+        description={project.description || 'Project-level support context, widget controls, and delivery detail.'}
+        breadcrumbs={[
+          { label: 'Operations', to: appPaths.projects.list },
+          { label: 'Projects', to: appPaths.projects.list },
+          { label: project.name },
+          { label: humanizeEnum(currentTab) },
+        ]}
+        badges={
+          <>
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-mono font-bold text-slate-700">{project.displayId}</span>
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold uppercase tracking-wider text-slate-700">
+              {humanizeEnum(project.status)}
+            </span>
+            <span
+              className={`rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wider ${
+                project.widgetEnabled ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
+              }`}
+            >
+              {project.widgetEnabled ? 'Widget Enabled' : 'Widget Disabled'}
+            </span>
+          </>
+        }
+      />
+
+      <SectionTabs tabs={projectTabs} role={backendRole} />
 
       <div className="flex flex-col items-start gap-6 rounded-3xl border border-slate-200 bg-white p-8 shadow-sm md:flex-row">
         <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-3xl border border-slate-200 bg-slate-100">
@@ -137,18 +175,7 @@ export default function ProjectDetail() {
           <div className="flex flex-col justify-between gap-4 xl:flex-row xl:items-start">
             <div>
               <div className="flex flex-wrap items-center gap-3">
-                <h1 className="text-3xl font-bold text-slate-900">{project.name}</h1>
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-mono font-bold text-slate-700">{project.displayId}</span>
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold uppercase tracking-wider text-slate-700">
-                  {humanizeEnum(project.status)}
-                </span>
-                <span
-                  className={`rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wider ${
-                    project.widgetEnabled ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
-                  }`}
-                >
-                  {project.widgetEnabled ? 'Widget Enabled' : 'Widget Disabled'}
-                </span>
+                <h2 className="text-3xl font-bold text-slate-900">{project.name}</h2>
               </div>
               <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-slate-500">
                 {project.client ? <span>Client: {project.client.name}</span> : null}
@@ -185,12 +212,14 @@ export default function ProjectDetail() {
         <ProjectDetailStat icon={FileQuestion} label="FAQs" value={String(faqs.length)} accent="orange" />
       </div>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+      <div className={`grid grid-cols-1 gap-6 ${currentTab === 'overview' ? 'xl:grid-cols-[1.05fr_0.95fr]' : ''}`}>
+        {currentTab === 'overview' || currentTab === 'tickets' || currentTab === 'docs' ? (
         <div className="space-y-6">
+          {currentTab === 'overview' || currentTab === 'tickets' ? (
           <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="flex items-center justify-between border-b border-slate-100 p-6">
               <h2 className="text-lg font-bold text-slate-900">Ticket Activity</h2>
-              <Link to="/agent/queue" className="text-sm font-bold text-orange-600 hover:text-orange-700">
+              <Link to={appPaths.tickets.queue} className="text-sm font-bold text-orange-600 hover:text-orange-700">
                 Open queue
               </Link>
             </div>
@@ -199,7 +228,7 @@ export default function ProjectDetail() {
                 <div className="p-6 text-sm text-slate-500">No tickets are linked to this project yet.</div>
               ) : (
                 tickets.map((ticket) => (
-                  <Link key={ticket.id} to={`/agent/ticket/${ticket.id}`} className="block p-5 transition-colors hover:bg-slate-50">
+                  <Link key={ticket.id} to={appPaths.tickets.detail(ticket.id)} className="block p-5 transition-colors hover:bg-slate-50">
                     <p className="font-bold text-slate-900">{ticket.title}</p>
                     <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
                       <span className="font-mono font-bold text-orange-600">{ticket.displayId}</span>
@@ -218,7 +247,9 @@ export default function ProjectDetail() {
               )}
             </div>
           </section>
+          ) : null}
 
+          {currentTab === 'overview' || currentTab === 'docs' ? (
           <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="flex items-center justify-between border-b border-slate-100 p-6">
               <h2 className="text-lg font-bold text-slate-900">Project Documentation</h2>
@@ -266,9 +297,13 @@ export default function ProjectDetail() {
               )}
             </div>
           </section>
+          ) : null}
         </div>
+        ) : null}
 
+        {currentTab === 'overview' || currentTab === 'widget' || currentTab === 'julia' || currentTab === 'faqs' || currentTab === 'client' || currentTab === 'amc' ? (
         <div className="space-y-6">
+          {currentTab === 'overview' || currentTab === 'widget' ? (
           <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-100 p-5">
               <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">Widget Controls</h2>
@@ -312,7 +347,9 @@ export default function ProjectDetail() {
               </div>
             </div>
           </section>
+          ) : null}
 
+          {currentTab === 'overview' || currentTab === 'julia' ? (
           <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-100 p-5">
               <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">Julia Configuration</h2>
@@ -323,7 +360,9 @@ export default function ProjectDetail() {
               <JuliaCard label="Escalation Hint" value={project.juliaEscalationHint || 'No escalation hint set.'} />
             </div>
           </section>
+          ) : null}
 
+          {currentTab === 'overview' || currentTab === 'faqs' ? (
           <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="flex items-center justify-between border-b border-slate-100 p-5">
               <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">FAQs</h2>
@@ -368,7 +407,9 @@ export default function ProjectDetail() {
               )}
             </div>
           </section>
+          ) : null}
 
+          {currentTab === 'overview' || currentTab === 'client' ? (
           <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-100 p-5">
               <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">Client Context</h2>
@@ -406,7 +447,9 @@ export default function ProjectDetail() {
               )}
             </div>
           </section>
+          ) : null}
 
+          {currentTab === 'overview' || currentTab === 'amc' ? (
           <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-100 p-5">
               <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">AMC Status</h2>
@@ -442,7 +485,9 @@ export default function ProjectDetail() {
               )}
             </div>
           </section>
+          ) : null}
         </div>
+        ) : null}
       </div>
     </div>
   );

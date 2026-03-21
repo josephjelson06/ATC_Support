@@ -13,7 +13,6 @@ import {
   knowledgeBaseTabs,
   reportTabs,
   settingsTabs,
-  ticketModuleTabs,
   userAccessTabs,
 } from './lib/navigation';
 
@@ -166,7 +165,7 @@ function AppRoutes() {
 
             <Route
               path="tickets"
-              element={<SectionRouteLayout breadcrumbs={[{ label: 'Operations' }, { label: 'Tickets' }]} tabs={ticketModuleTabs} />}
+              element={<SectionRouteLayout breadcrumbs={[{ label: 'Operations' }, { label: 'Tickets' }]} />}
             >
               <Route index element={<Navigate to="queue" replace />} />
               <Route path="queue" element={<InboundQueue />} />

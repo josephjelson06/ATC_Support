@@ -199,25 +199,73 @@ router.get(
     const matchedStatus = Object.values(TicketStatus).find((value) => value === normalizedSearch);
     const matchedPriority = Object.values(TicketPriority).find((value) => value === normalizedSearch);
     const status = req.query.status ? String(req.query.status) : undefined;
+    const priority = req.query.priority ? String(req.query.priority) : undefined;
     const projectId = req.query.projectId ? Number(req.query.projectId) : undefined;
+    const clientId = req.query.clientId ? Number(req.query.clientId) : undefined;
+    const assignedTo = req.query.assignedTo ? String(req.query.assignedTo).toLowerCase() : undefined;
+    const createdWithinDays = req.query.createdWithinDays ? Number(req.query.createdWithinDays) : undefined;
     const pagination = getPaginationOptions(req.query as Record<string, unknown>);
-    const where: Prisma.TicketWhereInput = {
-      ...ticketScopeForUser(req.user!),
-      ...(status ? { status: status as TicketStatus } : {}),
-      ...(projectId ? { projectId } : {}),
-      ...(search
-        ? {
-            OR: [
-              { title: { contains: search, mode: Prisma.QueryMode.insensitive } },
-              { description: { contains: search, mode: Prisma.QueryMode.insensitive } },
-              { project: { name: { contains: search, mode: Prisma.QueryMode.insensitive } } },
-              { project: { client: { name: { contains: search, mode: Prisma.QueryMode.insensitive } } } },
-              ...(matchedStatus ? [{ status: matchedStatus }] : []),
-              ...(matchedPriority ? [{ priority: matchedPriority }] : []),
-            ],
-          }
-        : {}),
-    };
+    const createdAfter =
+      Number.isFinite(createdWithinDays) && createdWithinDays && createdWithinDays > 0
+        ? new Date(Date.now() - createdWithinDays * 24 * 60 * 60 * 1000)
+        : null;
+
+    const whereConditions: Prisma.TicketWhereInput[] = [ticketScopeForUser(req.user!)];
+
+    if (status) {
+      whereConditions.push({ status: status as TicketStatus });
+    }
+
+    if (priority) {
+      whereConditions.push({ priority: priority as TicketPriority });
+    }
+
+    if (projectId) {
+      whereConditions.push({ projectId });
+    }
+
+    if (clientId) {
+      whereConditions.push({
+        project: {
+          clientId,
+        },
+      });
+    }
+
+    if (assignedTo === 'me') {
+      whereConditions.push({ assignedToId: req.user!.id });
+    } else if (assignedTo === 'unassigned') {
+      whereConditions.push({ assignedToId: null });
+    } else if (assignedTo === 'assigned') {
+      whereConditions.push({
+        assignedToId: {
+          not: null,
+        },
+      });
+    }
+
+    if (createdAfter) {
+      whereConditions.push({
+        createdAt: {
+          gte: createdAfter,
+        },
+      });
+    }
+
+    if (search) {
+      whereConditions.push({
+        OR: [
+          { title: { contains: search, mode: Prisma.QueryMode.insensitive } },
+          { description: { contains: search, mode: Prisma.QueryMode.insensitive } },
+          { project: { name: { contains: search, mode: Prisma.QueryMode.insensitive } } },
+          { project: { client: { name: { contains: search, mode: Prisma.QueryMode.insensitive } } } },
+          ...(matchedStatus ? [{ status: matchedStatus }] : []),
+          ...(matchedPriority ? [{ priority: matchedPriority }] : []),
+        ],
+      });
+    }
+
+    const where: Prisma.TicketWhereInput = whereConditions.length === 1 ? whereConditions[0] : { AND: whereConditions };
 
     if (pagination) {
       const [tickets, total] = await prisma.$transaction([

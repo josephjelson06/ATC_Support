@@ -11,7 +11,7 @@ import { useAsyncData } from '../../hooks/useAsyncData';
 import { apiFetch, getErrorMessage } from '../../lib/api';
 import { formatRelativeTime, getTicketPriorityClasses, getTicketStatusClasses, humanizeEnum } from '../../lib/format';
 import { appPaths } from '../../lib/navigation';
-import type { ApiTicket, PaginatedResponse, TicketStatus } from '../../lib/types';
+import type { ApiClient, ApiProject, ApiTicket, PaginatedResponse, TicketPriority, TicketStatus } from '../../lib/types';
 
 const PAGE_SIZE = 10;
 
@@ -56,53 +56,39 @@ export default function InboundQueue() {
   const { showToast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | TicketStatus>('ALL');
+  const [priorityFilter, setPriorityFilter] = useState<'ALL' | TicketPriority>('ALL');
+  const [clientFilter, setClientFilter] = useState<'ALL' | string>('ALL');
+  const [projectFilter, setProjectFilter] = useState<'ALL' | string>('ALL');
+  const [assignmentFilter, setAssignmentFilter] = useState<'ALL' | 'ME' | 'UNASSIGNED' | 'ASSIGNED'>('ALL');
+  const [createdWithinDays, setCreatedWithinDays] = useState<'ALL' | '1' | '7' | '30'>('ALL');
   const [page, setPage] = useState(1);
   const [selectedTicketId, setSelectedTicketId] = useState<number | null>(null);
   const [isAssigning, setIsAssigning] = useState(false);
   const deferredSearch = useDeferredValue(searchQuery);
   const currentView = ticketViewConfig[view] || ticketViewConfig.queue;
 
-  useEffect(() => {
-    setPage(1);
-  }, [deferredSearch, statusFilter]);
+  const filterOptionsQuery = useAsyncData(async () => {
+    const [clients, projects] = await Promise.all([apiFetch<ApiClient[]>('/clients'), apiFetch<ApiProject[]>('/projects')]);
+    return { clients, projects };
+  }, []);
 
   useEffect(() => {
-    setStatusFilter(currentView.fixedStatus || 'ALL');
-    setSelectedTicketId(null);
     setPage(1);
-  }, [currentView.fixedStatus, view]);
+  }, [deferredSearch, statusFilter, priorityFilter, clientFilter, projectFilter, assignmentFilter, createdWithinDays]);
+
+  useEffect(() => {
+    setSelectedTicketId(null);
+    setSearchQuery('');
+    setPriorityFilter('ALL');
+    setClientFilter('ALL');
+    setProjectFilter('ALL');
+    setCreatedWithinDays('ALL');
+    setStatusFilter(currentView.fixedStatus || 'ALL');
+    setAssignmentFilter(currentView.assignedToMe ? 'ME' : 'ALL');
+    setPage(1);
+  }, [currentView.assignedToMe, currentView.fixedStatus, view]);
 
   const ticketsQuery = useAsyncData(async () => {
-    if (currentView.assignedToMe) {
-      const tickets = await apiFetch<ApiTicket[]>('/tickets');
-      const filteredTickets = tickets
-        .filter((ticket) => ticket.assignedTo?.id === user?.id)
-        .filter((ticket) => {
-          if (statusFilter !== 'ALL' && ticket.status !== statusFilter) {
-            return false;
-          }
-
-          if (!deferredSearch.trim()) {
-            return true;
-          }
-
-          const haystack = `${ticket.displayId} ${ticket.title} ${ticket.description || ''} ${ticket.project?.name || ''} ${ticket.project?.client?.name || ''}`.toLowerCase();
-          return haystack.includes(deferredSearch.trim().toLowerCase());
-        });
-
-      const total = filteredTickets.length;
-      const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-      const startIndex = (page - 1) * PAGE_SIZE;
-
-      return {
-        items: filteredTickets.slice(startIndex, startIndex + PAGE_SIZE),
-        total,
-        page,
-        pageSize: PAGE_SIZE,
-        totalPages,
-      } satisfies PaginatedResponse<ApiTicket>;
-    }
-
     const searchParams = new URLSearchParams({
       page: String(page),
       pageSize: String(PAGE_SIZE),
@@ -113,13 +99,34 @@ export default function InboundQueue() {
     }
 
     const effectiveStatus = currentView.fixedStatus || (statusFilter !== 'ALL' ? statusFilter : undefined);
+    const effectiveAssignment = currentView.assignedToMe ? 'me' : assignmentFilter !== 'ALL' ? assignmentFilter.toLowerCase() : undefined;
 
     if (effectiveStatus) {
       searchParams.set('status', effectiveStatus);
     }
 
+    if (priorityFilter !== 'ALL') {
+      searchParams.set('priority', priorityFilter);
+    }
+
+    if (clientFilter !== 'ALL') {
+      searchParams.set('clientId', clientFilter);
+    }
+
+    if (projectFilter !== 'ALL') {
+      searchParams.set('projectId', projectFilter);
+    }
+
+    if (effectiveAssignment) {
+      searchParams.set('assignedTo', effectiveAssignment);
+    }
+
+    if (createdWithinDays !== 'ALL') {
+      searchParams.set('createdWithinDays', createdWithinDays);
+    }
+
     return apiFetch<PaginatedResponse<ApiTicket>>(`/tickets?${searchParams.toString()}`);
-  }, [currentView.assignedToMe, currentView.fixedStatus, deferredSearch, page, statusFilter, user?.id]);
+  }, [assignmentFilter, clientFilter, createdWithinDays, currentView.assignedToMe, currentView.fixedStatus, deferredSearch, page, priorityFilter, projectFilter, statusFilter, user?.id]);
 
   useEffect(() => {
     if (!selectedTicketId || !ticketsQuery.data) {
@@ -170,6 +177,26 @@ export default function InboundQueue() {
   const selectedTicket = visibleTickets.find((ticket) => ticket.id === selectedTicketId) || null;
   const unassignedVisibleTickets = visibleTickets.filter((ticket) => !ticket.assignedTo && ticket.status !== 'RESOLVED').length;
   const resolvedVisibleTickets = visibleTickets.filter((ticket) => ticket.status === 'RESOLVED').length;
+  const clientOptions = filterOptionsQuery.data?.clients || [];
+  const projectOptions = filterOptionsQuery.data?.projects || [];
+  const hasActiveFilters =
+    Boolean(searchQuery.trim()) ||
+    statusFilter !== 'ALL' ||
+    priorityFilter !== 'ALL' ||
+    clientFilter !== 'ALL' ||
+    projectFilter !== 'ALL' ||
+    assignmentFilter !== 'ALL' ||
+    createdWithinDays !== 'ALL';
+
+  const clearFilters = () => {
+    setSearchQuery('');
+    setStatusFilter(currentView.fixedStatus || 'ALL');
+    setPriorityFilter('ALL');
+    setClientFilter('ALL');
+    setProjectFilter('ALL');
+    setAssignmentFilter(currentView.assignedToMe ? 'ME' : 'ALL');
+    setCreatedWithinDays('ALL');
+  };
 
   return (
     <div className="relative flex h-[calc(100vh-64px)] flex-col overflow-hidden">
@@ -191,7 +218,23 @@ export default function InboundQueue() {
           <SummaryCard label="Resolved on Page" value={String(resolvedVisibleTickets)} />
         </div>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr),220px]">
+        <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.24em] text-slate-400">Filters</p>
+              <p className="mt-1 text-sm text-slate-500">Slice the queue by ownership, urgency, client context, and ticket age.</p>
+            </div>
+            {hasActiveFilters ? (
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="inline-flex items-center justify-center rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 transition-colors hover:bg-slate-50"
+              >
+                Clear filters
+              </button>
+            ) : null}
+          </div>
+
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
@@ -199,23 +242,64 @@ export default function InboundQueue() {
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
               placeholder="Search by title, client, project, or description..."
-              className="w-full rounded-lg border border-slate-200 bg-white py-2.5 pl-9 pr-4 text-sm outline-none transition-all focus:ring-2 focus:ring-orange-500"
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-4 text-sm outline-none transition-all focus:border-orange-200 focus:bg-white focus:ring-2 focus:ring-orange-500"
             />
           </div>
-          <select
-            value={statusFilter}
-            onChange={(event) => setStatusFilter(event.target.value as 'ALL' | TicketStatus)}
-            className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 outline-none transition-all focus:ring-2 focus:ring-orange-500"
-          >
-            <option value="ALL">All Statuses</option>
-            <option value="NEW">New</option>
-            <option value="ASSIGNED">Assigned</option>
-            <option value="IN_PROGRESS">In Progress</option>
-            <option value="WAITING_ON_CUSTOMER">Waiting on Customer</option>
-            <option value="ESCALATED">Escalated</option>
-            <option value="REOPENED">Reopened</option>
-            <option value="RESOLVED">Resolved</option>
-          </select>
+
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
+            <FilterSelect label="Status" value={statusFilter} onChange={(value) => setStatusFilter(value as 'ALL' | TicketStatus)} disabled={Boolean(currentView.fixedStatus)}>
+              <option value="ALL">All statuses</option>
+              <option value="NEW">New</option>
+              <option value="ASSIGNED">Assigned</option>
+              <option value="IN_PROGRESS">In Progress</option>
+              <option value="WAITING_ON_CUSTOMER">Waiting</option>
+              <option value="ESCALATED">Escalated</option>
+              <option value="REOPENED">Reopened</option>
+              <option value="RESOLVED">Resolved</option>
+            </FilterSelect>
+
+            <FilterSelect label="Priority" value={priorityFilter} onChange={(value) => setPriorityFilter(value as 'ALL' | TicketPriority)}>
+              <option value="ALL">All priorities</option>
+              <option value="LOW">Low</option>
+              <option value="MEDIUM">Medium</option>
+              <option value="HIGH">High</option>
+              <option value="CRITICAL">Critical</option>
+            </FilterSelect>
+
+            <FilterSelect label="Client" value={clientFilter} onChange={setClientFilter}>
+              <option value="ALL">All clients</option>
+              {clientOptions.map((client) => (
+                <option key={client.id} value={String(client.id)}>
+                  {client.name}
+                </option>
+              ))}
+            </FilterSelect>
+
+            <FilterSelect label="Project" value={projectFilter} onChange={setProjectFilter}>
+              <option value="ALL">All projects</option>
+              {projectOptions
+                .filter((project) => clientFilter === 'ALL' || String(project.clientId) === clientFilter)
+                .map((project) => (
+                  <option key={project.id} value={String(project.id)}>
+                    {project.name}
+                  </option>
+                ))}
+            </FilterSelect>
+
+            <FilterSelect label="Assignment" value={assignmentFilter} onChange={(value) => setAssignmentFilter(value as 'ALL' | 'ME' | 'UNASSIGNED' | 'ASSIGNED')} disabled={Boolean(currentView.assignedToMe)}>
+              <option value="ALL">All ownership</option>
+              <option value="ME">Assigned to me</option>
+              <option value="UNASSIGNED">Unassigned</option>
+              <option value="ASSIGNED">Assigned</option>
+            </FilterSelect>
+
+            <FilterSelect label="Created" value={createdWithinDays} onChange={(value) => setCreatedWithinDays(value as 'ALL' | '1' | '7' | '30')}>
+              <option value="ALL">Any time</option>
+              <option value="1">Last 24h</option>
+              <option value="7">Last 7 days</option>
+              <option value="30">Last 30 days</option>
+            </FilterSelect>
+          </div>
         </div>
 
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -381,12 +465,37 @@ function QueueSkeleton() {
           <div key={index} className="h-24 rounded-xl border border-slate-200 bg-white shadow-sm" />
         ))}
       </div>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr),220px]">
-        <div className="h-12 rounded-xl bg-slate-200" />
-        <div className="h-12 rounded-xl bg-slate-200" />
-      </div>
+      <div className="h-40 rounded-xl bg-slate-200" />
       <div className="h-[480px] rounded-xl border border-slate-200 bg-white shadow-sm" />
     </div>
+  );
+}
+
+function FilterSelect({
+  label,
+  value,
+  onChange,
+  children,
+  disabled = false,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  children: React.ReactNode;
+  disabled?: boolean;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">{label}</span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        disabled={disabled}
+        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 outline-none transition-all focus:ring-2 focus:ring-orange-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+      >
+        {children}
+      </select>
+    </label>
   );
 }
 

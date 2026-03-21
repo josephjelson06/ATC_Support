@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { type ChangeEvent, type ReactNode, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   AlertCircle,
@@ -21,15 +21,35 @@ import { clsx } from 'clsx';
 import EmptyState from '../../components/layout/EmptyState';
 import PageHeader from '../../components/layout/PageHeader';
 import SectionTabs from '../../components/layout/SectionTabs';
+import { useRole } from '../../contexts/RoleContext';
+import { useToast } from '../../contexts/ToastContext';
 import { useAsyncData } from '../../hooks/useAsyncData';
 import { apiDownloadFile, apiFetch, getErrorMessage } from '../../lib/api';
 import { formatBytes, formatDateTime, formatRelativeTime, getTicketPriorityClasses, getTicketStatusClasses, humanizeEnum } from '../../lib/format';
 import { appPaths } from '../../lib/navigation';
-import type { ApiTicket, TicketDetailTab, TicketMessageType } from '../../lib/types';
-import { useRole } from '../../contexts/RoleContext';
-import { useToast } from '../../contexts/ToastContext';
+import type {
+  ApiEscalationHistory,
+  ApiTicket,
+  ApiTicketAttachment,
+  ApiTicketEmail,
+  ApiTicketMessage,
+  TicketDetailTab,
+  TicketMessageType,
+} from '../../lib/types';
 
 const detailTabs: TicketDetailTab[] = ['summary', 'conversation', 'attachments', 'email', 'history'];
+
+const tabLabels: Record<TicketDetailTab, string> = {
+  summary: 'Summary',
+  conversation: 'Conversation',
+  attachments: 'Attachments',
+  email: 'Email History',
+  history: 'History',
+};
+
+type ActivityEntry =
+  | { id: string; createdAt: string; kind: 'message'; message: ApiTicketMessage }
+  | { id: string; createdAt: string; kind: 'escalation'; escalation: ApiEscalationHistory };
 
 export default function TicketDetail() {
   const { id, tab } = useParams();
@@ -45,16 +65,43 @@ export default function TicketDetail() {
   const ticketQuery = useAsyncData(() => apiFetch<ApiTicket>(`/tickets/${ticketId}`), [ticketId]);
 
   const isReadOnly = role === 'Project Manager';
-  const timeline = useMemo(
-    () => (ticketQuery.data?.messages || []).slice().sort((left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime()),
-    [ticketQuery.data?.messages],
+
+  const ticketMessages = useMemo(() => (ticketQuery.data?.messages || []).slice(), [ticketQuery.data?.messages]);
+  const transcriptMessages = useMemo(
+    () => (ticketQuery.data?.chatSession?.messages || []).slice().sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()),
+    [ticketQuery.data?.chatSession?.messages],
   );
-  const ticketAttachments = useMemo(() => timeline.flatMap((entry) => entry.attachments || []), [timeline]);
+  const ticketAttachments = useMemo(
+    () =>
+      ticketMessages
+        .flatMap((entry) => entry.attachments || [])
+        .slice()
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
+    [ticketMessages],
+  );
   const emailEvents = useMemo(
-    () => (ticketQuery.data?.emailEvents || []).slice().sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()),
+    () => (ticketQuery.data?.emailEvents || []).slice().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
     [ticketQuery.data?.emailEvents],
   );
-  const systemTimeline = useMemo(() => timeline.filter((entry) => entry.type === 'SYSTEM'), [timeline]);
+  const activityEntries = useMemo<ActivityEntry[]>(() => {
+    const messageEntries = ticketMessages.map(
+      (message): ActivityEntry => ({ id: `message-${message.id}`, createdAt: message.createdAt, kind: 'message', message }),
+    );
+    const escalationEntries = (ticketQuery.data?.escalationHistory || []).map(
+      (escalation): ActivityEntry => ({ id: `escalation-${escalation.id}`, createdAt: escalation.createdAt, kind: 'escalation', escalation }),
+    );
+
+    return [...messageEntries, ...escalationEntries].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }, [ticketMessages, ticketQuery.data?.escalationHistory]);
+  const historyCounts = useMemo(
+    () => ({
+      replies: ticketMessages.filter((entry) => entry.type === 'REPLY').length,
+      notes: ticketMessages.filter((entry) => entry.type === 'INTERNAL_NOTE').length,
+      system: ticketMessages.filter((entry) => !entry.type || entry.type === 'SYSTEM').length,
+      escalations: (ticketQuery.data?.escalationHistory || []).length,
+    }),
+    [ticketMessages, ticketQuery.data?.escalationHistory],
+  );
 
   const resetComposer = () => {
     setMessageText('');
@@ -64,10 +111,7 @@ export default function TicketDetail() {
 
   const performTicketAction = async (path: string, body: Record<string, unknown> | undefined, successMessage: string) => {
     try {
-      await apiFetch<ApiTicket>(path, {
-        method: 'POST',
-        body,
-      });
+      await apiFetch<ApiTicket>(path, { method: 'POST', body });
       await ticketQuery.reload();
       showToast('success', successMessage);
     } catch (error) {
@@ -77,86 +121,43 @@ export default function TicketDetail() {
   };
 
   const handleAssignToMe = async () => {
-    if (!user || isReadOnly) {
-      return;
-    }
-
+    if (!user || isReadOnly) return;
     await performTicketAction(`/tickets/${ticketId}/assign`, { assignedToId: user.id }, 'Ticket assigned successfully.');
   };
 
   const handleStartWork = async () => {
-    if (isReadOnly) {
-      return;
-    }
-
+    if (isReadOnly) return;
     await performTicketAction(`/tickets/${ticketId}/start`, undefined, 'Work started on this ticket.');
   };
 
   const handleWaitingOnCustomer = async () => {
     const note = window.prompt('Optional note about what we need from the customer:', '') || undefined;
-
     await performTicketAction(
       `/tickets/${ticketId}/waiting-on-customer`,
-      note?.trim()
-        ? {
-            note: note.trim(),
-          }
-        : undefined,
+      note?.trim() ? { note: note.trim() } : undefined,
       'Ticket moved to waiting on customer.',
     );
   };
 
   const handleResolve = async () => {
     const resolutionSummary = window.prompt('Add a short resolution summary for this ticket:');
-
-    if (!resolutionSummary?.trim()) {
-      return;
-    }
-
-    await performTicketAction(
-      `/tickets/${ticketId}/resolve`,
-      {
-        resolutionSummary: resolutionSummary.trim(),
-      },
-      'Ticket marked as resolved.',
-    );
+    if (!resolutionSummary?.trim()) return;
+    await performTicketAction(`/tickets/${ticketId}/resolve`, { resolutionSummary: resolutionSummary.trim() }, 'Ticket marked as resolved.');
   };
 
   const handleReopen = async () => {
     const note = window.prompt('Optional reopen reason:', '') || undefined;
-
-    await performTicketAction(
-      `/tickets/${ticketId}/reopen`,
-      note?.trim()
-        ? {
-            note: note.trim(),
-          }
-        : undefined,
-      'Ticket reopened.',
-    );
+    await performTicketAction(`/tickets/${ticketId}/reopen`, note?.trim() ? { note: note.trim() } : undefined, 'Ticket reopened.');
   };
 
   const handleEscalate = async () => {
     const note = window.prompt('Optional escalation note for the project lead:', '') || undefined;
-
-    await performTicketAction(
-      `/tickets/${ticketId}/escalate`,
-      note?.trim()
-        ? {
-            note: note.trim(),
-          }
-        : undefined,
-      'Ticket escalated to the project lead.',
-    );
+    await performTicketAction(`/tickets/${ticketId}/escalate`, note?.trim() ? { note: note.trim() } : undefined, 'Ticket escalated to the project lead.');
   };
 
-  const handleAttachmentSelection = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAttachmentSelection = (event: ChangeEvent<HTMLInputElement>) => {
     const nextFiles = Array.from(event.target.files || []);
-
-    if (nextFiles.length === 0) {
-      return;
-    }
-
+    if (nextFiles.length === 0) return;
     setAttachmentFiles((current) => [...current, ...nextFiles].slice(0, 5));
   };
 
@@ -173,9 +174,7 @@ export default function TicketDetail() {
   };
 
   const handleSendInteraction = async () => {
-    if (!messageText.trim() && attachmentFiles.length === 0) {
-      return;
-    }
+    if (!messageText.trim() && attachmentFiles.length === 0) return;
 
     setIsSubmitting(true);
 
@@ -183,15 +182,9 @@ export default function TicketDetail() {
       const formData = new FormData();
       formData.append('content', messageText.trim());
       formData.append('type', (interactionType === 'reply' ? 'REPLY' : 'INTERNAL_NOTE') as TicketMessageType);
-      attachmentFiles.forEach((file) => {
-        formData.append('attachments', file);
-      });
+      attachmentFiles.forEach((file) => formData.append('attachments', file));
 
-      await apiFetch(`/tickets/${ticketId}/messages`, {
-        method: 'POST',
-        body: formData,
-      });
-
+      await apiFetch(`/tickets/${ticketId}/messages`, { method: 'POST', body: formData });
       resetComposer();
       await ticketQuery.reload();
       showToast('success', interactionType === 'reply' ? 'Reply sent.' : 'Internal note added.');
@@ -219,34 +212,340 @@ export default function TicketDetail() {
   const canReopen = !isReadOnly && ticket.status === 'RESOLVED';
   const requesterName = ticket.requesterName || ticket.chatSession?.clientName || 'Unknown requester';
   const requesterEmail = ticket.requesterEmail || ticket.chatSession?.clientEmail || null;
-  const ticketTabs = [
-    { label: 'Summary', to: appPaths.tickets.detail(ticketId, 'summary') },
-    { label: 'Conversation', to: appPaths.tickets.detail(ticketId, 'conversation') },
-    { label: 'Attachments', to: appPaths.tickets.detail(ticketId, 'attachments') },
-    { label: 'Email Activity', to: appPaths.tickets.detail(ticketId, 'email') },
-    { label: 'History', to: appPaths.tickets.detail(ticketId, 'history') },
-  ];
+  const ticketTabs = detailTabs.map((detailTab) => ({ label: tabLabels[detailTab], to: appPaths.tickets.detail(ticketId, detailTab) }));
+
+  let mainContent: ReactNode = null;
+
+  switch (currentTab) {
+    case 'summary':
+      mainContent = (
+        <>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <SummaryJumpCard
+              label="Conversation"
+              value={String(transcriptMessages.length)}
+              note={`${transcriptMessages.length} Julia/client message${transcriptMessages.length === 1 ? '' : 's'}`}
+              to={appPaths.tickets.detail(ticketId, 'conversation')}
+              icon={MessageSquare}
+            />
+            <SummaryJumpCard
+              label="Attachments"
+              value={String(ticketAttachments.length)}
+              note={`${ticketAttachments.length} file${ticketAttachments.length === 1 ? '' : 's'} on this ticket`}
+              to={appPaths.tickets.detail(ticketId, 'attachments')}
+              icon={Paperclip}
+            />
+            <SummaryJumpCard
+              label="Email History"
+              value={String(emailEvents.length)}
+              note={`${emailEvents.length} email${emailEvents.length === 1 ? '' : 's'} recorded`}
+              to={appPaths.tickets.detail(ticketId, 'email')}
+              icon={Mail}
+            />
+            <SummaryJumpCard
+              label="Activity Log"
+              value={String(activityEntries.length)}
+              note={`${activityEntries.length} history entr${activityEntries.length === 1 ? 'y' : 'ies'}`}
+              to={appPaths.tickets.detail(ticketId, 'history')}
+              icon={Clock3}
+            />
+          </div>
+
+          <DetailCard eyebrow="Ticket Overview" title="Issue Summary" description="Summary holds the working details of the ticket.">
+            <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-600">{ticket.description || 'No description provided.'}</p>
+            {ticket.resolutionSummary ? (
+              <div className="mt-5 rounded-2xl border border-green-200 bg-green-50 px-4 py-4">
+                <p className="text-xs font-black uppercase tracking-[0.22em] text-green-700">Resolution Summary</p>
+                <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-green-900">{ticket.resolutionSummary}</p>
+              </div>
+            ) : null}
+          </DetailCard>
+
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            <DetailCard eyebrow="Ticket Details" title="Lifecycle Details" description="Core routing and lifecycle metadata.">
+              <DetailGrid
+                items={[
+                  { label: 'Ticket', value: ticket.displayId },
+                  { label: 'Source', value: ticket.source ? humanizeEnum(ticket.source) : 'Widget' },
+                  {
+                    label: 'Status',
+                    value: (
+                      <span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${getTicketStatusClasses(ticket.status)}`}>
+                        {humanizeEnum(ticket.status)}
+                      </span>
+                    ),
+                  },
+                  {
+                    label: 'Priority',
+                    value: (
+                      <span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${getTicketPriorityClasses(ticket.priority)}`}>
+                        {humanizeEnum(ticket.priority)}
+                      </span>
+                    ),
+                  },
+                  { label: 'Assigned To', value: ticket.assignedTo?.name || 'Unassigned' },
+                  { label: 'Created', value: formatDateTime(ticket.createdAt) },
+                  { label: 'Resolved', value: ticket.resolvedAt ? formatDateTime(ticket.resolvedAt) : 'Not resolved' },
+                  { label: 'Escalations', value: String((ticket.escalationHistory || []).length) },
+                ]}
+              />
+            </DetailCard>
+
+            <DetailCard eyebrow="Support Context" title="Requester and Routing" description="Who raised the issue and how the thread comes back into support.">
+              <DetailGrid
+                items={[
+                  { label: 'Requester', value: requesterName },
+                  { label: 'Requester Email', value: requesterEmail || 'Not available' },
+                  { label: 'Client', value: ticket.project?.client?.name || 'Not linked' },
+                  { label: 'Project', value: ticket.project?.name || 'Not linked' },
+                  { label: 'Widget Chat Messages', value: String(transcriptMessages.length) },
+                  { label: 'Email Thread Token', value: ticket.emailThreadToken ? <span className="break-all font-mono text-xs">{ticket.emailThreadToken}</span> : 'Not created yet' },
+                ]}
+              />
+            </DetailCard>
+          </div>
+
+          {!isReadOnly ? (
+            <DetailCard eyebrow="Respond" title="Reply or Add Internal Note" description="Keep replies and notes inside the working summary tab.">
+              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                <div className="flex border-b border-slate-200 bg-slate-50/60">
+                  <button
+                    onClick={() => setInteractionType('reply')}
+                    className={clsx(
+                      'flex flex-1 items-center justify-center gap-2 py-3 text-xs font-bold uppercase tracking-[0.18em] transition-all',
+                      interactionType === 'reply' ? 'border-b-2 border-orange-600 bg-white text-orange-600' : 'text-slate-400 hover:text-slate-600',
+                    )}
+                  >
+                    <MessageSquare className="h-3.5 w-3.5" />
+                    Reply to Client
+                  </button>
+                  <button
+                    onClick={() => setInteractionType('note')}
+                    className={clsx(
+                      'flex flex-1 items-center justify-center gap-2 py-3 text-xs font-bold uppercase tracking-[0.18em] transition-all',
+                      interactionType === 'note' ? 'border-b-2 border-amber-600 bg-white text-amber-600' : 'text-slate-400 hover:text-slate-600',
+                    )}
+                  >
+                    <Lock className="h-3.5 w-3.5" />
+                    Internal Note
+                  </button>
+                </div>
+
+                <div className="p-5">
+                  {interactionType === 'reply' ? (
+                    <div className="mb-4 rounded-2xl border border-orange-100 bg-orange-50 px-4 py-3 text-sm text-orange-900">
+                      <p className="font-semibold">This reply will be emailed to {requesterEmail || 'the requester on file when available'}.</p>
+                      <p className="mt-1 text-xs text-orange-700">Customer replies can thread back into this ticket through the email token.</p>
+                    </div>
+                  ) : (
+                    <div className="mb-4 rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                      <p className="font-semibold">Internal notes stay inside ATC Support and are never emailed to the client.</p>
+                    </div>
+                  )}
+
+                  <textarea
+                    rows={5}
+                    value={messageText}
+                    onChange={(event) => setMessageText(event.target.value)}
+                    placeholder={interactionType === 'reply' ? 'Type your reply to the client...' : 'Type an internal note for the team...'}
+                    className="w-full resize-none rounded-2xl border border-slate-200 bg-slate-50/60 px-4 py-3 text-sm text-slate-700 outline-none transition-colors focus:border-orange-200 focus:bg-white placeholder:text-slate-400"
+                  />
+
+                  <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">Attachments</p>
+                        <p className="mt-1 text-xs text-slate-500">Up to 5 files, 10 MB each.</p>
+                      </div>
+                      <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold uppercase tracking-[0.18em] text-slate-700 transition-colors hover:bg-slate-50">
+                        <Paperclip className="h-3.5 w-3.5" />
+                        Add Files
+                        <input key={fileInputKey} type="file" multiple className="hidden" onChange={handleAttachmentSelection} />
+                      </label>
+                    </div>
+
+                    {attachmentFiles.length ? (
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {attachmentFiles.map((file, index) => (
+                          <div key={`${file.name}-${index}`} className="flex items-center gap-2 rounded-full bg-white px-3 py-2 text-xs text-slate-700 shadow-sm">
+                            <Paperclip className="h-3.5 w-3.5 text-slate-400" />
+                            <span className="max-w-[180px] truncate font-semibold">{file.name}</span>
+                            <span className="text-slate-400">{formatBytes(file.size)}</span>
+                            <button onClick={() => handleRemoveAttachment(index)} className="text-slate-400 transition-colors hover:text-slate-700">
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className="flex justify-end border-t border-slate-100 bg-slate-50 p-3">
+                  <button
+                    onClick={() => void handleSendInteraction()}
+                    disabled={(!messageText.trim() && attachmentFiles.length === 0) || isSubmitting}
+                    className={clsx(
+                      'flex items-center gap-2 rounded-xl px-6 py-2.5 text-sm font-bold text-white shadow-sm transition-all active:scale-95 disabled:scale-100 disabled:cursor-not-allowed disabled:opacity-50',
+                      interactionType === 'reply' ? 'bg-orange-600 hover:bg-orange-700' : 'bg-amber-500 hover:bg-amber-600',
+                    )}
+                  >
+                    <Send className="h-4 w-4" />
+                    {interactionType === 'reply' ? 'Send Reply' : 'Add Note'}
+                  </button>
+                </div>
+              </div>
+            </DetailCard>
+          ) : (
+            <DetailCard eyebrow="Access" title="Read-Only View" description="Project managers can review details, transcript, history, and email activity here.">
+              <p className="text-sm leading-relaxed text-slate-600">Ticket actions, replies, and internal notes are disabled for this role.</p>
+            </DetailCard>
+          )}
+        </>
+      );
+      break;
+    case 'conversation':
+      mainContent = (
+        <DetailCard
+          eyebrow="Conversation"
+          title="Julia and Client Chat"
+          description="Only the original widget conversation lives here. Replies, notes, and workflow events are kept in History."
+          action={<CountBadge count={transcriptMessages.length} label={transcriptMessages.length === 1 ? 'message' : 'messages'} />}
+        >
+          {transcriptMessages.length === 0 ? (
+            <div className="py-6">
+              <EmptyState title="No Julia/client transcript available" message="This ticket does not have a stored widget chat transcript." />
+            </div>
+          ) : (
+            <div className="space-y-4 rounded-3xl border border-slate-100 bg-slate-50/70 p-5">
+              {transcriptMessages.map((message) => (
+                <div key={message.id} className={clsx('flex gap-3', message.role === 'JULIA' && 'flex-row-reverse')}>
+                  <div
+                    className={clsx(
+                      'flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl text-xs font-black',
+                      message.role === 'JULIA' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700',
+                    )}
+                  >
+                    {message.role === 'JULIA' ? 'J' : 'C'}
+                  </div>
+                  <div className={clsx('max-w-[85%]', message.role === 'JULIA' && 'text-right')}>
+                    <div
+                      className={clsx(
+                        'rounded-2xl border px-4 py-3 text-sm leading-relaxed shadow-sm',
+                        message.role === 'JULIA' ? 'border-orange-600 bg-orange-600 text-white' : 'border-slate-200 bg-white text-slate-700',
+                      )}
+                    >
+                      {message.content}
+                    </div>
+                    <p className="mt-1.5 text-[11px] text-slate-400">{formatDateTime(message.createdAt)}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </DetailCard>
+      );
+      break;
+    case 'attachments':
+      mainContent = (
+        <DetailCard
+          eyebrow="Attachments"
+          title="Ticket Attachments"
+          description="Files uploaded on replies and internal notes live here in one place."
+          action={<CountBadge count={ticketAttachments.length} label={ticketAttachments.length === 1 ? 'file' : 'files'} />}
+        >
+          {ticketAttachments.length === 0 ? (
+            <div className="py-6">
+              <EmptyState title="No attachments yet" message="Files added to replies and internal notes will appear here." />
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {ticketAttachments.map((attachment) => (
+                <AttachmentButton key={attachment.id} attachment={attachment} onDownload={() => void handleDownloadAttachment(attachment.id, attachment.originalName)} />
+              ))}
+            </div>
+          )}
+        </DetailCard>
+      );
+      break;
+    case 'email':
+      mainContent = (
+        <DetailCard
+          eyebrow="Email History"
+          title="Previous Ticket Emails"
+          description="Only mail activity is shown here, including outbound updates and inbound customer replies linked to the ticket."
+          action={<CountBadge count={emailEvents.length} label={emailEvents.length === 1 ? 'email' : 'emails'} />}
+        >
+          {ticket.emailThreadToken ? (
+            <div className="mb-5 rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3">
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Thread Token</p>
+              <p className="mt-2 break-all font-mono text-xs text-slate-700">{ticket.emailThreadToken}</p>
+            </div>
+          ) : null}
+
+          {emailEvents.length === 0 ? (
+            <div className="py-6">
+              <EmptyState title="No email history yet" message="Outbound updates and inbound customer replies will show here." />
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {emailEvents.map((emailEvent) => (
+                <EmailHistoryCard key={emailEvent.id} emailEvent={emailEvent} />
+              ))}
+            </div>
+          )}
+        </DetailCard>
+      );
+      break;
+    case 'history':
+      mainContent = (
+        <>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <HistoryMetricCard label="Replies" value={String(historyCounts.replies)} />
+            <HistoryMetricCard label="Internal Notes" value={String(historyCounts.notes)} />
+            <HistoryMetricCard label="System Events" value={String(historyCounts.system)} />
+            <HistoryMetricCard label="Escalations" value={String(historyCounts.escalations)} />
+          </div>
+
+          <DetailCard
+            eyebrow="History"
+            title="Activity Log"
+            description="All ticket events except email delivery are collected here: replies, internal notes, system workflow messages, and escalation records."
+            action={<CountBadge count={activityEntries.length} label={activityEntries.length === 1 ? 'entry' : 'entries'} />}
+          >
+            {activityEntries.length === 0 ? (
+              <div className="py-6">
+                <EmptyState title="No activity recorded yet" message="Ticket activity will appear here as work begins." />
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {activityEntries.map((entry) => (
+                  <ActivityEntryCard key={entry.id} entry={entry} onDownloadAttachment={(attachment) => void handleDownloadAttachment(attachment.id, attachment.originalName)} />
+                ))}
+              </div>
+            )}
+          </DetailCard>
+        </>
+      );
+      break;
+  }
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 p-6">
+    <div className="mx-auto max-w-[1520px] space-y-6 p-6">
       <PageHeader
         title={ticket.title}
-        description={ticket.description || 'Ticket detail with full conversation, context, and lifecycle actions.'}
+        description={ticket.description || 'Ticket detail with clear summary, transcript, email history, and activity log.'}
         breadcrumbs={[
           { label: 'Operations', to: appPaths.tickets.queue },
           { label: 'Tickets', to: appPaths.tickets.queue },
           { label: ticket.displayId },
-          { label: humanizeEnum(currentTab) },
+          { label: tabLabels[currentTab] },
         ]}
         badges={
           <>
             <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-mono font-bold text-slate-700">{ticket.displayId}</span>
-            <span className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider ${getTicketStatusClasses(ticket.status)}`}>
-              {humanizeEnum(ticket.status)}
-            </span>
-            <span className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider ${getTicketPriorityClasses(ticket.priority)}`}>
-              {humanizeEnum(ticket.priority)}
-            </span>
+            <span className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider ${getTicketStatusClasses(ticket.status)}`}>{humanizeEnum(ticket.status)}</span>
+            <span className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider ${getTicketPriorityClasses(ticket.priority)}`}>{humanizeEnum(ticket.priority)}</span>
             <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
               <Clock3 className="h-3.5 w-3.5" />
               Created {formatRelativeTime(ticket.createdAt)}
@@ -257,442 +556,322 @@ export default function TicketDetail() {
 
       <SectionTabs tabs={ticketTabs} role={backendRole} />
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-        <div className="space-y-6 xl:col-span-2">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr),340px]">
+        <div className="min-w-0 space-y-6">{mainContent}</div>
+
+        <aside className="space-y-6 xl:sticky xl:top-6 xl:self-start">
           {currentTab === 'summary' ? (
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h2 className="text-xl font-bold text-slate-900">Issue Summary</h2>
-              <p className="mt-4 whitespace-pre-wrap text-sm leading-relaxed text-slate-600">
-                {ticket.description || 'No description provided.'}
-              </p>
-              {ticket.resolutionSummary ? (
-                <div className="mt-5 rounded-2xl border border-green-200 bg-green-50 px-4 py-4">
-                  <p className="text-xs font-black uppercase tracking-widest text-green-700">Resolution Summary</p>
-                  <p className="mt-2 whitespace-pre-wrap text-sm text-green-900">{ticket.resolutionSummary}</p>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-
-          {currentTab === 'conversation' && ticket.chatSession?.messages?.length ? (
-            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-              <div className="border-b border-slate-100 p-5">
-                <h3 className="text-lg font-bold text-slate-900">Original Chat Transcript</h3>
-              </div>
-              <div className="space-y-4 bg-slate-50/50 p-5">
-                {ticket.chatSession.messages.map((message) => (
-                  <div key={message.id} className={clsx('flex gap-3', message.role === 'JULIA' && 'flex-row-reverse')}>
-                    <div
-                      className={clsx(
-                        'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold',
-                        message.role === 'JULIA' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700',
-                      )}
-                    >
-                      {message.role === 'JULIA' ? 'J' : 'C'}
-                    </div>
-                    <div className={clsx('max-w-[80%]', message.role === 'JULIA' && 'items-end')}>
-                      <div className={clsx('rounded-xl border p-3 text-sm shadow-sm', message.role === 'JULIA' ? 'border-orange-600 bg-orange-600 text-white' : 'border-slate-200 bg-white text-slate-700')}>
-                        {message.content}
-                      </div>
-                      <p className="mt-1 text-[10px] text-slate-400">{formatDateTime(message.createdAt)}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
-
-          {currentTab === 'conversation' ? (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">Timeline</h3>
-                <span className="text-xs text-slate-400">{timeline.length} entries</span>
-              </div>
-
-              <div className="space-y-4">
-                {timeline.length === 0 ? (
-                  <EmptyState title="No conversation entries yet" message="Replies, internal notes, and system events will appear here." />
-                ) : (
-                  timeline.map((entry) => (
-                    <div key={entry.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                      <div className="flex items-center justify-between gap-4">
-                        <div className="flex items-center gap-2">
-                          {entry.type === 'INTERNAL_NOTE' ? <Lock className="h-4 w-4 text-amber-600" /> : <MessageSquare className="h-4 w-4 text-orange-600" />}
-                          <p className="text-sm font-bold text-slate-900">{entry.user?.name || entry.senderName || 'System'}</p>
-                          <span
-                            className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase ${
-                              entry.type === 'INTERNAL_NOTE'
-                                ? 'bg-amber-100 text-amber-700'
-                                : entry.type === 'SYSTEM'
-                                  ? 'bg-slate-100 text-slate-700'
-                                  : 'bg-orange-100 text-orange-700'
-                            }`}
-                          >
-                            {humanizeEnum(entry.type || 'SYSTEM')}
-                          </span>
-                        </div>
-                        <p className="text-xs text-slate-400">{formatDateTime(entry.createdAt)}</p>
-                      </div>
-
-                      {entry.senderEmail && !entry.user ? <p className="mt-3 text-xs font-medium text-slate-400">{entry.senderEmail}</p> : null}
-
-                      {entry.content ? <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-600">{entry.content}</p> : null}
-
-                      {entry.attachments?.length ? (
-                        <div className="mt-4 space-y-2 rounded-2xl border border-slate-100 bg-slate-50 p-3">
-                          {entry.attachments.map((attachment) => (
-                            <button
-                              key={attachment.id}
-                              onClick={() => void handleDownloadAttachment(attachment.id, attachment.originalName)}
-                              className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-left transition-colors hover:bg-slate-50"
-                            >
-                              <div className="min-w-0">
-                                <p className="truncate text-sm font-semibold text-slate-900">{attachment.originalName}</p>
-                                <p className="mt-1 text-xs text-slate-500">
-                                  {formatBytes(attachment.sizeBytes)} | {attachment.uploadedBy?.name || 'Unknown uploader'}
-                                </p>
-                              </div>
-                              <Download className="h-4 w-4 shrink-0 text-slate-500" />
-                            </button>
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          ) : null}
-
-          {currentTab === 'history' ? (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">Escalation History</h3>
-                <span className="text-xs text-slate-400">
-                  {(ticket.escalationHistory || []).length} event{(ticket.escalationHistory || []).length === 1 ? '' : 's'}
-                </span>
-              </div>
-              <div className="space-y-4">
-                {ticket.escalationHistory?.length ? (
-                  ticket.escalationHistory.map((event) => (
-                    <div key={event.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                      <div className="flex items-center justify-between gap-4">
-                        <p className="text-sm font-bold text-slate-900">{event.createdBy?.name || 'System'} escalated the ticket</p>
-                        <p className="text-xs text-slate-400">{formatDateTime(event.createdAt)}</p>
-                      </div>
-                      <p className="mt-2 text-sm text-slate-600">
-                        {humanizeEnum(event.fromStatus)} to {humanizeEnum(event.toStatus)}
-                      </p>
-                      {event.note ? <p className="mt-2 whitespace-pre-wrap text-sm text-slate-500">{event.note}</p> : null}
-                    </div>
-                  ))
-                ) : (
-                  <EmptyState title="No escalation history" message="Escalation events will appear here when the ticket is handed to the project lead." />
-                )}
-              </div>
-            </div>
-          ) : null}
-
-          {currentTab === 'history' ? (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">System Activity</h3>
-                <span className="text-xs text-slate-400">{systemTimeline.length} entries</span>
-              </div>
-              {systemTimeline.length === 0 ? (
-                <EmptyState title="No system activity yet" message="Workflow-generated state changes will show here." />
-              ) : (
-                systemTimeline.map((entry) => (
-                  <div key={entry.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                    <div className="flex items-center justify-between gap-4">
-                      <p className="text-sm font-bold text-slate-900">{entry.user?.name || entry.senderName || 'System'}</p>
-                      <p className="text-xs text-slate-400">{formatDateTime(entry.createdAt)}</p>
-                    </div>
-                    <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-600">{entry.content}</p>
-                  </div>
-                ))
-              )}
-            </div>
-          ) : null}
-
-          {currentTab === 'attachments' ? (
-            <div className="space-y-4">
-              {ticketAttachments.length === 0 ? (
-                <EmptyState title="No attachments yet" message="Files added to replies and notes will appear here." />
-              ) : (
-                ticketAttachments.map((attachment) => (
-                  <button
-                    key={attachment.id}
-                    onClick={() => void handleDownloadAttachment(attachment.id, attachment.originalName)}
-                    className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white px-5 py-4 text-left shadow-sm transition-colors hover:bg-slate-50"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-slate-900">{attachment.originalName}</p>
-                      <p className="mt-1 text-xs text-slate-500">
-                        {formatBytes(attachment.sizeBytes)} | {formatDateTime(attachment.createdAt)}
-                      </p>
-                    </div>
-                    <Download className="h-4 w-4 shrink-0 text-slate-500" />
+            <DetailCard eyebrow="Actions" title="Ticket Actions" description="Move the ticket forward from this summary workspace.">
+              {!isReadOnly ? (
+                <div className="space-y-3">
+                  <button onClick={() => void handleAssignToMe()} className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-100 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-200">
+                    <UserPlus className="h-4 w-4" />
+                    Assign to Me
                   </button>
-                ))
-              )}
-            </div>
-          ) : null}
-
-          {currentTab === 'email' ? (
-            <div className="space-y-4">
-              {emailEvents.length === 0 ? (
-                <EmptyState title="No email activity yet" message="Outbound updates and inbound customer replies will show here." />
-              ) : (
-                emailEvents.map((emailEvent) => (
-                  <div key={emailEvent.id} className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <Mail className="h-4 w-4 text-slate-500" />
-                          <p className="truncate text-sm font-semibold text-slate-900">{emailEvent.subject}</p>
-                        </div>
-                        <p className="mt-1 text-xs text-slate-500">
-                          {humanizeEnum(emailEvent.direction)} | {humanizeEnum(emailEvent.status)}
-                        </p>
-                      </div>
-                      <p className="shrink-0 text-xs text-slate-400">{formatDateTime(emailEvent.createdAt)}</p>
-                    </div>
-                    <p className="mt-2 text-xs text-slate-500">
-                      {emailEvent.fromEmail} to {emailEvent.toEmail}
-                    </p>
-                    <p className="mt-2 whitespace-pre-wrap text-sm text-slate-600">{emailEvent.bodyText}</p>
-                    {emailEvent.errorMessage ? <p className="mt-2 text-xs text-rose-600">{emailEvent.errorMessage}</p> : null}
-                  </div>
-                ))
-              )}
-            </div>
-          ) : null}
-
-          {currentTab === 'conversation' && !isReadOnly ? (
-            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-              <div className="flex border-b border-slate-200 bg-slate-50/50">
-                <button
-                  onClick={() => setInteractionType('reply')}
-                  className={clsx(
-                    'flex flex-1 items-center justify-center gap-2 py-3 text-xs font-bold uppercase tracking-wider transition-all',
-                    interactionType === 'reply' ? 'border-b-2 border-orange-600 bg-white text-orange-600' : 'text-slate-400 hover:text-slate-600',
-                  )}
-                >
-                  <MessageSquare className="h-3.5 w-3.5" />
-                  Reply to Client
-                </button>
-                <button
-                  onClick={() => setInteractionType('note')}
-                  className={clsx(
-                    'flex flex-1 items-center justify-center gap-2 py-3 text-xs font-bold uppercase tracking-wider transition-all',
-                    interactionType === 'note' ? 'border-b-2 border-amber-600 bg-white text-amber-600' : 'text-slate-400 hover:text-slate-600',
-                  )}
-                >
-                  <Lock className="h-3.5 w-3.5" />
-                  Internal Note
-                </button>
-              </div>
-
-              <div className="p-4">
-                {interactionType === 'reply' ? (
-                  <div className="mb-4 rounded-2xl border border-orange-100 bg-orange-50 px-4 py-3 text-sm text-orange-900">
-                    <p className="font-semibold">This reply will be emailed to {requesterEmail || 'the requester on file when available'}.</p>
-                    <p className="mt-1 text-xs text-orange-700">Replies from the customer can be threaded back into this ticket through the email subject token.</p>
-                  </div>
-                ) : null}
-
-                <textarea
-                  rows={4}
-                  value={messageText}
-                  onChange={(event) => setMessageText(event.target.value)}
-                  placeholder={interactionType === 'reply' ? 'Type your reply to the client...' : 'Type an internal note...'}
-                  className="w-full resize-none bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
-                />
-
-                <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 p-4">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900">Attachments</p>
-                      <p className="mt-1 text-xs text-slate-500">Up to 5 files, 10 MB each.</p>
-                    </div>
-                    <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold uppercase tracking-wider text-slate-700 transition-colors hover:bg-slate-50">
-                      <Paperclip className="h-3.5 w-3.5" />
-                      Add Files
-                      <input key={fileInputKey} type="file" multiple className="hidden" onChange={handleAttachmentSelection} />
-                    </label>
-                  </div>
-
-                  {attachmentFiles.length ? (
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      {attachmentFiles.map((file, index) => (
-                        <div key={`${file.name}-${index}`} className="flex items-center gap-2 rounded-full bg-white px-3 py-2 text-xs text-slate-700 shadow-sm">
-                          <Paperclip className="h-3.5 w-3.5 text-slate-400" />
-                          <span className="max-w-[180px] truncate font-semibold">{file.name}</span>
-                          <span className="text-slate-400">{formatBytes(file.size)}</span>
-                          <button onClick={() => handleRemoveAttachment(index)} className="text-slate-400 transition-colors hover:text-slate-700">
-                            <X className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
+                  <button onClick={() => void handleStartWork()} className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50">
+                    <PlayCircle className="h-4 w-4" />
+                    Start Work
+                  </button>
+                  {canMoveToWaiting ? (
+                    <button onClick={() => void handleWaitingOnCustomer()} className="flex w-full items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 py-2.5 text-sm font-bold text-amber-800 transition-colors hover:bg-amber-100">
+                      <Users className="h-4 w-4" />
+                      Waiting on Customer
+                    </button>
+                  ) : null}
+                  <button onClick={() => void handleResolve()} className="flex w-full items-center justify-center gap-2 rounded-xl bg-orange-600 py-2.5 text-sm font-bold text-white transition-colors hover:bg-orange-700">
+                    <CheckCircle2 className="h-4 w-4" />
+                    Mark as Resolved
+                  </button>
+                  {canReopen ? (
+                    <button onClick={() => void handleReopen()} className="flex w-full items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50 py-2.5 text-sm font-bold text-rose-700 transition-colors hover:bg-rose-100">
+                      <RotateCcw className="h-4 w-4" />
+                      Reopen Ticket
+                    </button>
+                  ) : null}
+                  {role === 'Support Engineer' ? (
+                    <button onClick={() => void handleEscalate()} className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50">
+                      <AlertCircle className="h-4 w-4" />
+                      Escalate to Project Lead
+                    </button>
                   ) : null}
                 </div>
+              ) : (
+                <p className="text-sm leading-relaxed text-slate-600">Project managers can review the ticket here, but ticket state changes and replies are disabled.</p>
+              )}
+            </DetailCard>
+          ) : (
+            <DetailCard eyebrow="Context" title="At a Glance" description="Key ticket context stays visible while you review transcript, emails, or history.">
+              <div className="space-y-3 text-sm">
+                <SnapshotRow label="Ticket" value={ticket.displayId} />
+                <SnapshotRow label="Source" value={ticket.source ? humanizeEnum(ticket.source) : 'Widget'} />
+                <SnapshotRow label="Requester" value={requesterName} />
+                <SnapshotRow label="Assigned To" value={ticket.assignedTo?.name || 'Unassigned'} />
+                <SnapshotRow label="Created" value={formatDateTime(ticket.createdAt)} />
+                <SnapshotRow label="Resolved" value={ticket.resolvedAt ? formatDateTime(ticket.resolvedAt) : 'Not resolved'} />
               </div>
+            </DetailCard>
+          )}
 
-              <div className="flex justify-end border-t border-slate-100 bg-slate-50 p-3">
-                <button
-                  onClick={() => void handleSendInteraction()}
-                  disabled={(!messageText.trim() && attachmentFiles.length === 0) || isSubmitting}
-                  className={clsx(
-                    'flex items-center gap-2 rounded-lg px-6 py-2 text-sm font-bold text-white shadow-md transition-all active:scale-95 disabled:scale-100 disabled:opacity-50',
-                    interactionType === 'reply' ? 'bg-orange-600 hover:bg-orange-700' : 'bg-amber-500 hover:bg-amber-600',
-                  )}
-                >
-                  <Send className="h-4 w-4" />
-                  {interactionType === 'reply' ? 'Send Reply' : 'Add Note'}
-                </button>
-              </div>
-            </div>
-          ) : null}
-        </div>
-
-        <div className="space-y-6">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h3 className="mb-4 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              {currentTab === 'email' ? 'Email Snapshot' : currentTab === 'attachments' ? 'Attachment Snapshot' : currentTab === 'history' ? 'History Snapshot' : 'Ticket Snapshot'}
-            </h3>
-            <div className="space-y-3 text-sm">
-              <SnapshotRow label="Ticket" value={ticket.displayId} />
-              <SnapshotRow label="Source" value={ticket.source ? humanizeEnum(ticket.source) : 'Widget'} />
-              <SnapshotRow label="Client" value={ticket.project?.client?.name || '-'} />
-              <SnapshotRow label="Project" value={ticket.project?.name || '-'} />
-              <SnapshotRow label="Requester" value={requesterName} />
-              <SnapshotRow label="Assigned To" value={ticket.assignedTo?.name || 'Unassigned'} />
-              <SnapshotRow label="Created" value={formatDateTime(ticket.createdAt)} />
-              <SnapshotRow label="Resolved" value={ticket.resolvedAt ? formatDateTime(ticket.resolvedAt) : 'Not resolved'} />
-            </div>
-          </div>
-
-          {currentTab === 'summary' || currentTab === 'conversation' ? (
-            <>
-              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                <h3 className="mb-4 text-[10px] font-bold uppercase tracking-wider text-slate-400">Requester</h3>
-                <div className="space-y-3 text-sm">
-                  <SnapshotRow label="Name" value={requesterName} />
-                  <SnapshotRow label="Email" value={requesterEmail || 'Not available'} />
-                </div>
-              </div>
-
-              <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Ticket Actions</h3>
-                {!isReadOnly ? (
-                  <>
-                    <button
-                      onClick={() => void handleAssignToMe()}
-                      className="flex w-full items-center justify-center gap-2 rounded-lg bg-slate-100 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-200"
-                    >
-                      <UserPlus className="h-4 w-4" />
-                      Assign to Me
-                    </button>
-                    <button
-                      onClick={() => void handleStartWork()}
-                      className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50"
-                    >
-                      <PlayCircle className="h-4 w-4" />
-                      Start Work
-                    </button>
-                    {canMoveToWaiting ? (
-                      <button
-                        onClick={() => void handleWaitingOnCustomer()}
-                        className="flex w-full items-center justify-center gap-2 rounded-lg border border-amber-200 bg-amber-50 py-2.5 text-sm font-bold text-amber-800 transition-colors hover:bg-amber-100"
-                      >
-                        <Users className="h-4 w-4" />
-                        Waiting on Customer
-                      </button>
-                    ) : null}
-                    <button
-                      onClick={() => void handleResolve()}
-                      className="flex w-full items-center justify-center gap-2 rounded-lg bg-orange-600 py-2.5 text-sm font-bold text-white transition-colors hover:bg-orange-700"
-                    >
-                      <CheckCircle2 className="h-4 w-4" />
-                      Mark as Resolved
-                    </button>
-                    {canReopen ? (
-                      <button
-                        onClick={() => void handleReopen()}
-                        className="flex w-full items-center justify-center gap-2 rounded-lg border border-rose-200 bg-rose-50 py-2.5 text-sm font-bold text-rose-700 transition-colors hover:bg-rose-100"
-                      >
-                        <RotateCcw className="h-4 w-4" />
-                        Reopen Ticket
-                      </button>
-                    ) : null}
-                    {role === 'Support Engineer' ? (
-                      <button
-                        onClick={() => void handleEscalate()}
-                        className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50"
-                      >
-                        <AlertCircle className="h-4 w-4" />
-                        Escalate to Project Lead
-                      </button>
-                    ) : null}
-                  </>
-                ) : (
-                  <p className="text-sm text-slate-500">Project managers can review tickets here but cannot reply or change ticket state.</p>
-                )}
-              </div>
-
-              {ticket.project?.client?.id ? (
-                <Link
-                  to={appPaths.clients.detail(ticket.project.client.id)}
-                  className="block rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-colors hover:bg-slate-50"
-                >
-                  <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">Client Context</p>
-                  <p className="mt-3 text-lg font-bold text-slate-900">{ticket.project.client.name}</p>
-                  <p className="mt-1 text-sm text-slate-500">Open the client record for contacts, linked projects, and AMC coverage.</p>
-                </Link>
-              ) : null}
-
-              {ticket.project?.id ? (
-                <Link
-                  to={appPaths.projects.detail(ticket.project.id)}
-                  className="block rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-colors hover:bg-slate-50"
-                >
-                  <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">Project Context</p>
-                  <p className="mt-3 text-lg font-bold text-slate-900">{ticket.project.name}</p>
-                  <p className="mt-1 text-sm text-slate-500">Jump into project docs, FAQs, widget status, and Julia configuration.</p>
-                </Link>
-              ) : null}
-            </>
-          ) : null}
-        </div>
+          {ticket.project?.client?.id ? <ContextLinkCard eyebrow="Client Context" title={ticket.project.client.name} description="Open the client record for contacts, linked projects, and AMC coverage." to={appPaths.clients.detail(ticket.project.client.id)} /> : null}
+          {ticket.project?.id ? <ContextLinkCard eyebrow="Project Context" title={ticket.project.name} description="Jump into project docs, FAQs, widget status, and Julia configuration." to={appPaths.projects.detail(ticket.project.id)} /> : null}
+        </aside>
       </div>
     </div>
   );
 }
 
-function SnapshotRow({ label, value }: { label: string; value: string }) {
+function DetailCard({
+  eyebrow,
+  title,
+  description,
+  action,
+  children,
+}: {
+  eyebrow?: string;
+  title: string;
+  description?: string;
+  action?: ReactNode;
+  children: ReactNode;
+}) {
   return (
-    <div className="flex justify-between gap-4">
+    <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="flex flex-col gap-4 border-b border-slate-100 pb-5 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          {eyebrow ? <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">{eyebrow}</p> : null}
+          <h2 className="mt-2 text-xl font-black text-slate-900">{title}</h2>
+          {description ? <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-500">{description}</p> : null}
+        </div>
+        {action ? <div className="shrink-0">{action}</div> : null}
+      </div>
+      <div className="pt-5">{children}</div>
+    </section>
+  );
+}
+
+function DetailGrid({ items }: { items: Array<{ label: string; value: ReactNode }> }) {
+  return (
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      {items.map((item) => (
+        <div key={item.label} className="rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3">
+          <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">{item.label}</p>
+          <div className="mt-2 break-words text-sm font-semibold text-slate-900">{item.value}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SummaryJumpCard({
+  label,
+  value,
+  note,
+  to,
+  icon: Icon,
+}: {
+  label: string;
+  value: string;
+  note: string;
+  to: string;
+  icon: typeof MessageSquare;
+}) {
+  return (
+    <Link to={to} className="group rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition-colors hover:bg-slate-50">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">{label}</p>
+          <p className="mt-3 text-3xl font-black text-slate-900">{value}</p>
+          <p className="mt-2 text-sm text-slate-500">{note}</p>
+        </div>
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-slate-600 transition-colors group-hover:bg-white">
+          <Icon className="h-5 w-5" />
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+function HistoryMetricCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">{label}</p>
+      <p className="mt-3 text-3xl font-black text-slate-900">{value}</p>
+    </div>
+  );
+}
+
+function CountBadge({ count, label }: { count: number; label: string }) {
+  return <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">{count} {label}</div>;
+}
+
+function ActivityEntryCard({
+  entry,
+  onDownloadAttachment,
+}: {
+  entry: ActivityEntry;
+  onDownloadAttachment: (attachment: ApiTicketAttachment) => void;
+}) {
+  if (entry.kind === 'escalation') {
+    return (
+      <div className="rounded-2xl border border-violet-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="flex h-8 w-8 items-center justify-center rounded-2xl bg-violet-100 text-violet-700">
+                <AlertCircle className="h-4 w-4" />
+              </span>
+              <p className="text-sm font-bold text-slate-900">{entry.escalation.createdBy?.name || 'System'} escalated the ticket</p>
+              <span className="rounded-full bg-violet-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-violet-700">Escalation</span>
+            </div>
+          </div>
+          <p className="shrink-0 text-xs text-slate-400">{formatDateTime(entry.escalation.createdAt)}</p>
+        </div>
+        <p className="mt-3 text-sm leading-relaxed text-slate-600">
+          Status changed from {humanizeEnum(entry.escalation.fromStatus)} to {humanizeEnum(entry.escalation.toStatus)}.
+        </p>
+        {entry.escalation.note ? <div className="mt-3 rounded-2xl border border-violet-100 bg-violet-50/70 px-4 py-3 text-sm leading-relaxed text-slate-700">{entry.escalation.note}</div> : null}
+      </div>
+    );
+  }
+
+  const messageType = entry.message.type || 'SYSTEM';
+  const badgeClass = messageType === 'INTERNAL_NOTE' ? 'bg-amber-100 text-amber-700' : messageType === 'REPLY' ? 'bg-orange-100 text-orange-700' : 'bg-slate-100 text-slate-700';
+  const iconTone = messageType === 'INTERNAL_NOTE' ? 'bg-amber-100 text-amber-700' : messageType === 'REPLY' ? 'bg-orange-100 text-orange-700' : 'bg-slate-100 text-slate-700';
+  const Icon = messageType === 'INTERNAL_NOTE' ? Lock : messageType === 'REPLY' ? MessageSquare : AlertCircle;
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`flex h-8 w-8 items-center justify-center rounded-2xl ${iconTone}`}>
+              <Icon className="h-4 w-4" />
+            </span>
+            <p className="text-sm font-bold text-slate-900">{entry.message.user?.name || entry.message.senderName || 'System'}</p>
+            <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${badgeClass}`}>{humanizeEnum(messageType)}</span>
+          </div>
+          {entry.message.senderEmail && !entry.message.user ? <p className="mt-2 text-xs text-slate-400">{entry.message.senderEmail}</p> : null}
+        </div>
+        <p className="shrink-0 text-xs text-slate-400">{formatDateTime(entry.message.createdAt)}</p>
+      </div>
+      {entry.message.content ? <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-slate-600">{entry.message.content}</p> : null}
+      {entry.message.attachments?.length ? (
+        <div className="mt-4 space-y-2">
+          {entry.message.attachments.map((attachment) => (
+            <AttachmentButton key={attachment.id} attachment={attachment} onDownload={() => onDownloadAttachment(attachment)} compact />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function EmailHistoryCard({ emailEvent }: { emailEvent: ApiTicketEmail }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <Mail className="h-4 w-4 text-slate-500" />
+            <p className="truncate text-sm font-semibold text-slate-900">{emailEvent.subject}</p>
+            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-700">{humanizeEnum(emailEvent.direction)}</span>
+            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-700">{humanizeEnum(emailEvent.status)}</span>
+          </div>
+          <p className="mt-2 text-xs text-slate-500">From {emailEvent.fromEmail}{emailEvent.fromName ? ` (${emailEvent.fromName})` : ''}</p>
+          <p className="mt-1 text-xs text-slate-500">To {emailEvent.toEmail}{emailEvent.toName ? ` (${emailEvent.toName})` : ''}</p>
+        </div>
+        <div className="shrink-0 text-right">
+          <p className="text-xs text-slate-400">{formatDateTime(emailEvent.createdAt)}</p>
+          {emailEvent.deliveredAt ? <p className="mt-1 text-[11px] text-slate-400">Delivered {formatDateTime(emailEvent.deliveredAt)}</p> : null}
+        </div>
+      </div>
+      <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50/80 px-4 py-3">
+        <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{emailEvent.bodyText || 'No email body stored.'}</p>
+      </div>
+      {emailEvent.errorMessage ? <p className="mt-3 text-xs font-medium text-rose-600">{emailEvent.errorMessage}</p> : null}
+    </div>
+  );
+}
+
+function AttachmentButton({
+  attachment,
+  onDownload,
+  compact = false,
+}: {
+  attachment: ApiTicketAttachment;
+  onDownload: () => void;
+  compact?: boolean;
+}) {
+  return (
+    <button
+      onClick={onDownload}
+      className={clsx(
+        'flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white text-left shadow-sm transition-colors hover:bg-slate-50',
+        compact ? 'px-4 py-3' : 'px-5 py-4',
+      )}
+    >
+      <div className="min-w-0">
+        <p className="truncate text-sm font-semibold text-slate-900">{attachment.originalName}</p>
+        <p className="mt-1 text-xs text-slate-500">
+          {formatBytes(attachment.sizeBytes)} | {attachment.uploadedBy?.name || 'Unknown uploader'} | {formatDateTime(attachment.createdAt)}
+        </p>
+      </div>
+      <Download className="h-4 w-4 shrink-0 text-slate-500" />
+    </button>
+  );
+}
+
+function ContextLinkCard({
+  eyebrow,
+  title,
+  description,
+  to,
+}: {
+  eyebrow: string;
+  title: string;
+  description: string;
+  to: string;
+}) {
+  return (
+    <Link to={to} className="block rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition-colors hover:bg-slate-50">
+      <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">{eyebrow}</p>
+      <p className="mt-3 text-lg font-bold text-slate-900">{title}</p>
+      <p className="mt-2 text-sm leading-relaxed text-slate-500">{description}</p>
+    </Link>
+  );
+}
+
+function SnapshotRow({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="flex items-start justify-between gap-4">
       <span className="text-slate-500">{label}</span>
-      <span className="text-right font-semibold text-slate-900">{value}</span>
+      <span className="max-w-[60%] text-right font-semibold text-slate-900">{value}</span>
     </div>
   );
 }
 
 function TicketSkeleton() {
   return (
-    <div className="mx-auto max-w-7xl space-y-6 p-6 animate-pulse">
+    <div className="mx-auto max-w-[1520px] animate-pulse space-y-6 p-6">
       <div className="h-8 w-80 rounded-xl bg-slate-200" />
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-        <div className="space-y-6 xl:col-span-2">
-          <div className="h-48 rounded-2xl border border-slate-200 bg-white shadow-sm" />
-          <div className="h-72 rounded-2xl border border-slate-200 bg-white shadow-sm" />
-          <div className="h-80 rounded-2xl border border-slate-200 bg-white shadow-sm" />
+      <div className="h-12 rounded-2xl bg-white shadow-sm" />
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr),340px]">
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div key={index} className="h-32 rounded-3xl border border-slate-200 bg-white shadow-sm" />
+            ))}
+          </div>
+          <div className="h-64 rounded-3xl border border-slate-200 bg-white shadow-sm" />
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            <div className="h-64 rounded-3xl border border-slate-200 bg-white shadow-sm" />
+            <div className="h-64 rounded-3xl border border-slate-200 bg-white shadow-sm" />
+          </div>
+          <div className="h-96 rounded-3xl border border-slate-200 bg-white shadow-sm" />
         </div>
         <div className="space-y-6">
-          <div className="h-56 rounded-2xl border border-slate-200 bg-white shadow-sm" />
-          <div className="h-72 rounded-2xl border border-slate-200 bg-white shadow-sm" />
+          <div className="h-72 rounded-3xl border border-slate-200 bg-white shadow-sm" />
+          <div className="h-40 rounded-3xl border border-slate-200 bg-white shadow-sm" />
+          <div className="h-40 rounded-3xl border border-slate-200 bg-white shadow-sm" />
         </div>
       </div>
     </div>

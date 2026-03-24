@@ -102,22 +102,17 @@ export default function ClientMasterList() {
         description="Server-filtered client data with pagination, business metadata, and quick ticket context."
         breadcrumbs={[{ label: 'Operations' }, { label: 'Clients' }]}
         actions={
-          <button
-            onClick={openCreateModal}
-            disabled={!canManageClients}
-            className="inline-flex items-center gap-2 rounded-xl bg-orange-600 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-orange-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-          >
-            <Plus className="h-4 w-4" />
-            New Client
-          </button>
+          canManageClients ? (
+            <button
+              onClick={openCreateModal}
+              className="inline-flex items-center gap-2 rounded-xl bg-orange-600 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-orange-700"
+            >
+              <Plus className="h-4 w-4" />
+              New Client
+            </button>
+          ) : null
         }
       />
-
-      {!canManageClients ? (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900">
-          This area is read-only for your account. Only Project Managers can create or edit client records.
-        </div>
-      ) : null}
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
         <SummaryCard icon={Building2} label="Clients" value={String(clientPage.total)} accent="blue" />

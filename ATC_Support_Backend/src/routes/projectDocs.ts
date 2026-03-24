@@ -1,8 +1,9 @@
-import { KnowledgeStatus } from '@prisma/client';
+import { KnowledgeStatus, Role } from '@prisma/client';
 import { Router } from 'express';
 import { z } from 'zod';
 
 import { prisma } from '../lib/prisma';
+import { requireRole } from '../middleware/role';
 import { validate } from '../middleware/validate';
 import { assertProjectAccess } from '../utils/access';
 import { asyncHandler, parseId, notFound } from '../utils/http';
@@ -61,6 +62,7 @@ router.get(
 
 router.post(
   '/projects/:id/docs',
+  requireRole(Role.PM, Role.PL),
   validate(createDocSchema),
   asyncHandler(async (req, res) => {
     const projectId = parseId(req.params.id, 'project id');
@@ -87,6 +89,7 @@ router.post(
 
 router.patch(
   '/docs/:id',
+  requireRole(Role.PM, Role.PL),
   validate(updateDocSchema),
   asyncHandler(async (req, res) => {
     const docId = parseId(req.params.id, 'doc id');
@@ -127,6 +130,7 @@ router.patch(
 
 router.delete(
   '/docs/:id',
+  requireRole(Role.PM, Role.PL),
   asyncHandler(async (req, res) => {
     const docId = parseId(req.params.id, 'doc id');
     const existingDoc = await prisma.projectDoc.findUnique({

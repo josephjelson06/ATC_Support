@@ -100,22 +100,17 @@ export default function ProjectMasterList() {
         description="Projects are server-filtered and paginated with live client, widget, and ticket metadata."
         breadcrumbs={[{ label: 'Operations' }, { label: 'Projects' }]}
         actions={
-          <button
-            onClick={openCreateModal}
-            disabled={!canManageProjects}
-            className="inline-flex items-center gap-2 rounded-xl bg-orange-600 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-orange-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-          >
-            <Plus className="h-4 w-4" />
-            New Project
-          </button>
+          canManageProjects ? (
+            <button
+              onClick={openCreateModal}
+              className="inline-flex items-center gap-2 rounded-xl bg-orange-600 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-orange-700"
+            >
+              <Plus className="h-4 w-4" />
+              New Project
+            </button>
+          ) : null
         }
       />
-
-      {!canManageProjects ? (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900">
-          This area is read-only for your account. Only Project Managers can create or edit projects.
-        </div>
-      ) : null}
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
         <ProjectStat icon={Briefcase} label="Projects" value={String(projectPage.total)} accent="orange" />

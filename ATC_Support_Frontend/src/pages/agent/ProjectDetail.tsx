@@ -5,6 +5,7 @@ import { BookOpenText, Briefcase, Copy, FileQuestion, FileText, KeyRound, Pencil
 import PageHeader from '../../components/layout/PageHeader';
 import SectionTabs from '../../components/layout/SectionTabs';
 import { FaqCrudPanel } from '../../components/entities/FaqCrudPanel';
+import { ProjectDocCrudPanel } from '../../components/entities/ProjectDocCrudPanel';
 import { ProjectCrudPanel } from '../../components/entities/ProjectCrudPanel';
 import { useModal } from '../../contexts/ModalContext';
 import { useRole } from '../../contexts/RoleContext';
@@ -59,6 +60,7 @@ export default function ProjectDetail() {
   const { project, docs, faqs } = projectQuery.data;
   const canManageProjects = backendRole === 'PM';
   const canManageFaqs = backendRole === 'PM' || backendRole === 'PL';
+  const canManageDocs = backendRole === 'PM' || backendRole === 'PL';
   const projectTabs = [
     { label: 'Overview', to: appPaths.projects.detail(project.id, 'overview') },
     { label: 'FAQs', to: appPaths.projects.detail(project.id, 'faqs') },
@@ -87,6 +89,42 @@ export default function ProjectDetail() {
           }}
           onDeleted={async () => {
             navigate(appPaths.projects.list);
+          }}
+        />
+      ),
+    });
+  };
+
+  const openCreateDocModal = () => {
+    openModal({
+      title: `Add Doc to ${project.name}`,
+      size: 'xl',
+      content: (
+        <ProjectDocCrudPanel
+          mode="create"
+          projectId={project.id}
+          onCompleted={async () => {
+            projectQuery.reload();
+          }}
+        />
+      ),
+    });
+  };
+
+  const openEditDocModal = (doc: ApiProjectDoc) => {
+    openModal({
+      title: 'Edit Project Doc',
+      size: 'xl',
+      content: (
+        <ProjectDocCrudPanel
+          mode="edit"
+          projectId={project.id}
+          doc={doc}
+          onCompleted={async () => {
+            projectQuery.reload();
+          }}
+          onDeleted={async () => {
+            projectQuery.reload();
           }}
         />
       ),
@@ -255,10 +293,21 @@ export default function ProjectDetail() {
         {currentTab === 'docs' ? (
           <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="flex items-center justify-between border-b border-slate-100 p-6">
-              <h2 className="text-lg font-bold text-slate-900">Project Documentation</h2>
-              <span className="text-sm text-slate-500">
-                {docs.length} document{docs.length === 1 ? '' : 's'}
-              </span>
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">Project Documentation</h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  {docs.length} document{docs.length === 1 ? '' : 's'}
+                </p>
+              </div>
+              {canManageDocs ? (
+                <button
+                  onClick={openCreateDocModal}
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold uppercase tracking-wider text-slate-700 transition-colors hover:bg-slate-50"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Add Doc
+                </button>
+              ) : null}
             </div>
             <div className="divide-y divide-slate-100">
               {docs.length === 0 ? (
@@ -266,34 +315,45 @@ export default function ProjectDetail() {
               ) : (
                 docs.map((doc) => (
                   <div key={doc.id} className="p-5">
-                    <div className="flex items-start gap-4">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-                        <BookOpenText className="h-5 w-5" />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-bold text-slate-900">{doc.title}</p>
-                          <span
-                            className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-widest ${
-                              doc.status === 'PUBLISHED' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'
-                            }`}
-                          >
-                            {humanizeEnum(doc.status)}
-                          </span>
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex min-w-0 items-start gap-4">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                          <BookOpenText className="h-5 w-5" />
                         </div>
-                        <p className="mt-2 line-clamp-3 text-sm text-slate-500">{doc.content}</p>
-                        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-400">
-                          {doc.createdBy ? <span>{doc.createdBy.name}</span> : null}
-                          <span>|</span>
-                          <span>Updated {formatRelativeTime(doc.updatedAt)}</span>
-                          {doc.publishedAt ? (
-                            <>
-                              <span>|</span>
-                              <span>Published {formatRelativeTime(doc.publishedAt)}</span>
-                            </>
-                          ) : null}
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-bold text-slate-900">{doc.title}</p>
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-widest ${
+                                doc.status === 'PUBLISHED' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'
+                              }`}
+                            >
+                              {humanizeEnum(doc.status)}
+                            </span>
+                          </div>
+                          <p className="mt-2 line-clamp-3 text-sm text-slate-500">{doc.content}</p>
+                          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-400">
+                            {doc.createdBy ? <span>{doc.createdBy.name}</span> : null}
+                            <span>|</span>
+                            <span>Updated {formatRelativeTime(doc.updatedAt)}</span>
+                            {doc.publishedAt ? (
+                              <>
+                                <span>|</span>
+                                <span>Published {formatRelativeTime(doc.publishedAt)}</span>
+                              </>
+                            ) : null}
+                          </div>
                         </div>
                       </div>
+                      {canManageDocs ? (
+                        <button
+                          onClick={() => openEditDocModal(doc)}
+                          className="rounded-lg border border-slate-200 bg-white p-2 text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700"
+                          aria-label={`Edit doc ${doc.title}`}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                      ) : null}
                     </div>
                   </div>
                 ))

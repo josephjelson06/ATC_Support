@@ -1,8 +1,10 @@
 import { useDeferredValue, useEffect, useState } from 'react';
-import { AlertTriangle, Search } from 'lucide-react';
+import { AlertTriangle, Plus, Search } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 
+import { TicketCreatePanel } from '../../components/entities/TicketCreatePanel';
 import { PaginationControls } from '../../components/layout/PaginationControls';
+import { useModal } from '../../contexts/ModalContext';
 import { useAsyncData } from '../../hooks/useAsyncData';
 import { apiFetch } from '../../lib/api';
 import { formatRelativeTime, getTicketPriorityClasses, getTicketStatusClasses, humanizeEnum } from '../../lib/format';
@@ -49,6 +51,7 @@ const ticketViewConfig: Record<
 export default function InboundQueue() {
   const { view = 'queue' } = useParams();
   const navigate = useNavigate();
+  const { openModal } = useModal();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | TicketStatus>('ALL');
   const [priorityFilter, setPriorityFilter] = useState<'ALL' | TicketPriority>('ALL');
@@ -64,6 +67,24 @@ export default function InboundQueue() {
     const [clients, projects] = await Promise.all([apiFetch<ApiClient[]>('/clients'), apiFetch<ApiProject[]>('/projects')]);
     return { clients, projects };
   }, []);
+
+  const openCreateTicketModal = () => {
+    const projects = filterOptionsQuery.data?.projects || [];
+
+    openModal({
+      title: 'Create Ticket',
+      size: 'lg',
+      content: (
+        <TicketCreatePanel
+          projects={projects}
+          onCompleted={async (ticket) => {
+            ticketsQuery.reload();
+            navigate(appPaths.tickets.detail(ticket.id, 'summary'));
+          }}
+        />
+      ),
+    });
+  };
 
   useEffect(() => {
     setPage(1);
@@ -161,9 +182,15 @@ export default function InboundQueue() {
             <h1 className="text-2xl font-bold text-slate-900">{currentView.title}</h1>
             <p className="mt-1 text-sm text-slate-500">{currentView.description}</p>
           </div>
-          <div className="flex max-w-xl items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
-            <p>Tickets are created only through widget escalation. Manual internal ticket creation stays disabled.</p>
+          <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-end">
+            <button
+              type="button"
+              onClick={openCreateTicketModal}
+              className="inline-flex items-center gap-2 rounded-xl bg-orange-600 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-orange-700"
+            >
+              <Plus className="h-4 w-4" />
+              New Ticket
+            </button>
           </div>
         </div>
 

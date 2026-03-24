@@ -1,12 +1,9 @@
-import { LogOut } from 'lucide-react';
-
 import { useRole } from '../../contexts/RoleContext';
-import { formatRoleLabel } from '../../lib/format';
 import { getVisibleSidebarGroups } from '../../lib/navigation';
 import SidebarGroup from './SidebarGroup';
 
 export default function Sidebar() {
-  const { role, backendRole, name, designation, logout } = useRole();
+  const { backendRole } = useRole();
   const sidebarGroups = getVisibleSidebarGroups(backendRole);
 
   return (
@@ -26,33 +23,7 @@ export default function Sidebar() {
           <SidebarGroup key={group.id} label={group.label} items={group.items} />
         ))}
       </nav>
-
-      <div className="border-t border-slate-100 p-4">
-        <div className="mb-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-          <p className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-400">Authenticated Account</p>
-          <p className="mt-2 text-sm font-bold text-slate-900">{backendRole ? formatRoleLabel(backendRole) : role}</p>
-        </div>
-
-        <div className="flex items-center gap-3 p-2">
-          <div className="h-8 w-8 overflow-hidden rounded-full bg-slate-200">
-            <img
-              src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${name}`}
-              alt="User"
-              className="h-full w-full object-cover"
-            />
-          </div>
-          <div className="flex-1 overflow-hidden">
-            <p className="truncate text-sm font-medium text-slate-900">{name}</p>
-            <p className="truncate text-xs text-slate-500">
-              {designation}
-              {backendRole ? ` • ${formatRoleLabel(backendRole)}` : ''}
-            </p>
-          </div>
-          <button onClick={() => void logout()} className="text-slate-400 transition-colors hover:text-slate-600" title="Sign out">
-            <LogOut className="h-5 w-5" />
-          </button>
-        </div>
-      </div>
     </aside>
   );
 }
+

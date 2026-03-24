@@ -1,8 +1,10 @@
 import { useDeferredValue, useEffect, useState } from 'react';
-import { AlertTriangle, Plus, Search } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Plus, Search, Ticket, Users } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import { TicketCreatePanel } from '../../components/entities/TicketCreatePanel';
+import PageHeader from '../../components/layout/PageHeader';
 import { PaginationControls } from '../../components/layout/PaginationControls';
 import { useModal } from '../../contexts/ModalContext';
 import { useAsyncData } from '../../hooks/useAsyncData';
@@ -175,184 +177,209 @@ export default function InboundQueue() {
   };
 
   return (
-    <div className="space-y-6 px-4 py-4 sm:px-6 sm:py-6 xl:px-8">
-        <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
+    <div className="mx-auto max-w-7xl space-y-6 px-4 py-4 sm:px-6 sm:py-6 xl:px-8">
+      <PageHeader
+        title={currentView.title}
+        description={currentView.description}
+        actions={
+          <button
+            type="button"
+            onClick={openCreateTicketModal}
+            className="inline-flex items-center gap-2 rounded-xl bg-orange-600 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-orange-700"
+          >
+            <Plus className="h-4 w-4" />
+            New Ticket
+          </button>
+        }
+      />
+
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
+        <SummaryCard icon={Ticket} label="Total Tickets" value={String(ticketPage.total)} accent="orange" />
+        <SummaryCard icon={Users} label="Unassigned on Page" value={String(unassignedVisibleTickets)} accent="blue" />
+        <SummaryCard icon={CheckCircle2} label="Resolved on Page" value={String(resolvedVisibleTickets)} accent="green" />
+      </div>
+
+      <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">{currentView.title}</h1>
-            <p className="mt-1 text-sm text-slate-500">{currentView.description}</p>
+            <p className="text-xs font-black uppercase tracking-[0.24em] text-slate-400">Filters</p>
+            <p className="mt-1 text-sm text-slate-500">Slice the queue by ownership, urgency, client context, and ticket age.</p>
           </div>
-          <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-end">
+          {hasActiveFilters ? (
             <button
               type="button"
-              onClick={openCreateTicketModal}
-              className="inline-flex items-center gap-2 rounded-xl bg-orange-600 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-orange-700"
+              onClick={clearFilters}
+              className="inline-flex items-center justify-center rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 transition-colors hover:bg-slate-50"
             >
-              <Plus className="h-4 w-4" />
-              New Ticket
+              Clear filters
             </button>
-          </div>
+          ) : null}
         </div>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <SummaryCard label="Total Tickets" value={String(ticketPage.total)} />
-          <SummaryCard label="Unassigned on Page" value={String(unassignedVisibleTickets)} />
-          <SummaryCard label="Resolved on Page" value={String(resolvedVisibleTickets)} />
-        </div>
-
-        <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <p className="text-xs font-black uppercase tracking-[0.24em] text-slate-400">Filters</p>
-              <p className="mt-1 text-sm text-slate-500">Slice the queue by ownership, urgency, client context, and ticket age.</p>
-            </div>
-            {hasActiveFilters ? (
-              <button
-                type="button"
-                onClick={clearFilters}
-                className="inline-flex items-center justify-center rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 transition-colors hover:bg-slate-50"
-              >
-                Clear filters
-              </button>
-            ) : null}
-          </div>
-
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="Search by title, client, project, or description..."
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-4 text-sm outline-none transition-all focus:border-orange-200 focus:bg-white focus:ring-2 focus:ring-orange-500"
-            />
-          </div>
-
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
-            <FilterSelect label="Status" value={statusFilter} onChange={(value) => setStatusFilter(value as 'ALL' | TicketStatus)} disabled={Boolean(currentView.fixedStatus)}>
-              <option value="ALL">All statuses</option>
-              <option value="NEW">New</option>
-              <option value="ASSIGNED">Assigned</option>
-              <option value="IN_PROGRESS">In Progress</option>
-              <option value="WAITING_ON_CUSTOMER">Waiting</option>
-              <option value="ESCALATED">Escalated</option>
-              <option value="REOPENED">Reopened</option>
-              <option value="RESOLVED">Resolved</option>
-            </FilterSelect>
-
-            <FilterSelect label="Priority" value={priorityFilter} onChange={(value) => setPriorityFilter(value as 'ALL' | TicketPriority)}>
-              <option value="ALL">All priorities</option>
-              <option value="LOW">Low</option>
-              <option value="MEDIUM">Medium</option>
-              <option value="HIGH">High</option>
-              <option value="CRITICAL">Critical</option>
-            </FilterSelect>
-
-            <FilterSelect label="Client" value={clientFilter} onChange={setClientFilter}>
-              <option value="ALL">All clients</option>
-              {clientOptions.map((client) => (
-                <option key={client.id} value={String(client.id)}>
-                  {client.name}
-                </option>
-              ))}
-            </FilterSelect>
-
-            <FilterSelect label="Project" value={projectFilter} onChange={setProjectFilter}>
-              <option value="ALL">All projects</option>
-              {projectOptions
-                .filter((project) => clientFilter === 'ALL' || String(project.clientId) === clientFilter)
-                .map((project) => (
-                  <option key={project.id} value={String(project.id)}>
-                    {project.name}
-                  </option>
-                ))}
-            </FilterSelect>
-
-            <FilterSelect label="Assignment" value={assignmentFilter} onChange={(value) => setAssignmentFilter(value as 'ALL' | 'ME' | 'UNASSIGNED' | 'ASSIGNED')} disabled={Boolean(currentView.assignedToMe)}>
-              <option value="ALL">All ownership</option>
-              <option value="ME">Assigned to me</option>
-              <option value="UNASSIGNED">Unassigned</option>
-              <option value="ASSIGNED">Assigned</option>
-            </FilterSelect>
-
-            <FilterSelect label="Created" value={createdWithinDays} onChange={(value) => setCreatedWithinDays(value as 'ALL' | '1' | '7' | '30')}>
-              <option value="ALL">Any time</option>
-              <option value="1">Last 24h</option>
-              <option value="7">Last 7 days</option>
-              <option value="30">Last 30 days</option>
-            </FilterSelect>
-          </div>
-        </div>
-
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[860px] text-left">
-              <thead className="border-b border-slate-200 bg-slate-50">
-                <tr>
-                  {['Ticket', 'Client', 'Project', 'Priority', 'Status', 'Assigned To', 'Created'].map((heading) => (
-                    <th key={heading} className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-500">
-                      {heading}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {visibleTickets.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-500">
-                      No tickets match your current filters.
-                    </td>
-                  </tr>
-                ) : (
-                  visibleTickets.map((ticket) => (
-                    <tr
-                      key={ticket.id}
-                      onClick={() => navigate(appPaths.tickets.detail(ticket.id))}
-                      className="cursor-pointer transition-colors hover:bg-slate-50"
-                    >
-                      <td className="px-4 py-4">
-                        <div>
-                          <p className="font-bold text-slate-900">{ticket.title}</p>
-                          <p className="mt-1 font-mono text-xs text-orange-600">{ticket.displayId}</p>
-                        </div>
-                      </td>
-                      <td className="px-4 py-4 text-sm text-slate-700">{ticket.project?.client?.name || '-'}</td>
-                      <td className="px-4 py-4 text-sm text-slate-500">{ticket.project?.name || '-'}</td>
-                      <td className="px-4 py-4">
-                        <span className={`rounded px-2 py-1 text-[10px] font-bold uppercase ${getTicketPriorityClasses(ticket.priority)}`}>
-                          {humanizeEnum(ticket.priority)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-4">
-                        <span className={`rounded px-2 py-1 text-[10px] font-bold uppercase ${getTicketStatusClasses(ticket.status)}`}>
-                          {humanizeEnum(ticket.status)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-4 text-sm text-slate-700">{ticket.assignedTo?.name || 'Unassigned'}</td>
-                      <td className="px-4 py-4 text-sm text-slate-500">{formatRelativeTime(ticket.createdAt)}</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-          <PaginationControls
-            page={ticketPage.page}
-            totalPages={ticketPage.totalPages}
-            totalItems={ticketPage.total}
-            itemLabel="tickets"
-            pageSize={ticketPage.pageSize}
-            onPageChange={setPage}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Search by title, client, project, or description..."
+            className="w-full rounded-2xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm shadow-sm outline-none transition-all focus:border-orange-200 focus:ring-2 focus:ring-orange-500"
           />
         </div>
+
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
+          <FilterSelect label="Status" value={statusFilter} onChange={(value) => setStatusFilter(value as 'ALL' | TicketStatus)} disabled={Boolean(currentView.fixedStatus)}>
+            <option value="ALL">All statuses</option>
+            <option value="NEW">New</option>
+            <option value="ASSIGNED">Assigned</option>
+            <option value="IN_PROGRESS">In Progress</option>
+            <option value="WAITING_ON_CUSTOMER">Waiting</option>
+            <option value="ESCALATED">Escalated</option>
+            <option value="REOPENED">Reopened</option>
+            <option value="RESOLVED">Resolved</option>
+          </FilterSelect>
+
+          <FilterSelect label="Priority" value={priorityFilter} onChange={(value) => setPriorityFilter(value as 'ALL' | TicketPriority)}>
+            <option value="ALL">All priorities</option>
+            <option value="LOW">Low</option>
+            <option value="MEDIUM">Medium</option>
+            <option value="HIGH">High</option>
+            <option value="CRITICAL">Critical</option>
+          </FilterSelect>
+
+          <FilterSelect label="Client" value={clientFilter} onChange={setClientFilter}>
+            <option value="ALL">All clients</option>
+            {clientOptions.map((client) => (
+              <option key={client.id} value={String(client.id)}>
+                {client.name}
+              </option>
+            ))}
+          </FilterSelect>
+
+          <FilterSelect label="Project" value={projectFilter} onChange={setProjectFilter}>
+            <option value="ALL">All projects</option>
+            {projectOptions
+              .filter((project) => clientFilter === 'ALL' || String(project.clientId) === clientFilter)
+              .map((project) => (
+                <option key={project.id} value={String(project.id)}>
+                  {project.name}
+                </option>
+              ))}
+          </FilterSelect>
+
+          <FilterSelect label="Assignment" value={assignmentFilter} onChange={(value) => setAssignmentFilter(value as 'ALL' | 'ME' | 'UNASSIGNED' | 'ASSIGNED')} disabled={Boolean(currentView.assignedToMe)}>
+            <option value="ALL">All ownership</option>
+            <option value="ME">Assigned to me</option>
+            <option value="UNASSIGNED">Unassigned</option>
+            <option value="ASSIGNED">Assigned</option>
+          </FilterSelect>
+
+          <FilterSelect label="Created" value={createdWithinDays} onChange={(value) => setCreatedWithinDays(value as 'ALL' | '1' | '7' | '30')}>
+            <option value="ALL">Any time</option>
+            <option value="1">Last 24h</option>
+            <option value="7">Last 7 days</option>
+            <option value="30">Last 30 days</option>
+          </FilterSelect>
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[860px] text-left whitespace-nowrap">
+            <thead className="border-b border-slate-200 bg-slate-50">
+              <tr>
+                {['Ticket', 'Client', 'Project', 'Priority', 'Status', 'Assigned To', 'Created'].map((heading) => (
+                  <th key={heading} className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">
+                    {heading}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {visibleTickets.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-6 py-12 text-center text-sm text-slate-500">
+                    No tickets match your current filters.
+                  </td>
+                </tr>
+              ) : (
+                visibleTickets.map((ticket) => (
+                  <tr
+                    key={ticket.id}
+                    onClick={() => navigate(appPaths.tickets.detail(ticket.id))}
+                    className="group cursor-pointer transition-colors hover:bg-slate-50"
+                  >
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-500">
+                          <Ticket className="h-5 w-5" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="truncate font-bold text-slate-900 transition-colors group-hover:text-orange-600">{ticket.title}</p>
+                          <p className="mt-1 font-mono text-xs text-slate-500">{ticket.displayId}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-slate-600">{ticket.project?.client?.name || '-'}</td>
+                    <td className="px-6 py-4 text-sm text-slate-600">{ticket.project?.name || '-'}</td>
+                    <td className="px-6 py-4">
+                      <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${getTicketPriorityClasses(ticket.priority)}`}>
+                        {humanizeEnum(ticket.priority)}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${getTicketStatusClasses(ticket.status)}`}>
+                        {humanizeEnum(ticket.status)}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-slate-600">{ticket.assignedTo?.name || 'Unassigned'}</td>
+                    <td className="px-6 py-4 text-sm text-slate-600">{formatRelativeTime(ticket.createdAt)}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+        <PaginationControls
+          page={ticketPage.page}
+          totalPages={ticketPage.totalPages}
+          totalItems={ticketPage.total}
+          itemLabel="tickets"
+          pageSize={ticketPage.pageSize}
+          onPageChange={setPage}
+        />
+      </div>
     </div>
   );
 }
 
-function SummaryCard({ label, value }: { label: string; value: string }) {
+function SummaryCard({
+  icon: Icon,
+  label,
+  value,
+  accent,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  accent: 'orange' | 'blue' | 'green';
+}) {
+  const theme =
+    accent === 'blue'
+      ? 'bg-blue-50 text-blue-600'
+      : accent === 'green'
+        ? 'bg-green-50 text-green-600'
+        : 'bg-orange-50 text-orange-600';
+
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{label}</p>
-      <p className="mt-2 text-3xl font-black text-slate-900">{value}</p>
+    <div className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className={`flex h-12 w-12 items-center justify-center rounded-xl ${theme}`}>
+        <Icon className="h-6 w-6" />
+      </div>
+      <div>
+        <p className="text-sm font-bold uppercase tracking-wider text-slate-500">{label}</p>
+        <p className="text-2xl font-black text-slate-900">{value}</p>
+      </div>
     </div>
   );
 }

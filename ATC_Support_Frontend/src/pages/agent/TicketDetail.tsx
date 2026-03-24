@@ -1,5 +1,5 @@
-import { type ChangeEvent, type ReactNode, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { type ChangeEvent, type ReactNode, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   AlertCircle,
   CheckCircle2,
@@ -21,6 +21,7 @@ import { clsx } from 'clsx';
 import EmptyState from '../../components/layout/EmptyState';
 import PageHeader from '../../components/layout/PageHeader';
 import SectionTabs from '../../components/layout/SectionTabs';
+import { useModal } from '../../contexts/ModalContext';
 import { useRole } from '../../contexts/RoleContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useAsyncData } from '../../hooks/useAsyncData';
@@ -52,16 +53,19 @@ type ActivityEntry =
   | { id: string; createdAt: string; kind: 'escalation'; escalation: ApiEscalationHistory };
 
 export default function TicketDetail() {
+  const navigate = useNavigate();
   const { id, tab } = useParams();
   const ticketId = Number(id);
   const currentTab = detailTabs.includes((tab as TicketDetailTab) || 'summary') ? ((tab as TicketDetailTab) || 'summary') : 'summary';
   const { role, user, backendRole } = useRole();
   const { showToast } = useToast();
+  const { openModal, closeModal } = useModal();
   const [interactionType, setInteractionType] = useState<'reply' | 'note'>('reply');
   const [messageText, setMessageText] = useState('');
   const [attachmentFiles, setAttachmentFiles] = useState<File[]>([]);
   const [fileInputKey, setFileInputKey] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const composerRef = useRef<HTMLDivElement | null>(null);
   const ticketQuery = useAsyncData(() => apiFetch<ApiTicket>(`/tickets/${ticketId}`), [ticketId]);
 
   const isReadOnly = role === 'Project Manager';
@@ -93,15 +97,6 @@ export default function TicketDetail() {
 
     return [...messageEntries, ...escalationEntries].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [ticketMessages, ticketQuery.data?.escalationHistory]);
-  const historyCounts = useMemo(
-    () => ({
-      replies: ticketMessages.filter((entry) => entry.type === 'REPLY').length,
-      notes: ticketMessages.filter((entry) => entry.type === 'INTERNAL_NOTE').length,
-      system: ticketMessages.filter((entry) => !entry.type || entry.type === 'SYSTEM').length,
-      escalations: (ticketQuery.data?.escalationHistory || []).length,
-    }),
-    [ticketMessages, ticketQuery.data?.escalationHistory],
-  );
 
   const resetComposer = () => {
     setMessageText('');
@@ -153,6 +148,89 @@ export default function TicketDetail() {
   const handleEscalate = async () => {
     const note = window.prompt('Optional escalation note for the project lead:', '') || undefined;
     await performTicketAction(`/tickets/${ticketId}/escalate`, note?.trim() ? { note: note.trim() } : undefined, 'Ticket escalated to the project lead.');
+  };
+
+  const jumpToComposer = (nextType: 'reply' | 'note') => {
+    setInteractionType(nextType);
+    if (currentTab !== 'summary') {
+      navigate(appPaths.tickets.detail(ticketId, 'summary'));
+    }
+    requestAnimationFrame(() => {
+      composerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  };
+
+  const openStatusModal = () => {
+    openModal({
+      title: 'Change Ticket Status',
+      size: 'sm',
+      content: (
+        <div className="space-y-3">
+          <p className="text-sm text-slate-500">Choose the next action for this ticket.</p>
+          <div className="space-y-2">
+            {!isReadOnly && user ? (
+              <button
+                onClick={() => void handleAssignToMe().then(closeModal)}
+                className="flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+              >
+                <UserPlus className="h-4 w-4" />
+                Assign to Me
+              </button>
+            ) : null}
+            {!isReadOnly ? (
+              <button
+                onClick={() => void handleStartWork().then(closeModal)}
+                className="flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+              >
+                <PlayCircle className="h-4 w-4" />
+                Start Work
+              </button>
+            ) : null}
+            {!isReadOnly && canMoveToWaiting ? (
+              <button
+                onClick={() => void handleWaitingOnCustomer().then(closeModal)}
+                className="flex w-full items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-800 transition-colors hover:bg-amber-100"
+              >
+                <Users className="h-4 w-4" />
+                Waiting on Customer
+              </button>
+            ) : null}
+            {!isReadOnly ? (
+              <button
+                onClick={() => void handleResolve().then(closeModal)}
+                className="flex w-full items-center gap-2 rounded-xl bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-orange-700"
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                Mark as Resolved
+              </button>
+            ) : null}
+            {!isReadOnly && canReopen ? (
+              <button
+                onClick={() => void handleReopen().then(closeModal)}
+                className="flex w-full items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-700 transition-colors hover:bg-rose-100"
+              >
+                <RotateCcw className="h-4 w-4" />
+                Reopen Ticket
+              </button>
+            ) : null}
+            {!isReadOnly && role === 'Support Engineer' ? (
+              <button
+                onClick={() => void handleEscalate().then(closeModal)}
+                className="flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+              >
+                <AlertCircle className="h-4 w-4" />
+                Escalate to Project Lead
+              </button>
+            ) : null}
+            {isReadOnly ? (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                Status updates are disabled for this role.
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ),
+    });
   };
 
   const handleAttachmentSelection = (event: ChangeEvent<HTMLInputElement>) => {
@@ -220,37 +298,6 @@ export default function TicketDetail() {
     case 'summary':
       mainContent = (
         <>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <SummaryJumpCard
-              label="Conversation"
-              value={String(transcriptMessages.length)}
-              note={`${transcriptMessages.length} Julia/client message${transcriptMessages.length === 1 ? '' : 's'}`}
-              to={appPaths.tickets.detail(ticketId, 'conversation')}
-              icon={MessageSquare}
-            />
-            <SummaryJumpCard
-              label="Attachments"
-              value={String(ticketAttachments.length)}
-              note={`${ticketAttachments.length} file${ticketAttachments.length === 1 ? '' : 's'} on this ticket`}
-              to={appPaths.tickets.detail(ticketId, 'attachments')}
-              icon={Paperclip}
-            />
-            <SummaryJumpCard
-              label="Email History"
-              value={String(emailEvents.length)}
-              note={`${emailEvents.length} email${emailEvents.length === 1 ? '' : 's'} recorded`}
-              to={appPaths.tickets.detail(ticketId, 'email')}
-              icon={Mail}
-            />
-            <SummaryJumpCard
-              label="Activity Log"
-              value={String(activityEntries.length)}
-              note={`${activityEntries.length} history entr${activityEntries.length === 1 ? 'y' : 'ies'}`}
-              to={appPaths.tickets.detail(ticketId, 'history')}
-              icon={Clock3}
-            />
-          </div>
-
           <DetailCard eyebrow="Ticket Overview" title="Issue Summary" description="Summary holds the working details of the ticket.">
             <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-600">{ticket.description || 'No description provided.'}</p>
             {ticket.resolutionSummary ? (
@@ -306,7 +353,8 @@ export default function TicketDetail() {
           </div>
 
           {!isReadOnly ? (
-            <DetailCard eyebrow="Respond" title="Reply or Add Internal Note" description="Keep replies and notes inside the working summary tab.">
+            <div ref={composerRef}>
+              <DetailCard eyebrow="Respond" title="Reply or Add Internal Note" description="Keep replies and notes inside the working summary tab.">
               <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
                 <div className="flex border-b border-slate-200 bg-slate-50/60">
                   <button
@@ -395,7 +443,8 @@ export default function TicketDetail() {
                   </button>
                 </div>
               </div>
-            </DetailCard>
+              </DetailCard>
+            </div>
           ) : (
             <DetailCard eyebrow="Access" title="Read-Only View" description="Project managers can review details, transcript, history, and email activity here.">
               <p className="text-sm leading-relaxed text-slate-600">Ticket actions, replies, and internal notes are disabled for this role.</p>
@@ -417,7 +466,7 @@ export default function TicketDetail() {
               <EmptyState title="No Julia/client transcript available" message="This ticket does not have a stored widget chat transcript." />
             </div>
           ) : (
-            <div className="space-y-4 rounded-3xl border border-slate-100 bg-slate-50/70 p-5">
+            <div className="space-y-4 rounded-2xl border border-slate-100 bg-slate-50/70 p-5">
               {transcriptMessages.map((message) => (
                 <div key={message.id} className={clsx('flex gap-3', message.role === 'JULIA' && 'flex-row-reverse')}>
                   <div
@@ -499,33 +548,24 @@ export default function TicketDetail() {
       break;
     case 'history':
       mainContent = (
-        <>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <HistoryMetricCard label="Replies" value={String(historyCounts.replies)} />
-            <HistoryMetricCard label="Internal Notes" value={String(historyCounts.notes)} />
-            <HistoryMetricCard label="System Events" value={String(historyCounts.system)} />
-            <HistoryMetricCard label="Escalations" value={String(historyCounts.escalations)} />
-          </div>
-
-          <DetailCard
-            eyebrow="History"
-            title="Activity Log"
-            description="All ticket events except email delivery are collected here: replies, internal notes, system workflow messages, and escalation records."
-            action={<CountBadge count={activityEntries.length} label={activityEntries.length === 1 ? 'entry' : 'entries'} />}
-          >
-            {activityEntries.length === 0 ? (
-              <div className="py-6">
-                <EmptyState title="No activity recorded yet" message="Ticket activity will appear here as work begins." />
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {activityEntries.map((entry) => (
-                  <ActivityEntryCard key={entry.id} entry={entry} onDownloadAttachment={(attachment) => void handleDownloadAttachment(attachment.id, attachment.originalName)} />
-                ))}
-              </div>
-            )}
-          </DetailCard>
-        </>
+        <DetailCard
+          eyebrow="History"
+          title="Activity Log"
+          description="All ticket events except email delivery are collected here: replies, internal notes, system workflow messages, and escalation records."
+          action={<CountBadge count={activityEntries.length} label={activityEntries.length === 1 ? 'entry' : 'entries'} />}
+        >
+          {activityEntries.length === 0 ? (
+            <div className="py-6">
+              <EmptyState title="No activity recorded yet" message="Ticket activity will appear here as work begins." />
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {activityEntries.map((entry) => (
+                <ActivityEntryCard key={entry.id} entry={entry} onDownloadAttachment={(attachment) => void handleDownloadAttachment(attachment.id, attachment.originalName)} />
+              ))}
+            </div>
+          )}
+        </DetailCard>
       );
       break;
   }
@@ -552,7 +592,79 @@ export default function TicketDetail() {
             </span>
           </>
         }
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={openStatusModal}
+              disabled={isReadOnly}
+              className={clsx(
+                'inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold uppercase tracking-wider transition-colors',
+                isReadOnly ? 'cursor-not-allowed text-slate-400' : 'text-slate-700 hover:bg-slate-50',
+              )}
+            >
+              <AlertCircle className="h-4 w-4" />
+              Change Status
+            </button>
+            <button
+              onClick={() => jumpToComposer('reply')}
+              disabled={isReadOnly}
+              className={clsx(
+                'inline-flex items-center gap-2 rounded-xl bg-orange-600 px-3 py-2 text-xs font-bold uppercase tracking-wider text-white transition-colors',
+                isReadOnly ? 'cursor-not-allowed bg-orange-300' : 'hover:bg-orange-700',
+              )}
+            >
+              <Mail className="h-4 w-4" />
+              Send Email
+            </button>
+            <button
+              onClick={() => jumpToComposer('note')}
+              disabled={isReadOnly}
+              className={clsx(
+                'inline-flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold uppercase tracking-wider transition-colors',
+                isReadOnly ? 'cursor-not-allowed text-amber-300' : 'text-amber-800 hover:bg-amber-100',
+              )}
+            >
+              <Lock className="h-4 w-4" />
+              Internal Note
+            </button>
+          </div>
+        }
       />
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <SummaryJumpCard
+          label="Conversation"
+          value={String(transcriptMessages.length)}
+          note={`${transcriptMessages.length} Julia/client message${transcriptMessages.length === 1 ? '' : 's'}`}
+          to={appPaths.tickets.detail(ticketId, 'conversation')}
+          icon={MessageSquare}
+          accent="blue"
+        />
+        <SummaryJumpCard
+          label="Attachments"
+          value={String(ticketAttachments.length)}
+          note={`${ticketAttachments.length} file${ticketAttachments.length === 1 ? '' : 's'} on this ticket`}
+          to={appPaths.tickets.detail(ticketId, 'attachments')}
+          icon={Paperclip}
+          accent="orange"
+        />
+        <SummaryJumpCard
+          label="Email History"
+          value={String(emailEvents.length)}
+          note={`${emailEvents.length} email${emailEvents.length === 1 ? '' : 's'} recorded`}
+          to={appPaths.tickets.detail(ticketId, 'email')}
+          icon={Mail}
+          accent="green"
+        />
+        <SummaryJumpCard
+          label="Activity Log"
+          value={String(activityEntries.length)}
+          note={`${activityEntries.length} history entr${activityEntries.length === 1 ? 'y' : 'ies'}`}
+          to={appPaths.tickets.detail(ticketId, 'history')}
+          icon={Clock3}
+          accent="slate"
+        />
+      </div>
 
       <SectionTabs tabs={ticketTabs} role={backendRole} />
 
@@ -561,7 +673,7 @@ export default function TicketDetail() {
 
         {currentTab === 'summary' ? (
           <aside className="space-y-6 xl:sticky xl:top-6 xl:self-start">
-            <DetailCard eyebrow="Actions" title="Ticket Actions" description="Move the ticket forward from this summary workspace.">
+            {/* <DetailCard eyebrow="Actions" title="Ticket Actions" description="Move the ticket forward from this summary workspace.">
               {!isReadOnly ? (
                 <div className="space-y-3">
                   <button onClick={() => void handleAssignToMe()} className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-100 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-200">
@@ -598,7 +710,7 @@ export default function TicketDetail() {
               ) : (
                 <p className="text-sm leading-relaxed text-slate-600">Project managers can review the ticket here, but ticket state changes and replies are disabled.</p>
               )}
-            </DetailCard>
+            </DetailCard> */}
           </aside>
         ) : null}
       </div>
@@ -620,7 +732,7 @@ function DetailCard({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
       <div className="flex flex-col gap-4 border-b border-slate-100 pb-5 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           {eyebrow ? <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">{eyebrow}</p> : null}
@@ -653,35 +765,37 @@ function SummaryJumpCard({
   note,
   to,
   icon: Icon,
+  accent,
 }: {
   label: string;
   value: string;
   note: string;
   to: string;
   icon: typeof MessageSquare;
+  accent: 'orange' | 'blue' | 'green' | 'slate';
 }) {
+  const theme =
+    accent === 'blue'
+      ? 'bg-blue-50 text-blue-600'
+      : accent === 'green'
+        ? 'bg-green-50 text-green-600'
+        : accent === 'orange'
+          ? 'bg-orange-50 text-orange-600'
+          : 'bg-slate-100 text-slate-600';
+
   return (
-    <Link to={to} className="group rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition-colors hover:bg-slate-50">
+    <Link to={to} className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-all hover:border-slate-300 hover:bg-slate-50">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">{label}</p>
-          <p className="mt-3 text-3xl font-black text-slate-900">{value}</p>
+          <p className="text-xs font-bold uppercase tracking-wider text-slate-500">{label}</p>
+          <p className="mt-2 text-2xl font-black text-slate-900">{value}</p>
           <p className="mt-2 text-sm text-slate-500">{note}</p>
         </div>
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-slate-600 transition-colors group-hover:bg-white">
+        <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${theme}`}>
           <Icon className="h-5 w-5" />
         </div>
       </div>
     </Link>
-  );
-}
-
-function HistoryMetricCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-      <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">{label}</p>
-      <p className="mt-3 text-3xl font-black text-slate-900">{value}</p>
-    </div>
   );
 }
 
@@ -815,20 +929,20 @@ function TicketSkeleton() {
         <div className="space-y-6">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
             {Array.from({ length: 4 }).map((_, index) => (
-              <div key={index} className="h-32 rounded-3xl border border-slate-200 bg-white shadow-sm" />
+              <div key={index} className="h-32 rounded-2xl border border-slate-200 bg-white shadow-sm" />
             ))}
           </div>
-          <div className="h-64 rounded-3xl border border-slate-200 bg-white shadow-sm" />
+          <div className="h-64 rounded-2xl border border-slate-200 bg-white shadow-sm" />
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-            <div className="h-64 rounded-3xl border border-slate-200 bg-white shadow-sm" />
-            <div className="h-64 rounded-3xl border border-slate-200 bg-white shadow-sm" />
+            <div className="h-64 rounded-2xl border border-slate-200 bg-white shadow-sm" />
+            <div className="h-64 rounded-2xl border border-slate-200 bg-white shadow-sm" />
           </div>
-          <div className="h-96 rounded-3xl border border-slate-200 bg-white shadow-sm" />
+          <div className="h-96 rounded-2xl border border-slate-200 bg-white shadow-sm" />
         </div>
         <div className="space-y-6">
-          <div className="h-72 rounded-3xl border border-slate-200 bg-white shadow-sm" />
-          <div className="h-40 rounded-3xl border border-slate-200 bg-white shadow-sm" />
-          <div className="h-40 rounded-3xl border border-slate-200 bg-white shadow-sm" />
+          <div className="h-72 rounded-2xl border border-slate-200 bg-white shadow-sm" />
+          <div className="h-40 rounded-2xl border border-slate-200 bg-white shadow-sm" />
+          <div className="h-40 rounded-2xl border border-slate-200 bg-white shadow-sm" />
         </div>
       </div>
     </div>

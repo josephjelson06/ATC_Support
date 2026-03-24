@@ -1,0 +1,45 @@
+Work done on 24-03-2026:
+
+
+- Removed unwanted pages -> 
+ Analytics
+ KB
+ Roles & Permissions
+ Settings
+ Projects -> Shorted Unwanted Tabs / Sections 
+
+ - Improved Designs -> Required Designs / Functionalities for Clients / Projects / Tickets
+
+==========================
+24-03-2026: 
+Work for 25-03-2026:
+
+Design improvements
+
+Tickets CRUD
+UI Designs -> Data Tools -> Search Bar | Filters | Results Page
+UI Designs -> Navbar | Sidebar | Breadcrumbs
+Give a preview mode in Project Docs
+
+Combine Roles and Permission Matrix
+Assign Users to their Projects
+
+Dashboard Pages - are scattered - have to bring them together
+
+Play out a user journey -> 
+- Creating ticket -> solved by FAQ
+- Creating ticket -> solved by ChatBot 
+- Creating ticket -> assigned solved by SE1
+- Creating ticket -> solved by SE2 -> assigned by SE1
+- Creating ticket -> solved by SE3 -> assigned by PM
+- Creating ticket -> assigned and solved by SE1
+
+Play out a user journey ->
+
+- Creating a Client
+- Creating a Project
+- Creating a User -> assigning a Project
+- Creating a Project FAQ | Project Docs
+
+Have to work on Julia AI Context | Knowledge Base 
+

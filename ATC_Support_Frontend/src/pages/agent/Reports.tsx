@@ -35,13 +35,13 @@ export default function Reports() {
     null;
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+    <div className="mx-auto max-w-7xl space-y-6 px-4 py-4 sm:px-6 sm:py-6 xl:px-8">
       <PageHeader
         title="Reports Overview"
         description="Live summaries from the backend to help you jump into reporting workflows."
       />
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
         <MetricCard icon={Ticket} label="Open Tickets" value={String(openTickets)} accent="orange" />
         <MetricCard icon={BarChart3} label="Resolved Tickets" value={String(resolvedTickets)} accent="green" />
         <MetricCard icon={Briefcase} label="Active Projects" value={String(activeProjects)} accent="blue" />

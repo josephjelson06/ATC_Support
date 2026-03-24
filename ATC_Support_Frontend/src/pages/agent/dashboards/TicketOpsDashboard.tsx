@@ -84,10 +84,10 @@ export default function TicketOpsDashboard({ title, description, tableTitle }: T
   });
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6 px-4 py-4 sm:px-6 sm:py-6 xl:px-8">
       <PageHeader title={title} description={description} />
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <KpiCard label="Assigned" value={String(assignedToMe)} note="Owned by you" icon={Ticket} accent="orange" />
         <KpiCard label="New Today" value={String(newToday)} note={todayStart.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} icon={AlertTriangle} accent="amber" />
         <KpiCard label="In Progress" value={String(inProgress)} note="Active workflow" icon={Workflow} accent="blue" />

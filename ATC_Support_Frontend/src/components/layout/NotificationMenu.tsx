@@ -176,7 +176,7 @@ export default function NotificationMenu() {
       </button>
 
       {isOpen ? (
-        <div className="absolute right-0 top-12 z-30 w-[22rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
+        <div className="fixed inset-x-4 top-20 z-[135] max-h-[calc(100dvh-6rem)] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl lg:absolute lg:right-0 lg:top-12 lg:left-auto lg:w-[22rem] lg:max-h-none">
           <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
             <div>
               <h2 className="text-sm font-black text-slate-900">Notifications</h2>
@@ -195,7 +195,7 @@ export default function NotificationMenu() {
 
           {actionError ? <p className="border-b border-rose-100 bg-rose-50 px-4 py-2 text-xs text-rose-700">{actionError}</p> : null}
 
-          <div className="max-h-[28rem] overflow-y-auto">
+          <div className="max-h-[calc(100dvh-10rem)] overflow-y-auto lg:max-h-[28rem]">
             {notificationsQuery.isLoading && notifications.length === 0 ? (
               <div className="px-4 py-6 text-sm text-slate-500">Loading notifications...</div>
             ) : notificationsQuery.error ? (

@@ -19,8 +19,8 @@ export default function SectionTabs({
   }
 
   return (
-    <div className="overflow-x-auto">
-      <div className="inline-flex min-w-full gap-2 border-b border-slate-200">
+    <div className="-mx-1 overflow-x-auto px-1">
+      <div className="inline-flex min-w-max gap-3 border-b border-slate-200 sm:min-w-full">
         {visibleTabs.map((tab) => (
           <NavLink
             key={tab.to}
@@ -28,7 +28,7 @@ export default function SectionTabs({
             end
             className={({ isActive }) =>
               clsx(
-                'border-b-2 px-1 pb-3 pt-1 text-sm font-bold transition-colors',
+                'shrink-0 border-b-2 px-1 pb-3 pt-1 text-sm font-bold transition-colors',
                 isActive ? 'border-orange-600 text-orange-600' : 'border-transparent text-slate-500 hover:text-slate-700',
               )
             }

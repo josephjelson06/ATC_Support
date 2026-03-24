@@ -94,7 +94,7 @@ export default function ProjectMasterList() {
   const totalOpenTicketsOnPage = projectPage.items.reduce((sum, project) => sum + (openTicketCountByProject[project.id] || 0), 0);
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+    <div className="mx-auto max-w-7xl space-y-6 px-4 py-4 sm:px-6 sm:py-6 xl:px-8">
       <PageHeader
         title={role === 'Project Manager' ? 'Projects' : 'Accessible Projects'}
         description="Projects are server-filtered and paginated with live client, widget, and ticket metadata."
@@ -112,7 +112,7 @@ export default function ProjectMasterList() {
         }
       />
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
         <ProjectStat icon={Briefcase} label="Projects" value={String(projectPage.total)} accent="orange" />
         <ProjectStat icon={Ticket} label="Open Tickets on Page" value={String(totalOpenTicketsOnPage)} accent="blue" />
         <ProjectStat icon={UserRoundCog} label="Active on Page" value={String(activeProjectsOnPage)} accent="green" />
@@ -143,7 +143,7 @@ export default function ProjectMasterList() {
 
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full text-left whitespace-nowrap">
+          <table className="w-full min-w-[760px] text-left whitespace-nowrap">
             <thead className="border-b border-slate-200 bg-slate-50">
               <tr>
                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">Project</th>

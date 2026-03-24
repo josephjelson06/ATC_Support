@@ -153,7 +153,7 @@ export default function UserManagement() {
   const userPage = usersQuery.data!;
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-7xl space-y-6 px-4 py-4 sm:px-6 sm:py-6 xl:px-8">
       <PageHeader
         title="Users"
         description="Live user directory with PM-only create, update, and delete controls."
@@ -209,7 +209,7 @@ export default function UserManagement() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left whitespace-nowrap">
+          <table className="w-full min-w-[760px] text-left whitespace-nowrap">
             <thead className="border-b border-slate-200 bg-slate-50">
               <tr>
                 <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500">User</th>

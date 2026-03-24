@@ -50,7 +50,7 @@ export default function UserMenu({
       </button>
 
       {isOpen ? (
-        <div className="absolute right-0 top-[calc(100%+0.75rem)] z-30 w-64 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+        <div className="fixed inset-x-4 top-20 z-[135] max-h-[calc(100dvh-6rem)] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl lg:absolute lg:right-0 lg:top-[calc(100%+0.75rem)] lg:left-auto lg:w-64 lg:max-h-none">
           <div className="border-b border-slate-100 px-4 py-4">
             <p className="text-sm font-bold text-slate-900">{name}</p>
             <p className="mt-1 text-xs text-slate-500">{designation}</p>

@@ -51,7 +51,7 @@ export function ModalProvider({ children }: { children: React.ReactNode }) {
       {children}
       <AnimatePresence>
         {modal && (
-          <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[10000] flex items-end justify-center p-2 sm:items-center sm:p-4">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -64,14 +64,14 @@ export function ModalProvider({ children }: { children: React.ReactNode }) {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className={`relative bg-white rounded-2xl shadow-2xl overflow-hidden w-full ${
-                modal.size === 'sm' ? 'max-w-md' :
-                modal.size === 'lg' ? 'max-w-2xl' :
-                modal.size === 'xl' ? 'max-w-4xl' :
-                'max-w-lg'
+              className={`relative flex h-[min(100dvh-1rem,100%)] w-full flex-col overflow-hidden rounded-3xl bg-white shadow-2xl sm:h-auto sm:max-h-[calc(100dvh-2rem)] ${
+                modal.size === 'sm' ? 'sm:max-w-md' :
+                modal.size === 'lg' ? 'sm:max-w-2xl' :
+                modal.size === 'xl' ? 'sm:max-w-4xl' :
+                'sm:max-w-lg'
               }`}
             >
-              <div className="px-6 py-4 border-b flex items-center justify-between">
+              <div className="flex shrink-0 items-center justify-between border-b px-4 py-4 sm:px-6">
                 <h3 className="text-lg font-semibold text-gray-900">{modal.title}</h3>
                 <button
                   onClick={closeModal}
@@ -81,19 +81,19 @@ export function ModalProvider({ children }: { children: React.ReactNode }) {
                 </button>
               </div>
               
-              <div className="px-6 py-6 max-h-[70vh] overflow-y-auto">
+              <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6">
                 {modal.content}
               </div>
 
               {(modal.primaryAction || modal.secondaryAction) && (
-                <div className="px-6 py-4 bg-gray-50 border-t flex items-center justify-end gap-3">
+                <div className="flex shrink-0 flex-col gap-3 border-t bg-gray-50 px-4 py-4 sm:flex-row sm:items-center sm:justify-end sm:px-6">
                   {modal.secondaryAction && (
                     <button
                       onClick={() => {
                         modal.secondaryAction?.onClick();
                         closeModal();
                       }}
-                      className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"
+                      className="w-full rounded-lg px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 sm:w-auto"
                     >
                       {modal.secondaryAction.label}
                     </button>
@@ -144,7 +144,7 @@ function PrimaryActionButton({ action, closeModal }: { action: any, closeModal: 
     <button
       disabled={isDisabled}
       onClick={handleClick}
-      className={`px-4 py-2 text-sm font-medium rounded-lg transition-all flex items-center gap-2 ${
+      className={`flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all sm:w-auto ${
         action.variant === 'danger'
           ? 'bg-red-600 text-white hover:bg-red-700 disabled:bg-red-300'
           : 'bg-orange-600 text-white hover:bg-orange-700 disabled:bg-orange-300'

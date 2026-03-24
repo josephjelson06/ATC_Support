@@ -142,7 +142,7 @@ export default function TicketReport() {
   })();
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
+    <div className="mx-auto max-w-7xl space-y-6 px-4 py-4 sm:px-6 sm:py-6 xl:px-8">
       <PageHeader
         title="Ticket Reports"
         description="Filter and export live ticket data from the backend report endpoint."
@@ -157,7 +157,7 @@ export default function TicketReport() {
         }
       />
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
         <SummaryCard label="Visible Tickets" value={String(visibleTickets.length)} />
         <SummaryCard label="Resolved" value={String(visibleTickets.filter((ticket) => ticket.status === 'RESOLVED').length)} />
         <SummaryCard label="Open" value={String(visibleTickets.filter((ticket) => ticket.status !== 'RESOLVED').length)} />
@@ -261,9 +261,9 @@ export default function TicketReport() {
       ) : reportQuery.error ? (
         <ReportError message={reportQuery.error} onRetry={reportQuery.reload} />
       ) : (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="overflow-x-auto">
-            <table className="w-full text-left whitespace-nowrap">
+            <table className="w-full min-w-[980px] text-left whitespace-nowrap">
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
                   <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Ticket</th>

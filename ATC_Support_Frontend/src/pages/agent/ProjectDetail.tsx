@@ -168,7 +168,7 @@ export default function ProjectDetail() {
   };
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
+    <div className="mx-auto max-w-7xl space-y-6 px-4 py-4 sm:px-6 sm:py-6 xl:px-8">
       <PageHeader
         title={project.name}
         description={project.description || 'Project-level support context, widget controls, and delivery detail.'}

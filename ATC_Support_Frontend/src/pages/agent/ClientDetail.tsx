@@ -191,7 +191,7 @@ export default function ClientDetail() {
   };
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
+    <div className="mx-auto max-w-7xl space-y-6 px-4 py-4 sm:px-6 sm:py-6 xl:px-8">
       <PageHeader
         title={client.name}
         description="Client profile, linked delivery records, and operational context."

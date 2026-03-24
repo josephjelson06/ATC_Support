@@ -531,7 +531,7 @@ export default function TicketDetail() {
   }
 
   return (
-    <div className="mx-auto max-w-[1520px] space-y-6 p-6">
+    <div className="mx-auto max-w-[1520px] space-y-6 px-4 py-4 sm:px-6 sm:py-6 xl:px-8">
       <PageHeader
         title={ticket.title}
         description={ticket.description || 'Ticket detail with clear summary, transcript, email history, and activity log.'}

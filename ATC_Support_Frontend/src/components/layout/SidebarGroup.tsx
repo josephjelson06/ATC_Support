@@ -10,12 +10,22 @@ type SidebarGroupItem = {
   matchPrefixes?: string[];
 };
 
-export default function SidebarGroup({ label, items }: { label: string; items: SidebarGroupItem[] }) {
+export default function SidebarGroup({
+  label,
+  items,
+  collapsed = false,
+  onNavigate,
+}: {
+  label: string;
+  items: SidebarGroupItem[];
+  collapsed?: boolean;
+  onNavigate?: () => void;
+}) {
   const location = useLocation();
 
   return (
     <div className="space-y-2">
-      <p className="px-3 text-[10px] font-black uppercase tracking-[0.28em] text-slate-400">{label}</p>
+      {!collapsed ? <p className="px-3 text-[10px] font-black uppercase tracking-[0.28em] text-slate-400">{label}</p> : null}
       <div className="space-y-1">
         {items.map((item) => {
           const isManuallyActive = item.matchPrefixes?.some((prefix) => location.pathname.startsWith(prefix)) ?? false;
@@ -24,15 +34,18 @@ export default function SidebarGroup({ label, items }: { label: string; items: S
             <NavLink
               key={item.id}
               to={item.to}
+              onClick={onNavigate}
+              title={collapsed ? item.label : undefined}
               className={({ isActive }) =>
                 clsx(
-                  'flex items-center gap-3 rounded-2xl px-3 py-2.5 transition-colors',
+                  'flex items-center rounded-2xl px-3 py-2.5 transition-colors',
+                  collapsed ? 'justify-center' : 'gap-3',
                   isActive || isManuallyActive ? 'bg-orange-50 text-orange-700' : 'text-slate-600 hover:bg-slate-50',
                 )
               }
             >
               <item.icon className="h-5 w-5" />
-              <span className="text-sm font-medium">{item.label}</span>
+              {!collapsed ? <span className="text-sm font-medium">{item.label}</span> : null}
             </NavLink>
           );
         })}

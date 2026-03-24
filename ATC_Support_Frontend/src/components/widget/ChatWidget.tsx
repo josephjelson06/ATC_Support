@@ -321,16 +321,16 @@ export default function ChatWidget() {
   };
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end">
+    <div className="fixed bottom-4 right-4 z-50 flex flex-col items-end sm:bottom-6 sm:right-6">
       <AnimatePresence>
         {state !== 'collapsed' && (
           <motion.div
             initial={{ opacity: 0, y: 20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.95 }}
-            className="w-[380px] h-[600px] max-h-[80vh] bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden mb-4"
+            className="mb-3 flex h-[calc(100dvh-6rem)] w-[calc(100vw-2rem)] max-w-[24rem] flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl sm:mb-4 sm:h-[600px] sm:max-h-[80vh] sm:w-[380px]"
           >
-            <header className="bg-slate-900 text-white p-4 flex items-center justify-between shrink-0">
+            <header className="flex shrink-0 items-center justify-between bg-slate-900 p-4 text-white">
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 bg-orange-600 rounded-full flex items-center justify-center font-bold text-sm">J</div>
                 <div>
@@ -662,12 +662,12 @@ export default function ChatWidget() {
       </AnimatePresence>
 
       <div className="relative group flex items-center gap-3">
-        <div className="opacity-0 group-hover:opacity-100 -translate-x-2 group-hover:translate-x-0 transition-all bg-slate-800 text-white px-3 py-1.5 rounded-lg text-sm font-medium shadow-lg pointer-events-none whitespace-nowrap">
+        <div className="pointer-events-none hidden whitespace-nowrap rounded-lg bg-slate-800 px-3 py-1.5 text-sm font-medium text-white opacity-0 shadow-lg transition-all group-hover:-translate-x-0 group-hover:opacity-100 sm:block sm:-translate-x-2">
           Julia Support
         </div>
         <button
           onClick={toggleWidget}
-          className="w-14 h-14 bg-orange-600 rounded-full shadow-xl flex items-center justify-center hover:bg-orange-700 transition-all active:scale-95 relative overflow-hidden"
+          className="relative flex h-14 w-14 items-center justify-center overflow-hidden rounded-full bg-orange-600 shadow-xl transition-all hover:bg-orange-700 active:scale-95"
         >
           <AnimatePresence mode="wait">
             {state === 'collapsed' ? (

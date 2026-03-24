@@ -175,8 +175,7 @@ export default function InboundQueue() {
   };
 
   return (
-    <div className="relative flex h-[calc(100vh-64px)] flex-col overflow-hidden">
-      <div className="flex-1 space-y-6 overflow-y-auto p-6">
+    <div className="space-y-6 px-4 py-4 sm:px-6 sm:py-6 xl:px-8">
         <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
           <div>
             <h1 className="text-2xl font-bold text-slate-900">{currentView.title}</h1>
@@ -285,55 +284,57 @@ export default function InboundQueue() {
         </div>
 
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          <table className="w-full text-left">
-            <thead className="border-b border-slate-200 bg-slate-50">
-              <tr>
-                {['Ticket', 'Client', 'Project', 'Priority', 'Status', 'Assigned To', 'Created'].map((heading) => (
-                  <th key={heading} className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-500">
-                    {heading}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {visibleTickets.length === 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[860px] text-left">
+              <thead className="border-b border-slate-200 bg-slate-50">
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-500">
-                    No tickets match your current filters.
-                  </td>
+                  {['Ticket', 'Client', 'Project', 'Priority', 'Status', 'Assigned To', 'Created'].map((heading) => (
+                    <th key={heading} className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-500">
+                      {heading}
+                    </th>
+                  ))}
                 </tr>
-              ) : (
-                visibleTickets.map((ticket) => (
-                  <tr
-                    key={ticket.id}
-                    onClick={() => navigate(appPaths.tickets.detail(ticket.id))}
-                    className="cursor-pointer transition-colors hover:bg-slate-50"
-                  >
-                    <td className="px-4 py-4">
-                      <div>
-                        <p className="font-bold text-slate-900">{ticket.title}</p>
-                        <p className="mt-1 font-mono text-xs text-orange-600">{ticket.displayId}</p>
-                      </div>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {visibleTickets.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-500">
+                      No tickets match your current filters.
                     </td>
-                    <td className="px-4 py-4 text-sm text-slate-700">{ticket.project?.client?.name || '-'}</td>
-                    <td className="px-4 py-4 text-sm text-slate-500">{ticket.project?.name || '-'}</td>
-                    <td className="px-4 py-4">
-                      <span className={`rounded px-2 py-1 text-[10px] font-bold uppercase ${getTicketPriorityClasses(ticket.priority)}`}>
-                        {humanizeEnum(ticket.priority)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4">
-                      <span className={`rounded px-2 py-1 text-[10px] font-bold uppercase ${getTicketStatusClasses(ticket.status)}`}>
-                        {humanizeEnum(ticket.status)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4 text-sm text-slate-700">{ticket.assignedTo?.name || 'Unassigned'}</td>
-                    <td className="px-4 py-4 text-sm text-slate-500">{formatRelativeTime(ticket.createdAt)}</td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : (
+                  visibleTickets.map((ticket) => (
+                    <tr
+                      key={ticket.id}
+                      onClick={() => navigate(appPaths.tickets.detail(ticket.id))}
+                      className="cursor-pointer transition-colors hover:bg-slate-50"
+                    >
+                      <td className="px-4 py-4">
+                        <div>
+                          <p className="font-bold text-slate-900">{ticket.title}</p>
+                          <p className="mt-1 font-mono text-xs text-orange-600">{ticket.displayId}</p>
+                        </div>
+                      </td>
+                      <td className="px-4 py-4 text-sm text-slate-700">{ticket.project?.client?.name || '-'}</td>
+                      <td className="px-4 py-4 text-sm text-slate-500">{ticket.project?.name || '-'}</td>
+                      <td className="px-4 py-4">
+                        <span className={`rounded px-2 py-1 text-[10px] font-bold uppercase ${getTicketPriorityClasses(ticket.priority)}`}>
+                          {humanizeEnum(ticket.priority)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-4">
+                        <span className={`rounded px-2 py-1 text-[10px] font-bold uppercase ${getTicketStatusClasses(ticket.status)}`}>
+                          {humanizeEnum(ticket.status)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-4 text-sm text-slate-700">{ticket.assignedTo?.name || 'Unassigned'}</td>
+                      <td className="px-4 py-4 text-sm text-slate-500">{formatRelativeTime(ticket.createdAt)}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
           <PaginationControls
             page={ticketPage.page}
             totalPages={ticketPage.totalPages}
@@ -343,7 +344,6 @@ export default function InboundQueue() {
             onPageChange={setPage}
           />
         </div>
-      </div>
     </div>
   );
 }

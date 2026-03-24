@@ -6,15 +6,7 @@ import { ModalProvider } from './contexts/ModalContext';
 import { RoleProvider, useRole } from './contexts/RoleContext';
 import { ToastProvider } from './contexts/ToastContext';
 import SectionRouteLayout from './layouts/SectionRouteLayout';
-import {
-  adminPrimaryTabs,
-  analyticsTabs,
-  appPaths,
-  knowledgeBaseTabs,
-  reportTabs,
-  settingsTabs,
-  userAccessTabs,
-} from './lib/navigation';
+import { adminPrimaryTabs, appPaths, reportTabs, userAccessTabs } from './lib/navigation';
 
 const AgentLayout = lazy(() => import('./layouts/AgentLayout'));
 const ClientLayout = lazy(() => import('./layouts/ClientLayout'));
@@ -35,28 +27,11 @@ const ProjectDetail = lazy(() => import('./pages/agent/ProjectDetail'));
 const Reports = lazy(() => import('./pages/agent/Reports'));
 const TicketReport = lazy(() => import('./pages/agent/TicketReport'));
 
-const RunbookLibrary = lazy(() => import('./pages/kb/RunbookLibrary'));
-const RunbookEditor = lazy(() => import('./pages/kb/RunbookEditor'));
-const ReviewQueue = lazy(() => import('./pages/kb/ReviewQueue'));
-const AutoDraftDetail = lazy(() => import('./pages/kb/AutoDraftDetail'));
-
-const AnalyticsOverview = lazy(() => import('./pages/analytics/AnalyticsOverview'));
-const TicketAnalytics = lazy(() => import('./pages/analytics/TicketAnalytics'));
-const KBAnalytics = lazy(() => import('./pages/analytics/KBAnalytics'));
-const EngineerPerformance = lazy(() => import('./pages/analytics/EngineerPerformance'));
-
-const GeneralSettings = lazy(() => import('./pages/settings/GeneralSettings'));
 const UserManagement = lazy(() => import('./pages/settings/UserManagement'));
 const ServiceCodesSettings = lazy(() => import('./pages/settings/ServiceCodesSettings'));
 const AccountPage = lazy(() => import('./pages/settings/AccountPage'));
 const RoleDirectory = lazy(() => import('./pages/settings/RoleDirectory'));
 const PermissionMatrix = lazy(() => import('./pages/settings/PermissionMatrix'));
-const NotificationSettings = lazy(() => import('./pages/settings/NotificationSettings'));
-const EmailSettings = lazy(() => import('./pages/settings/EmailSettings'));
-const WidgetDefaultsSettings = lazy(() => import('./pages/settings/WidgetDefaultsSettings'));
-const JuliaDefaultsSettings = lazy(() => import('./pages/settings/JuliaDefaultsSettings'));
-const SecuritySettings = lazy(() => import('./pages/settings/SecuritySettings'));
-const Integrations = lazy(() => import('./pages/settings/Integrations'));
 
 function RequireAuth() {
   const location = useLocation();
@@ -132,11 +107,6 @@ function LegacyTicketRedirect() {
   return <Navigate to={appPaths.tickets.detail(id || '')} replace />;
 }
 
-function LegacyRunbookEditRedirect() {
-  const { id } = useParams();
-  return <Navigate to={appPaths.kb.edit(id || '')} replace />;
-}
-
 function AppRoutes() {
   return (
     <Suspense fallback={<RouteFallback />}>
@@ -195,37 +165,6 @@ function AppRoutes() {
               <Route path="tickets" element={<TicketReport />} />
             </Route>
 
-            <Route path="kb" element={<Navigate to={appPaths.kb.library} replace />} />
-            <Route
-              path="kb"
-              element={<SectionRouteLayout breadcrumbs={[{ label: 'Operations' }, { label: 'Knowledge Base' }]} tabs={knowledgeBaseTabs} />}
-            >
-              <Route index element={<Navigate to="library" replace />} />
-              <Route path="library" element={<RunbookLibrary />} />
-              <Route path="review" element={<ReviewQueue />} />
-              <Route path="auto-drafts" element={<ReviewQueue />} />
-              <Route path="new" element={<RunbookEditor />} />
-              <Route path="edit/:id" element={<LegacyRunbookEditRedirect />} />
-              <Route path=":id/edit" element={<RunbookEditor />} />
-              <Route path="auto-draft/:id" element={<AutoDraftDetail />} />
-            </Route>
-
-            <Route path="analytics" element={<Navigate to={appPaths.analytics.overview} replace />} />
-            <Route
-              path="analytics"
-              element={<SectionRouteLayout breadcrumbs={[{ label: 'Insights' }, { label: 'Analytics' }]} tabs={analyticsTabs} />}
-            >
-              <Route index element={<Navigate to="overview" replace />} />
-              <Route path="overview" element={<AnalyticsOverview />} />
-              <Route path="tickets" element={<TicketAnalytics />} />
-              <Route path="kb" element={<KBAnalytics />} />
-              <Route path="performance" element={<EngineerPerformance />} />
-            </Route>
-
-            <Route path="settings" element={<Navigate to={appPaths.admin.settings.general} replace />} />
-            <Route path="settings/users" element={<Navigate to={appPaths.admin.users} replace />} />
-            <Route path="settings/service-codes" element={<Navigate to={appPaths.admin.masters.serviceCodes} replace />} />
-
             <Route path="account" element={<AccountPage />} />
 
             <Route
@@ -243,20 +182,6 @@ function AppRoutes() {
               </Route>
 
               <Route path="masters/service-codes" element={<ServiceCodesSettings />} />
-
-              <Route
-                path="settings"
-                element={<SectionRouteLayout breadcrumbs={[{ label: 'Administration' }, { label: 'Settings' }]} tabs={settingsTabs} />}
-              >
-                <Route index element={<Navigate to="general" replace />} />
-                <Route path="general" element={<GeneralSettings />} />
-                <Route path="notifications" element={<NotificationSettings />} />
-                <Route path="email" element={<EmailSettings />} />
-                <Route path="widget" element={<WidgetDefaultsSettings />} />
-                <Route path="julia" element={<JuliaDefaultsSettings />} />
-                <Route path="security" element={<SecuritySettings />} />
-                <Route path="integrations" element={<Integrations />} />
-              </Route>
             </Route>
           </Route>
         </Route>

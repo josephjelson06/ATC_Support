@@ -155,19 +155,16 @@ export default function ClientMasterList() {
               <tr>
                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">Client</th>
                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">Industry</th>
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">Location</th>
                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">Email</th>
                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">Status</th>
                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">Projects</th>
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">AMCs</th>
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">Open Tickets</th>
                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">Created</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {clientPage.items.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-6 py-12 text-center text-sm text-slate-500">
+                  <td colSpan={6} className="px-6 py-12 text-center text-sm text-slate-500">
                     No clients matched that search.
                   </td>
                 </tr>
@@ -186,7 +183,6 @@ export default function ClientMasterList() {
                       </Link>
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-600">{client.industry || '-'}</td>
-                    <td className="px-6 py-4 text-sm text-slate-600">{client.city || client.address || '-'}</td>
                     <td className="px-6 py-4 text-sm text-slate-600">{client.email || '-'}</td>
                     <td className="px-6 py-4">
                       <span
@@ -198,12 +194,6 @@ export default function ClientMasterList() {
                       </span>
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-600">{client._count?.projects || 0}</td>
-                    <td className="px-6 py-4 text-sm text-slate-600">{client._count?.amcs || 0}</td>
-                    <td className="px-6 py-4">
-                      <span className={`font-bold ${(openTicketCountByClient[client.id] || 0) > 0 ? 'text-orange-600' : 'text-slate-500'}`}>
-                        {openTicketCountByClient[client.id] || 0}
-                      </span>
-                    </td>
                     <td className="px-6 py-4 text-sm text-slate-600">{formatDate(client.createdAt)}</td>
                   </tr>
                 ))

@@ -155,7 +155,6 @@ export default function ProjectMasterList() {
                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">Client</th>
                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">Lead</th>
                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">Status</th>
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">Widget</th>
                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">Open Tickets</th>
                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">Created</th>
               </tr>
@@ -163,7 +162,7 @@ export default function ProjectMasterList() {
             <tbody className="divide-y divide-slate-100">
               {projectPage.items.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-sm text-slate-500">
+                  <td colSpan={6} className="px-6 py-12 text-center text-sm text-slate-500">
                     No projects matched that search.
                   </td>
                 </tr>
@@ -182,19 +181,6 @@ export default function ProjectMasterList() {
                       <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold uppercase tracking-wider text-slate-700">
                         {humanizeEnum(project.status)}
                       </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="space-y-2">
-                        <span
-                          className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wider ${
-                            project.widgetEnabled ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
-                          }`}
-                        >
-                          <KeyRound className="h-3 w-3" />
-                          {project.widgetEnabled ? 'Enabled' : 'Disabled'}
-                        </span>
-                        {project.widgetKey ? <p className="font-mono text-[11px] text-slate-500">{project.widgetKey}</p> : null}
-                      </div>
                     </td>
                     <td className="px-6 py-4">
                       <span className={`font-bold ${(openTicketCountByProject[project.id] || 0) > 0 ? 'text-orange-600' : 'text-slate-500'}`}>

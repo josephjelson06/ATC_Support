@@ -556,11 +556,11 @@ export default function TicketDetail() {
 
       <SectionTabs tabs={ticketTabs} role={backendRole} />
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr),340px]">
+      <div className={clsx('grid grid-cols-1 gap-6', currentTab === 'summary' && 'xl:grid-cols-[minmax(0,1fr),340px]')}>
         <div className="min-w-0 space-y-6">{mainContent}</div>
 
-        <aside className="space-y-6 xl:sticky xl:top-6 xl:self-start">
-          {currentTab === 'summary' ? (
+        {currentTab === 'summary' ? (
+          <aside className="space-y-6 xl:sticky xl:top-6 xl:self-start">
             <DetailCard eyebrow="Actions" title="Ticket Actions" description="Move the ticket forward from this summary workspace.">
               {!isReadOnly ? (
                 <div className="space-y-3">
@@ -599,22 +599,8 @@ export default function TicketDetail() {
                 <p className="text-sm leading-relaxed text-slate-600">Project managers can review the ticket here, but ticket state changes and replies are disabled.</p>
               )}
             </DetailCard>
-          ) : (
-            <DetailCard eyebrow="Context" title="At a Glance" description="Key ticket context stays visible while you review transcript, emails, or history.">
-              <div className="space-y-3 text-sm">
-                <SnapshotRow label="Ticket" value={ticket.displayId} />
-                <SnapshotRow label="Source" value={ticket.source ? humanizeEnum(ticket.source) : 'Widget'} />
-                <SnapshotRow label="Requester" value={requesterName} />
-                <SnapshotRow label="Assigned To" value={ticket.assignedTo?.name || 'Unassigned'} />
-                <SnapshotRow label="Created" value={formatDateTime(ticket.createdAt)} />
-                <SnapshotRow label="Resolved" value={ticket.resolvedAt ? formatDateTime(ticket.resolvedAt) : 'Not resolved'} />
-              </div>
-            </DetailCard>
-          )}
-
-          {ticket.project?.client?.id ? <ContextLinkCard eyebrow="Client Context" title={ticket.project.client.name} description="Open the client record for contacts, linked projects, and AMC coverage." to={appPaths.clients.detail(ticket.project.client.id)} /> : null}
-          {ticket.project?.id ? <ContextLinkCard eyebrow="Project Context" title={ticket.project.name} description="Jump into project docs, FAQs, widget status, and Julia configuration." to={appPaths.projects.detail(ticket.project.id)} /> : null}
-        </aside>
+          </aside>
+        ) : null}
       </div>
     </div>
   );
@@ -817,35 +803,6 @@ function AttachmentButton({
       </div>
       <Download className="h-4 w-4 shrink-0 text-slate-500" />
     </button>
-  );
-}
-
-function ContextLinkCard({
-  eyebrow,
-  title,
-  description,
-  to,
-}: {
-  eyebrow: string;
-  title: string;
-  description: string;
-  to: string;
-}) {
-  return (
-    <Link to={to} className="block rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition-colors hover:bg-slate-50">
-      <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">{eyebrow}</p>
-      <p className="mt-3 text-lg font-bold text-slate-900">{title}</p>
-      <p className="mt-2 text-sm leading-relaxed text-slate-500">{description}</p>
-    </Link>
-  );
-}
-
-function SnapshotRow({ label, value }: { label: string; value: ReactNode }) {
-  return (
-    <div className="flex items-start justify-between gap-4">
-      <span className="text-slate-500">{label}</span>
-      <span className="max-w-[60%] text-right font-semibold text-slate-900">{value}</span>
-    </div>
   );
 }
 

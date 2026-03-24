@@ -1,14 +1,10 @@
 import { useDeferredValue, useEffect, useState } from 'react';
-import { AlertTriangle, ArrowRight, Search, UserPlus, X } from 'lucide-react';
-import { Link, useParams } from 'react-router-dom';
-import { AnimatePresence, motion } from 'motion/react';
-import { clsx } from 'clsx';
+import { AlertTriangle, Search } from 'lucide-react';
+import { useNavigate, useParams } from 'react-router-dom';
 
 import { PaginationControls } from '../../components/layout/PaginationControls';
-import { useRole } from '../../contexts/RoleContext';
-import { useToast } from '../../contexts/ToastContext';
 import { useAsyncData } from '../../hooks/useAsyncData';
-import { apiFetch, getErrorMessage } from '../../lib/api';
+import { apiFetch } from '../../lib/api';
 import { formatRelativeTime, getTicketPriorityClasses, getTicketStatusClasses, humanizeEnum } from '../../lib/format';
 import { appPaths } from '../../lib/navigation';
 import type { ApiClient, ApiProject, ApiTicket, PaginatedResponse, TicketPriority, TicketStatus } from '../../lib/types';
@@ -52,8 +48,7 @@ const ticketViewConfig: Record<
 
 export default function InboundQueue() {
   const { view = 'queue' } = useParams();
-  const { role, user } = useRole();
-  const { showToast } = useToast();
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | TicketStatus>('ALL');
   const [priorityFilter, setPriorityFilter] = useState<'ALL' | TicketPriority>('ALL');
@@ -62,8 +57,6 @@ export default function InboundQueue() {
   const [assignmentFilter, setAssignmentFilter] = useState<'ALL' | 'ME' | 'UNASSIGNED' | 'ASSIGNED'>('ALL');
   const [createdWithinDays, setCreatedWithinDays] = useState<'ALL' | '1' | '7' | '30'>('ALL');
   const [page, setPage] = useState(1);
-  const [selectedTicketId, setSelectedTicketId] = useState<number | null>(null);
-  const [isAssigning, setIsAssigning] = useState(false);
   const deferredSearch = useDeferredValue(searchQuery);
   const currentView = ticketViewConfig[view] || ticketViewConfig.queue;
 
@@ -77,7 +70,6 @@ export default function InboundQueue() {
   }, [deferredSearch, statusFilter, priorityFilter, clientFilter, projectFilter, assignmentFilter, createdWithinDays]);
 
   useEffect(() => {
-    setSelectedTicketId(null);
     setSearchQuery('');
     setPriorityFilter('ALL');
     setClientFilter('ALL');
@@ -126,43 +118,7 @@ export default function InboundQueue() {
     }
 
     return apiFetch<PaginatedResponse<ApiTicket>>(`/tickets?${searchParams.toString()}`);
-  }, [assignmentFilter, clientFilter, createdWithinDays, currentView.assignedToMe, currentView.fixedStatus, deferredSearch, page, priorityFilter, projectFilter, statusFilter, user?.id]);
-
-  useEffect(() => {
-    if (!selectedTicketId || !ticketsQuery.data) {
-      return;
-    }
-
-    const isSelectedVisible = ticketsQuery.data.items.some((ticket) => ticket.id === selectedTicketId);
-
-    if (!isSelectedVisible) {
-      setSelectedTicketId(null);
-    }
-  }, [selectedTicketId, ticketsQuery.data]);
-
-  const handleAssignToMe = async (ticketId: number) => {
-    if (!user || role === 'Project Manager') {
-      return;
-    }
-
-    setIsAssigning(true);
-
-    try {
-      await apiFetch<ApiTicket>(`/tickets/${ticketId}/assign`, {
-        method: 'POST',
-        body: {
-          assignedToId: user.id,
-        },
-      });
-
-      showToast('success', 'Ticket assigned successfully.');
-      ticketsQuery.reload();
-    } catch (error) {
-      showToast('error', getErrorMessage(error));
-    } finally {
-      setIsAssigning(false);
-    }
-  };
+  }, [assignmentFilter, clientFilter, createdWithinDays, currentView.assignedToMe, currentView.fixedStatus, deferredSearch, page, priorityFilter, projectFilter, statusFilter]);
 
   if (ticketsQuery.isLoading) {
     return <QueueSkeleton />;
@@ -174,7 +130,6 @@ export default function InboundQueue() {
 
   const ticketPage = ticketsQuery.data;
   const visibleTickets = ticketPage.items;
-  const selectedTicket = visibleTickets.find((ticket) => ticket.id === selectedTicketId) || null;
   const unassignedVisibleTickets = visibleTickets.filter((ticket) => !ticket.assignedTo && ticket.status !== 'RESOLVED').length;
   const resolvedVisibleTickets = visibleTickets.filter((ticket) => ticket.status === 'RESOLVED').length;
   const clientOptions = filterOptionsQuery.data?.clients || [];
@@ -324,8 +279,8 @@ export default function InboundQueue() {
                 visibleTickets.map((ticket) => (
                   <tr
                     key={ticket.id}
-                    onClick={() => setSelectedTicketId(ticket.id)}
-                    className={clsx('cursor-pointer transition-colors hover:bg-slate-50', selectedTicketId === ticket.id && 'bg-orange-50/60')}
+                    onClick={() => navigate(appPaths.tickets.detail(ticket.id))}
+                    className="cursor-pointer transition-colors hover:bg-slate-50"
                   >
                     <td className="px-4 py-4">
                       <div>
@@ -362,78 +317,6 @@ export default function InboundQueue() {
           />
         </div>
       </div>
-
-      <AnimatePresence>
-        {selectedTicket ? (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setSelectedTicketId(null)}
-              className="absolute inset-0 z-40 bg-black/20 backdrop-blur-[1px]"
-            />
-            <motion.div
-              initial={{ x: '100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '100%' }}
-              transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-              className="absolute right-0 top-0 z-50 flex h-full w-[500px] flex-col border-l border-slate-200 bg-white shadow-2xl"
-            >
-              <div className="flex items-start justify-between border-b border-slate-100 bg-slate-50/50 p-6">
-                <div>
-                  <div className="mb-2 flex items-center gap-2">
-                    <span className="text-xs font-bold uppercase tracking-wider text-orange-600">{selectedTicket.displayId}</span>
-                    <span className={`rounded px-2 py-1 text-[10px] font-bold uppercase ${getTicketPriorityClasses(selectedTicket.priority)}`}>
-                      {humanizeEnum(selectedTicket.priority)}
-                    </span>
-                  </div>
-                  <h2 className="text-lg font-bold text-slate-900">{selectedTicket.title}</h2>
-                </div>
-                <button onClick={() => setSelectedTicketId(null)} className="rounded-full p-2 transition-colors hover:bg-slate-200">
-                  <X className="h-5 w-5 text-slate-500" />
-                </button>
-              </div>
-
-              <div className="flex-1 space-y-6 overflow-y-auto p-6">
-                <section>
-                  <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">Description</h3>
-                  <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-600">
-                    {selectedTicket.description || 'No description provided.'}
-                  </p>
-                </section>
-
-                <section className="grid grid-cols-2 gap-4">
-                  <DetailStat label="Client" value={selectedTicket.project?.client?.name || '-'} />
-                  <DetailStat label="Project" value={selectedTicket.project?.name || '-'} />
-                  <DetailStat label="Status" value={humanizeEnum(selectedTicket.status)} />
-                  <DetailStat label="Assigned To" value={selectedTicket.assignedTo?.name || 'Unassigned'} />
-                </section>
-
-                {selectedTicket.chatSessionId ? <DetailStat label="Chat Session" value={`#${selectedTicket.chatSessionId}`} /> : null}
-              </div>
-
-              <div className="flex items-center justify-between gap-3 border-t border-slate-100 bg-slate-50 p-4">
-                <Link to={appPaths.tickets.detail(selectedTicket.id)} className="flex items-center gap-2 text-sm font-bold text-orange-600 hover:underline">
-                  Open full detail
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
-
-                {role !== 'Project Manager' ? (
-                  <button
-                    onClick={() => void handleAssignToMe(selectedTicket.id)}
-                    disabled={isAssigning}
-                    className="flex items-center gap-2 rounded-lg bg-orange-600 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-orange-700 disabled:opacity-60"
-                  >
-                    <UserPlus className="h-4 w-4" />
-                    Assign to me
-                  </button>
-                ) : null}
-              </div>
-            </motion.div>
-          </>
-        ) : null}
-      </AnimatePresence>
     </div>
   );
 }
@@ -443,15 +326,6 @@ function SummaryCard({ label, value }: { label: string; value: string }) {
     <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{label}</p>
       <p className="mt-2 text-3xl font-black text-slate-900">{value}</p>
-    </div>
-  );
-}
-
-function DetailStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
-      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</p>
-      <p className="mt-1 text-sm font-semibold text-slate-900">{value}</p>
     </div>
   );
 }

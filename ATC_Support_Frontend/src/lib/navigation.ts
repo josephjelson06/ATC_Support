@@ -1,12 +1,9 @@
 import type { LucideIcon } from 'lucide-react';
 import {
   BarChart2,
-  BookOpen,
   Briefcase,
   FileCode2,
   LayoutDashboard,
-  LineChart,
-  Settings,
   Shield,
   Ticket,
   Users,
@@ -20,12 +17,9 @@ export type TicketListView = 'queue' | 'mine' | 'escalated' | 'waiting' | 'resol
 export type TicketDetailTab = 'summary' | 'conversation' | 'attachments' | 'email' | 'history';
 export type ClientDetailTab = 'overview' | 'projects' | 'contacts' | 'consignees' | 'amcs' | 'tickets';
 export type ProjectDetailTab = 'overview' | 'tickets' | 'faqs' | 'docs' | 'widget' | 'julia' | 'client' | 'amc';
-export type KnowledgeBaseTab = 'library' | 'review' | 'auto-drafts';
 export type ReportsTab = 'overview' | 'tickets';
-export type AnalyticsTab = 'overview' | 'tickets' | 'kb' | 'performance';
-export type AdminPrimaryTab = 'users' | 'masters' | 'settings';
+export type AdminPrimaryTab = 'users' | 'masters';
 export type UsersAccessTab = 'users' | 'roles' | 'permissions';
-export type SettingsTab = 'general' | 'notifications' | 'email' | 'widget' | 'julia' | 'security' | 'integrations';
 
 export interface SidebarNavItem {
   id: string;
@@ -71,23 +65,9 @@ export const appPaths = {
     list: '/agent/projects',
     detail: (id: number | string, tab: ProjectDetailTab = 'overview') => `/agent/projects/${id}/${tab}`,
   },
-  kb: {
-    library: '/agent/kb/library',
-    review: '/agent/kb/review',
-    autoDrafts: '/agent/kb/auto-drafts',
-    new: '/agent/kb/new',
-    edit: (id: number | string) => `/agent/kb/${id}/edit`,
-    autoDraft: (id: number | string) => `/agent/kb/auto-draft/${id}`,
-  },
   reports: {
     overview: '/agent/reports/overview',
     tickets: '/agent/reports/tickets',
-  },
-  analytics: {
-    overview: '/agent/analytics/overview',
-    tickets: '/agent/analytics/tickets',
-    kb: '/agent/analytics/kb',
-    performance: '/agent/analytics/performance',
   },
   admin: {
     users: '/agent/admin/users',
@@ -95,15 +75,6 @@ export const appPaths = {
     permissions: '/agent/admin/permissions',
     masters: {
       serviceCodes: '/agent/admin/masters/service-codes',
-    },
-    settings: {
-      general: '/agent/admin/settings/general',
-      notifications: '/agent/admin/settings/notifications',
-      email: '/agent/admin/settings/email',
-      widget: '/agent/admin/settings/widget',
-      julia: '/agent/admin/settings/julia',
-      security: '/agent/admin/settings/security',
-      integrations: '/agent/admin/settings/integrations',
     },
   },
   account: '/agent/account',
@@ -143,14 +114,6 @@ export const sidebarGroups: SidebarNavGroup[] = [
         icon: Briefcase,
         roles: ['PM', 'PL', 'SE'],
       },
-      {
-        id: 'kb',
-        label: 'Knowledge Base',
-        to: appPaths.kb.library,
-        icon: BookOpen,
-        roles: ['PM', 'PL', 'SE'],
-        matchPrefixes: ['/agent/kb'],
-      },
     ],
   },
   {
@@ -164,14 +127,6 @@ export const sidebarGroups: SidebarNavGroup[] = [
         icon: BarChart2,
         roles: ['PM', 'PL'],
         matchPrefixes: ['/agent/reports'],
-      },
-      {
-        id: 'analytics',
-        label: 'Analytics',
-        to: appPaths.analytics.overview,
-        icon: LineChart,
-        roles: ['PM', 'PL'],
-        matchPrefixes: ['/agent/analytics'],
       },
     ],
   },
@@ -195,14 +150,6 @@ export const sidebarGroups: SidebarNavGroup[] = [
         roles: ['PM'],
         matchPrefixes: ['/agent/admin/masters'],
       },
-      {
-        id: 'settings',
-        label: 'Settings',
-        to: appPaths.admin.settings.general,
-        icon: Settings,
-        roles: ['PM'],
-        matchPrefixes: ['/agent/admin/settings'],
-      },
     ],
   },
 ];
@@ -215,44 +162,20 @@ export const ticketModuleTabs: SectionTab[] = [
   { label: 'Resolved', to: appPaths.tickets.resolved },
 ];
 
-export const knowledgeBaseTabs: SectionTab[] = [
-  { label: 'Library', to: appPaths.kb.library },
-  { label: 'Review Queue', to: appPaths.kb.review },
-  { label: 'Auto Drafts', to: appPaths.kb.autoDrafts },
-];
-
 export const reportTabs: SectionTab[] = [
   { label: 'Overview', to: appPaths.reports.overview },
   { label: 'Ticket Reports', to: appPaths.reports.tickets },
 ];
 
-export const analyticsTabs: SectionTab[] = [
-  { label: 'Overview', to: appPaths.analytics.overview },
-  { label: 'Tickets', to: appPaths.analytics.tickets },
-  { label: 'Knowledge Base', to: appPaths.analytics.kb },
-  { label: 'Performance', to: appPaths.analytics.performance },
-];
-
 export const adminPrimaryTabs: SectionTab[] = [
   { label: 'Users & Access', to: appPaths.admin.users },
   { label: 'Masters', to: appPaths.admin.masters.serviceCodes },
-  { label: 'Settings', to: appPaths.admin.settings.general },
 ];
 
 export const userAccessTabs: SectionTab[] = [
   { label: 'Users', to: appPaths.admin.users },
   { label: 'Roles', to: appPaths.admin.roles },
   { label: 'Permission Matrix', to: appPaths.admin.permissions },
-];
-
-export const settingsTabs: SectionTab[] = [
-  { label: 'General', to: appPaths.admin.settings.general },
-  { label: 'Notifications', to: appPaths.admin.settings.notifications },
-  { label: 'Email', to: appPaths.admin.settings.email },
-  { label: 'Widget Defaults', to: appPaths.admin.settings.widget },
-  { label: 'Julia Defaults', to: appPaths.admin.settings.julia },
-  { label: 'Security', to: appPaths.admin.settings.security },
-  { label: 'Integrations', to: appPaths.admin.settings.integrations },
 ];
 
 export const getVisibleSidebarGroups = (role: BackendRole | null) => {

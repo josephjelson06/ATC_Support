@@ -1,23 +1,19 @@
 import { Link } from 'react-router-dom';
-import { BarChart3, BookOpenText, FileText, Ticket } from 'lucide-react';
+import { BarChart3, Briefcase, Ticket } from 'lucide-react';
 
 import PageHeader from '../../components/layout/PageHeader';
 import { useAsyncData } from '../../hooks/useAsyncData';
 import { apiFetch } from '../../lib/api';
 import { humanizeEnum } from '../../lib/format';
 import { appPaths } from '../../lib/navigation';
-import type { ApiProject, ApiRunbook, ApiTicket } from '../../lib/types';
+import type { ApiProject, ApiTicket } from '../../lib/types';
 
 export default function Reports() {
   const reportsQuery = useAsyncData(
     async () => {
-      const [tickets, projects, runbooks] = await Promise.all([
-        apiFetch<ApiTicket[]>('/tickets'),
-        apiFetch<ApiProject[]>('/projects'),
-        apiFetch<ApiRunbook[]>('/runbooks'),
-      ]);
+      const [tickets, projects] = await Promise.all([apiFetch<ApiTicket[]>('/tickets'), apiFetch<ApiProject[]>('/projects')]);
 
-      return { tickets, projects, runbooks };
+      return { tickets, projects };
     },
     [],
   );
@@ -45,14 +41,13 @@ export default function Reports() {
         description="Live summaries from the backend to help you jump into reporting workflows."
       />
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <MetricCard icon={Ticket} label="Open Tickets" value={String(openTickets)} accent="orange" />
         <MetricCard icon={BarChart3} label="Resolved Tickets" value={String(resolvedTickets)} accent="green" />
-        <MetricCard icon={FileText} label="Runbooks" value={String(reportsQuery.data.runbooks.length)} accent="blue" />
-        <MetricCard icon={BookOpenText} label="Active Projects" value={String(activeProjects)} accent="orange" />
+        <MetricCard icon={Briefcase} label="Active Projects" value={String(activeProjects)} accent="blue" />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-1 gap-6">
         <Link
           to={appPaths.reports.tickets}
           className="bg-white border border-slate-200 rounded-2xl p-6 hover:shadow-md hover:border-orange-300 transition-all group"
@@ -76,28 +71,6 @@ export default function Reports() {
                 Highest active priority: {humanizeEnum(topPriority)}
               </span>
             )}
-          </div>
-        </Link>
-
-        <Link
-          to={appPaths.kb.library}
-          className="bg-white border border-slate-200 rounded-2xl p-6 hover:shadow-md hover:border-blue-300 transition-all group"
-        >
-          <div className="flex items-start justify-between gap-4">
-            <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
-              <FileText className="w-6 h-6" />
-            </div>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-slate-50 px-2 py-1 rounded">
-              Knowledge Base
-            </span>
-          </div>
-          <h2 className="text-lg font-bold text-slate-900 mt-5 group-hover:text-blue-600 transition-colors">Knowledge Base Snapshot</h2>
-          <p className="text-sm text-slate-500 mt-2 leading-relaxed">
-            Jump into runbook and project document management, including draft review and deletion flows.
-          </p>
-          <div className="mt-5 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-            <span className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 font-bold">{reportsQuery.data.runbooks.length} runbooks</span>
-            <span className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 font-bold">{reportsQuery.data.projects.length} accessible projects</span>
           </div>
         </Link>
       </div>

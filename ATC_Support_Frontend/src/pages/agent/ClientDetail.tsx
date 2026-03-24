@@ -1,5 +1,5 @@
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Briefcase, Building2, Clock3, Globe, Mail, MapPin, Pencil, Phone, ShieldCheck, Ticket, Users } from 'lucide-react';
+import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
+import { Briefcase, Building2, Clock3, Globe, Mail, MapPin, Pencil, Phone, ShieldCheck, Users } from 'lucide-react';
 
 import PageHeader from '../../components/layout/PageHeader';
 import SectionTabs from '../../components/layout/SectionTabs';
@@ -8,18 +8,24 @@ import { useModal } from '../../contexts/ModalContext';
 import { useRole } from '../../contexts/RoleContext';
 import { useAsyncData } from '../../hooks/useAsyncData';
 import { apiFetch } from '../../lib/api';
-import { formatDate, formatRelativeTime, getTicketPriorityClasses, getTicketStatusClasses, humanizeEnum } from '../../lib/format';
+import { formatDate, humanizeEnum } from '../../lib/format';
 import { appPaths } from '../../lib/navigation';
-import type { ApiClientDetail, ApiTicket, ClientDetailTab } from '../../lib/types';
+import type { ApiClientDetail, ClientDetailTab } from '../../lib/types';
 
-const detailTabs: ClientDetailTab[] = ['overview', 'projects', 'contacts', 'consignees', 'amcs', 'tickets'];
+const detailTabs: ClientDetailTab[] = ['overview', 'projects', 'contacts', 'consignees', 'amcs'];
 
 export default function ClientDetail() {
   const navigate = useNavigate();
   const { openModal } = useModal();
   const { backendRole } = useRole();
   const { id, tab } = useParams();
-  const currentTab = detailTabs.includes((tab as ClientDetailTab) || 'overview') ? ((tab as ClientDetailTab) || 'overview') : 'overview';
+  const rawTab = (tab as ClientDetailTab) || 'overview';
+  const currentTab = detailTabs.includes(rawTab) ? rawTab : 'overview';
+
+  if (!detailTabs.includes(rawTab) && id) {
+    return <Navigate to={appPaths.clients.detail(id, 'overview')} replace />;
+  }
+
   const clientQuery = useAsyncData(
     async () => {
       if (!id) {
@@ -27,11 +33,7 @@ export default function ClientDetail() {
       }
 
       const client = await apiFetch<ApiClientDetail>(`/clients/${id}`);
-      const tickets = await apiFetch<ApiTicket[]>('/tickets');
-      const projectIds = new Set(client.projects.map((project) => project.id));
-      const relatedTickets = tickets.filter((ticket) => (ticket.projectId ? projectIds.has(ticket.projectId) : false));
-
-      return { client, tickets: relatedTickets };
+      return { client };
     },
     [id],
   );
@@ -44,8 +46,7 @@ export default function ClientDetail() {
     return <ClientDetailError message={clientQuery.error || 'Unable to load client details.'} onRetry={clientQuery.reload} />;
   }
 
-  const { client, tickets } = clientQuery.data;
-  const openTickets = tickets.filter((ticket) => ticket.status !== 'RESOLVED');
+  const { client } = clientQuery.data;
   const activeAmcs = client.amcs.filter((amc) => amc.status === 'ACTIVE');
   const canManageClients = backendRole === 'PM';
   const clientTabs = [
@@ -54,7 +55,6 @@ export default function ClientDetail() {
     { label: 'Contacts', to: appPaths.clients.detail(client.id, 'contacts') },
     { label: 'Consignees', to: appPaths.clients.detail(client.id, 'consignees') },
     { label: 'AMCs', to: appPaths.clients.detail(client.id, 'amcs') },
-    { label: 'Tickets', to: appPaths.clients.detail(client.id, 'tickets') },
   ];
 
   const openEditModal = () => {
@@ -99,58 +99,62 @@ export default function ClientDetail() {
             </span>
           </>
         }
+        actions={
+          canManageClients ? (
+            <button
+              onClick={openEditModal}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50"
+            >
+              <Pencil className="h-4 w-4" />
+              Edit Client
+            </button>
+          ) : null
+        }
       />
 
       <SectionTabs tabs={clientTabs} role={backendRole} />
 
-      <div className="flex flex-col items-start gap-6 rounded-3xl border border-slate-200 bg-white p-8 shadow-sm md:flex-row">
-        <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-3xl border border-slate-200 bg-slate-100">
-          <Building2 className="h-10 w-10 text-slate-400" />
-        </div>
-        <div className="flex-1">
-          <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
-            <div>
-              <div className="flex flex-wrap items-center gap-3">
-                <h2 className="text-3xl font-bold text-slate-900">{client.name}</h2>
-              </div>
-              <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-slate-500">
-                {client.industry ? <span>{client.industry}</span> : null}
-                {client.city ? <span>| {client.city}</span> : null}
-                {client.email ? <span>| {client.email}</span> : null}
-                {client.phone ? <span>| {client.phone}</span> : null}
-                <span>| Created {formatDate(client.createdAt)}</span>
-                <span>
-                  | {client.projects.length} project{client.projects.length === 1 ? '' : 's'}
-                </span>
+      {currentTab !== 'overview' ? (
+        <div className="flex flex-col items-start gap-6 rounded-3xl border border-slate-200 bg-white p-8 shadow-sm md:flex-row">
+          <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-3xl border border-slate-200 bg-slate-100">
+            <Building2 className="h-10 w-10 text-slate-400" />
+          </div>
+          <div className="flex-1">
+            <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
+              <div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <h2 className="text-3xl font-bold text-slate-900">{client.name}</h2>
+                </div>
+                <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-slate-500">
+                  {client.industry ? <span>{client.industry}</span> : null}
+                  {client.city ? <span>| {client.city}</span> : null}
+                  {client.email ? <span>| {client.email}</span> : null}
+                  {client.phone ? <span>| {client.phone}</span> : null}
+                  <span>| Created {formatDate(client.createdAt)}</span>
+                  <span>
+                    | {client.projects.length} project{client.projects.length === 1 ? '' : 's'}
+                  </span>
+                </div>
               </div>
             </div>
-            {canManageClients ? (
-              <button
-                onClick={openEditModal}
-                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50"
-              >
-                <Pencil className="h-4 w-4" />
-                Edit Client
-              </button>
-            ) : null}
+            <p className="mt-5 text-sm text-slate-500">
+              This view keeps the client business profile and linked delivery records in one operational page.
+            </p>
           </div>
-          <p className="mt-5 text-sm text-slate-500">
-            This view combines the client profile, linked delivery records, and live ticket activity into one operational page.
-          </p>
         </div>
-      </div>
+      ) : null}
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
-        <DetailStat icon={Briefcase} label="Projects" value={String(client.projects.length)} accent="orange" />
-        <DetailStat icon={Users} label="Contacts" value={String(client.contacts.length)} accent="blue" />
-        <DetailStat icon={Ticket} label="Open Tickets" value={String(openTickets.length)} accent="orange" />
-        <DetailStat icon={ShieldCheck} label="Active AMCs" value={String(activeAmcs.length)} accent="green" />
-      </div>
+      {currentTab !== 'overview' ? (
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+          <DetailStat icon={Briefcase} label="Projects" value={String(client.projects.length)} accent="orange" />
+          <DetailStat icon={Users} label="Contacts" value={String(client.contacts.length)} accent="blue" />
+          <DetailStat icon={ShieldCheck} label="Active AMCs" value={String(activeAmcs.length)} accent="green" />
+        </div>
+      ) : null}
 
-      <div className={`grid grid-cols-1 gap-6 ${currentTab === 'overview' ? 'xl:grid-cols-[1.1fr_0.9fr]' : ''}`}>
-        {currentTab === 'overview' || currentTab === 'projects' || currentTab === 'tickets' ? (
+      <div className="grid grid-cols-1 gap-6">
+        {currentTab === 'projects' ? (
         <div className="space-y-6">
-          {currentTab === 'overview' || currentTab === 'projects' ? (
           <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="flex items-center justify-between border-b border-slate-100 p-6">
               <h2 className="text-lg font-bold text-slate-900">Projects</h2>
@@ -189,41 +193,6 @@ export default function ClientDetail() {
               )}
             </div>
           </section>
-          ) : null}
-
-          {currentTab === 'overview' || currentTab === 'tickets' ? (
-          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="flex items-center justify-between border-b border-slate-100 p-6">
-              <h2 className="text-lg font-bold text-slate-900">{currentTab === 'tickets' ? 'Tickets' : 'Recent Tickets'}</h2>
-              <Link to={appPaths.tickets.queue} className="text-sm font-bold text-orange-600 hover:text-orange-700">
-                Open queue
-              </Link>
-            </div>
-            <div className="divide-y divide-slate-100">
-              {tickets.length === 0 ? (
-                <div className="p-6 text-sm text-slate-500">No tickets are currently linked to this client.</div>
-              ) : (
-                tickets.slice(0, 6).map((ticket) => (
-                  <Link key={ticket.id} to={appPaths.tickets.detail(ticket.id)} className="block p-5 transition-colors hover:bg-slate-50">
-                    <p className="font-bold text-slate-900">{ticket.title}</p>
-                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                      <span className="font-mono font-bold text-orange-600">{ticket.displayId}</span>
-                      <span className={`rounded px-2 py-0.5 font-bold uppercase ${getTicketPriorityClasses(ticket.priority)}`}>
-                        {humanizeEnum(ticket.priority)}
-                      </span>
-                      <span className={`rounded px-2 py-0.5 font-bold uppercase ${getTicketStatusClasses(ticket.status)}`}>
-                        {humanizeEnum(ticket.status)}
-                      </span>
-                      <span>{ticket.project?.name}</span>
-                      <span>|</span>
-                      <span>{formatRelativeTime(ticket.createdAt)}</span>
-                    </div>
-                  </Link>
-                ))
-              )}
-            </div>
-          </section>
-          ) : null}
         </div>
         ) : null}
 
@@ -251,7 +220,7 @@ export default function ClientDetail() {
           </section>
           ) : null}
 
-          {currentTab === 'overview' || currentTab === 'contacts' ? (
+          {currentTab === 'contacts' ? (
           <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-100 p-5">
               <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">Client Contacts</h2>
@@ -282,7 +251,7 @@ export default function ClientDetail() {
           </section>
           ) : null}
 
-          {currentTab === 'overview' || currentTab === 'consignees' ? (
+          {currentTab === 'consignees' ? (
           <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-100 p-5">
               <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">Consignees</h2>
@@ -312,7 +281,7 @@ export default function ClientDetail() {
           </section>
           ) : null}
 
-          {currentTab === 'overview' || currentTab === 'amcs' ? (
+          {currentTab === 'amcs' ? (
           <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-100 p-5">
               <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">AMC Coverage</h2>

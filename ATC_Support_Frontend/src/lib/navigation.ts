@@ -2,7 +2,6 @@ import type { LucideIcon } from 'lucide-react';
 import {
   BarChart2,
   Briefcase,
-  FileCode2,
   LayoutDashboard,
   Shield,
   Ticket,
@@ -15,10 +14,10 @@ export type NavGroupId = 'operations' | 'insights' | 'administration';
 
 export type TicketListView = 'queue' | 'mine' | 'escalated' | 'waiting' | 'resolved';
 export type TicketDetailTab = 'summary' | 'conversation' | 'attachments' | 'email' | 'history';
-export type ClientDetailTab = 'overview' | 'projects' | 'contacts' | 'consignees' | 'amcs' | 'tickets';
-export type ProjectDetailTab = 'overview' | 'tickets' | 'faqs' | 'docs' | 'widget' | 'julia' | 'client' | 'amc';
+export type ClientDetailTab = 'overview' | 'projects' | 'contacts' | 'consignees' | 'amcs';
+export type ProjectDetailTab = 'overview' | 'faqs' | 'docs';
 export type ReportsTab = 'overview' | 'tickets';
-export type AdminPrimaryTab = 'users' | 'masters';
+export type AdminPrimaryTab = 'users';
 export type UsersAccessTab = 'users' | 'roles' | 'permissions';
 
 export interface SidebarNavItem {
@@ -70,12 +69,10 @@ export const appPaths = {
     tickets: '/agent/reports/tickets',
   },
   admin: {
+    usersAccess: '/agent/admin/users-access',
     users: '/agent/admin/users',
     roles: '/agent/admin/roles',
     permissions: '/agent/admin/permissions',
-    masters: {
-      serviceCodes: '/agent/admin/masters/service-codes',
-    },
   },
   account: '/agent/account',
 } as const;
@@ -137,18 +134,10 @@ export const sidebarGroups: SidebarNavGroup[] = [
       {
         id: 'users-access',
         label: 'Users & Access',
-        to: appPaths.admin.users,
+        to: appPaths.admin.usersAccess,
         icon: Shield,
         roles: ['PM'],
-        matchPrefixes: ['/agent/admin/users', '/agent/admin/roles', '/agent/admin/permissions'],
-      },
-      {
-        id: 'masters',
-        label: 'Masters',
-        to: appPaths.admin.masters.serviceCodes,
-        icon: FileCode2,
-        roles: ['PM'],
-        matchPrefixes: ['/agent/admin/masters'],
+        matchPrefixes: ['/agent/admin/users-access', '/agent/admin/users', '/agent/admin/roles', '/agent/admin/permissions'],
       },
     ],
   },
@@ -164,12 +153,10 @@ export const ticketModuleTabs: SectionTab[] = [
 
 export const reportTabs: SectionTab[] = [
   { label: 'Overview', to: appPaths.reports.overview },
-  { label: 'Ticket Reports', to: appPaths.reports.tickets },
 ];
 
 export const adminPrimaryTabs: SectionTab[] = [
   { label: 'Users & Access', to: appPaths.admin.users },
-  { label: 'Masters', to: appPaths.admin.masters.serviceCodes },
 ];
 
 export const userAccessTabs: SectionTab[] = [

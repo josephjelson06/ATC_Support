@@ -6,7 +6,7 @@ import { ModalProvider } from './contexts/ModalContext';
 import { RoleProvider, useRole } from './contexts/RoleContext';
 import { ToastProvider } from './contexts/ToastContext';
 import SectionRouteLayout from './layouts/SectionRouteLayout';
-import { adminPrimaryTabs, appPaths, reportTabs, userAccessTabs } from './lib/navigation';
+import { appPaths, reportTabs } from './lib/navigation';
 
 const AgentLayout = lazy(() => import('./layouts/AgentLayout'));
 const ClientLayout = lazy(() => import('./layouts/ClientLayout'));
@@ -28,10 +28,10 @@ const Reports = lazy(() => import('./pages/agent/Reports'));
 const TicketReport = lazy(() => import('./pages/agent/TicketReport'));
 
 const UserManagement = lazy(() => import('./pages/settings/UserManagement'));
-const ServiceCodesSettings = lazy(() => import('./pages/settings/ServiceCodesSettings'));
 const AccountPage = lazy(() => import('./pages/settings/AccountPage'));
 const RoleDirectory = lazy(() => import('./pages/settings/RoleDirectory'));
 const PermissionMatrix = lazy(() => import('./pages/settings/PermissionMatrix'));
+const UsersAccessOverview = lazy(() => import('./pages/settings/UsersAccessOverview'));
 
 function RequireAuth() {
   const location = useLocation();
@@ -167,21 +167,12 @@ function AppRoutes() {
 
             <Route path="account" element={<AccountPage />} />
 
-            <Route
-              path="admin"
-              element={<SectionRouteLayout breadcrumbs={[{ label: 'Administration' }]} tabs={adminPrimaryTabs} />}
-            >
-              <Route index element={<Navigate to="users" replace />} />
-
-              <Route
-                element={<SectionRouteLayout breadcrumbs={[{ label: 'Administration' }, { label: 'Users & Access' }]} tabs={userAccessTabs} />}
-              >
-                <Route path="users" element={<UserManagement />} />
-                <Route path="roles" element={<RoleDirectory />} />
-                <Route path="permissions" element={<PermissionMatrix />} />
-              </Route>
-
-              <Route path="masters/service-codes" element={<ServiceCodesSettings />} />
+            <Route path="admin" element={<Outlet />}>
+              <Route index element={<Navigate to="users-access" replace />} />
+              <Route path="users-access" element={<UsersAccessOverview />} />
+              <Route path="users" element={<UserManagement />} />
+              <Route path="roles" element={<RoleDirectory />} />
+              <Route path="permissions" element={<PermissionMatrix />} />
             </Route>
           </Route>
         </Route>

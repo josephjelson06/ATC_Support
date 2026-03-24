@@ -1,5 +1,6 @@
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import { BookOpenText, Bot, Briefcase, Copy, FileQuestion, FileText, KeyRound, Pencil, Plus, Ticket, Users } from 'lucide-react';
+import { Navigate, useNavigate, useParams } from 'react-router-dom';
+import type { LucideIcon } from 'lucide-react';
+import { BookOpenText, Briefcase, Copy, FileQuestion, FileText, KeyRound, Pencil, Plus } from 'lucide-react';
 
 import PageHeader from '../../components/layout/PageHeader';
 import SectionTabs from '../../components/layout/SectionTabs';
@@ -10,11 +11,11 @@ import { useRole } from '../../contexts/RoleContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useAsyncData } from '../../hooks/useAsyncData';
 import { apiFetch } from '../../lib/api';
-import { formatDate, formatRelativeTime, getTicketPriorityClasses, getTicketStatusClasses, humanizeEnum } from '../../lib/format';
+import { formatDate, formatRelativeTime, humanizeEnum } from '../../lib/format';
 import { appPaths } from '../../lib/navigation';
-import type { ApiClientDetail, ApiFaq, ApiProject, ApiProjectDoc, ApiTicket, ProjectDetailTab } from '../../lib/types';
+import type { ApiFaq, ApiProject, ApiProjectDoc, ProjectDetailTab } from '../../lib/types';
 
-const detailTabs: ProjectDetailTab[] = ['overview', 'tickets', 'faqs', 'docs', 'widget', 'julia', 'client', 'amc'];
+const detailTabs: ProjectDetailTab[] = ['overview', 'faqs', 'docs'];
 
 export default function ProjectDetail() {
   const navigate = useNavigate();
@@ -22,7 +23,13 @@ export default function ProjectDetail() {
   const { backendRole } = useRole();
   const { showToast } = useToast();
   const { id, tab } = useParams();
-  const currentTab = detailTabs.includes((tab as ProjectDetailTab) || 'overview') ? ((tab as ProjectDetailTab) || 'overview') : 'overview';
+  const rawTab = (tab as ProjectDetailTab) || 'overview';
+  const currentTab = detailTabs.includes(rawTab) ? rawTab : 'overview';
+
+  if (!detailTabs.includes(rawTab) && id) {
+    return <Navigate to={appPaths.projects.detail(id, 'overview')} replace />;
+  }
+
   const projectQuery = useAsyncData(
     async () => {
       if (!id) {
@@ -30,19 +37,12 @@ export default function ProjectDetail() {
       }
 
       const project = await apiFetch<ApiProject>(`/projects/${id}`);
-      const [docs, faqs, tickets, client] = await Promise.all([
-        apiFetch<ApiProjectDoc[]>(`/projects/${id}/docs`),
-        apiFetch<ApiFaq[]>(`/projects/${id}/faqs`),
-        apiFetch<ApiTicket[]>('/tickets'),
-        project.clientId ? apiFetch<ApiClientDetail>(`/clients/${project.clientId}`) : Promise.resolve(null),
-      ]);
+      const [docs, faqs] = await Promise.all([apiFetch<ApiProjectDoc[]>(`/projects/${id}/docs`), apiFetch<ApiFaq[]>(`/projects/${id}/faqs`)]);
 
       return {
         project,
         docs,
         faqs,
-        client,
-        tickets: tickets.filter((ticket) => ticket.projectId === project.id),
       };
     },
     [id],
@@ -56,21 +56,13 @@ export default function ProjectDetail() {
     return <ProjectDetailError message={projectQuery.error || 'Unable to load project details.'} onRetry={projectQuery.reload} />;
   }
 
-  const { project, docs, faqs, client, tickets } = projectQuery.data;
-  const openTickets = tickets.filter((ticket) => ticket.status !== 'RESOLVED');
-  const resolvedTickets = tickets.filter((ticket) => ticket.status === 'RESOLVED');
-  const activeAmc = (client?.amcs || []).find((amc) => amc.projectId === project.id);
+  const { project, docs, faqs } = projectQuery.data;
   const canManageProjects = backendRole === 'PM';
   const canManageFaqs = backendRole === 'PM' || backendRole === 'PL';
   const projectTabs = [
     { label: 'Overview', to: appPaths.projects.detail(project.id, 'overview') },
-    { label: 'Tickets', to: appPaths.projects.detail(project.id, 'tickets') },
     { label: 'FAQs', to: appPaths.projects.detail(project.id, 'faqs') },
-    { label: 'Docs', to: appPaths.projects.detail(project.id, 'docs') },
-    { label: 'Widget', to: appPaths.projects.detail(project.id, 'widget') },
-    { label: 'Julia', to: appPaths.projects.detail(project.id, 'julia') },
-    { label: 'Client Context', to: appPaths.projects.detail(project.id, 'client') },
-    { label: 'AMC', to: appPaths.projects.detail(project.id, 'amc') },
+    { label: 'Project Docs', to: appPaths.projects.detail(project.id, 'docs') },
   ];
 
   const copyEmbedCode = async () => {
@@ -205,51 +197,62 @@ export default function ProjectDetail() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
-        <ProjectDetailStat icon={Ticket} label="Open Tickets" value={String(openTickets.length)} accent="orange" />
-        <ProjectDetailStat icon={Users} label="Resolved Tickets" value={String(resolvedTickets.length)} accent="green" />
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+        <ProjectDetailStat icon={KeyRound} label="Widget" value={project.widgetEnabled ? 'Enabled' : 'Disabled'} accent="green" />
         <ProjectDetailStat icon={FileText} label="Docs" value={String(docs.length)} accent="blue" />
         <ProjectDetailStat icon={FileQuestion} label="FAQs" value={String(faqs.length)} accent="orange" />
       </div>
 
-      <div className={`grid grid-cols-1 gap-6 ${currentTab === 'overview' ? 'xl:grid-cols-[1.05fr_0.95fr]' : ''}`}>
-        {currentTab === 'overview' || currentTab === 'tickets' || currentTab === 'docs' ? (
-        <div className="space-y-6">
-          {currentTab === 'overview' || currentTab === 'tickets' ? (
+      <div className="space-y-6">
+        {currentTab === 'overview' ? (
           <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="flex items-center justify-between border-b border-slate-100 p-6">
-              <h2 className="text-lg font-bold text-slate-900">Ticket Activity</h2>
-              <Link to={appPaths.tickets.queue} className="text-sm font-bold text-orange-600 hover:text-orange-700">
-                Open queue
-              </Link>
+            <div className="border-b border-slate-100 p-5">
+              <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">Widget Status & Embed</h2>
             </div>
-            <div className="divide-y divide-slate-100">
-              {tickets.length === 0 ? (
-                <div className="p-6 text-sm text-slate-500">No tickets are linked to this project yet.</div>
-              ) : (
-                tickets.map((ticket) => (
-                  <Link key={ticket.id} to={appPaths.tickets.detail(ticket.id)} className="block p-5 transition-colors hover:bg-slate-50">
-                    <p className="font-bold text-slate-900">{ticket.title}</p>
-                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                      <span className="font-mono font-bold text-orange-600">{ticket.displayId}</span>
-                      <span className={`rounded px-2 py-0.5 font-bold uppercase ${getTicketPriorityClasses(ticket.priority)}`}>
-                        {humanizeEnum(ticket.priority)}
-                      </span>
-                      <span className={`rounded px-2 py-0.5 font-bold uppercase ${getTicketStatusClasses(ticket.status)}`}>
-                        {humanizeEnum(ticket.status)}
-                      </span>
-                      {ticket.assignedTo ? <span>{ticket.assignedTo.name}</span> : null}
-                      <span>|</span>
-                      <span>{formatRelativeTime(ticket.createdAt)}</span>
-                    </div>
-                  </Link>
-                ))
-              )}
+            <div className="space-y-4 p-5">
+              <div className="rounded-2xl border border-slate-100 p-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="font-bold text-slate-900">Widget Status</p>
+                    <p className="mt-1 text-sm text-slate-500">{project.widgetEnabled ? 'The public widget is enabled for this project.' : 'The public widget is currently disabled.'}</p>
+                  </div>
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-xs font-bold uppercase tracking-wider ${
+                      project.widgetEnabled ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
+                    }`}
+                  >
+                    {project.widgetEnabled ? 'Enabled' : 'Disabled'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-100 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-bold text-slate-900">Widget Key</p>
+                    <p className="mt-1 font-mono text-xs text-slate-500">{project.widgetKey || 'No widget key available.'}</p>
+                  </div>
+                  {project.embedCode ? (
+                    <button
+                      onClick={() => void copyEmbedCode()}
+                      className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold uppercase tracking-wider text-slate-700 transition-colors hover:bg-slate-50"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                      Copy
+                    </button>
+                  ) : null}
+                </div>
+                {project.embedCode ? (
+                  <p className="mt-3 break-all rounded-xl bg-slate-50 px-3 py-3 font-mono text-[11px] text-slate-600">{project.embedCode}</p>
+                ) : (
+                  <p className="mt-3 text-sm text-slate-500">No embed snippet is available yet for this project.</p>
+                )}
+              </div>
             </div>
           </section>
-          ) : null}
+        ) : null}
 
-          {currentTab === 'overview' || currentTab === 'docs' ? (
+        {currentTab === 'docs' ? (
           <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="flex items-center justify-between border-b border-slate-100 p-6">
               <h2 className="text-lg font-bold text-slate-900">Project Documentation</h2>
@@ -297,72 +300,9 @@ export default function ProjectDetail() {
               )}
             </div>
           </section>
-          ) : null}
-        </div>
         ) : null}
 
-        {currentTab === 'overview' || currentTab === 'widget' || currentTab === 'julia' || currentTab === 'faqs' || currentTab === 'client' || currentTab === 'amc' ? (
-        <div className="space-y-6">
-          {currentTab === 'overview' || currentTab === 'widget' ? (
-          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-100 p-5">
-              <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">Widget Controls</h2>
-            </div>
-            <div className="space-y-4 p-5">
-              <div className="rounded-2xl border border-slate-100 p-4">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <p className="font-bold text-slate-900">Widget Status</p>
-                    <p className="mt-1 text-sm text-slate-500">
-                      {project.widgetEnabled ? 'The FAQ, Julia chat, and escalation entrypoints are live.' : 'The public widget is currently disabled.'}
-                    </p>
-                  </div>
-                  <span
-                    className={`rounded-full px-2.5 py-1 text-xs font-bold uppercase tracking-wider ${
-                      project.widgetEnabled ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
-                    }`}
-                  >
-                    {project.widgetEnabled ? 'Enabled' : 'Disabled'}
-                  </span>
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-slate-100 p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="font-bold text-slate-900">Widget Key</p>
-                    <p className="mt-1 font-mono text-xs text-slate-500">{project.widgetKey || 'No widget key available.'}</p>
-                  </div>
-                  {project.embedCode ? (
-                    <button
-                      onClick={() => void copyEmbedCode()}
-                      className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold uppercase tracking-wider text-slate-700 transition-colors hover:bg-slate-50"
-                    >
-                      <Copy className="h-3.5 w-3.5" />
-                      Copy Embed
-                    </button>
-                  ) : null}
-                </div>
-                {project.embedCode ? <p className="mt-3 break-all rounded-xl bg-slate-50 px-3 py-3 font-mono text-[11px] text-slate-600">{project.embedCode}</p> : null}
-              </div>
-            </div>
-          </section>
-          ) : null}
-
-          {currentTab === 'overview' || currentTab === 'julia' ? (
-          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-100 p-5">
-              <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">Julia Configuration</h2>
-            </div>
-            <div className="space-y-4 p-5">
-              <JuliaCard label="Greeting" value={project.juliaGreeting || 'No custom greeting set.'} />
-              <JuliaCard label="Fallback Message" value={project.juliaFallbackMessage || 'No custom fallback set.'} />
-              <JuliaCard label="Escalation Hint" value={project.juliaEscalationHint || 'No escalation hint set.'} />
-            </div>
-          </section>
-          ) : null}
-
-          {currentTab === 'overview' || currentTab === 'faqs' ? (
+        {currentTab === 'faqs' ? (
           <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="flex items-center justify-between border-b border-slate-100 p-5">
               <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">FAQs</h2>
@@ -407,86 +347,6 @@ export default function ProjectDetail() {
               )}
             </div>
           </section>
-          ) : null}
-
-          {currentTab === 'overview' || currentTab === 'client' ? (
-          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-100 p-5">
-              <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">Client Context</h2>
-            </div>
-            <div className="space-y-4 p-5">
-              {client ? (
-                <>
-                  <div className="rounded-2xl border border-slate-100 p-4">
-                    <p className="font-bold text-slate-900">{client.name}</p>
-                    <p className="mt-1 text-sm text-slate-500">{client.industry || 'No industry set'}</p>
-                    {client.city ? <p className="mt-1 text-sm text-slate-500">{client.city}</p> : null}
-                    {client.email ? <p className="mt-1 text-sm text-slate-500">{client.email}</p> : null}
-                  </div>
-                  <div className="space-y-3">
-                    {client.contacts.map((contact) => (
-                      <div key={contact.id} className="rounded-2xl border border-slate-100 p-4">
-                        <div className="flex items-center gap-2">
-                          <p className="font-bold text-slate-900">{contact.name}</p>
-                          {contact.isPrimary ? (
-                            <span className="rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-orange-700">
-                              Primary
-                            </span>
-                          ) : null}
-                        </div>
-                        <p className="mt-1 text-sm text-slate-500">{contact.designation || 'Client Contact'}</p>
-                        {contact.email ? <p className="mt-1 text-sm text-slate-500">{contact.email}</p> : null}
-                        {contact.phone ? <p className="text-sm text-slate-500">{contact.phone}</p> : null}
-                      </div>
-                    ))}
-                    {client.contacts.length === 0 ? <p className="text-sm text-slate-500">No client contacts available.</p> : null}
-                  </div>
-                </>
-              ) : (
-                <p className="text-sm text-slate-500">Client details are unavailable for this project.</p>
-              )}
-            </div>
-          </section>
-          ) : null}
-
-          {currentTab === 'overview' || currentTab === 'amc' ? (
-          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-100 p-5">
-              <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">AMC Status</h2>
-            </div>
-            <div className="p-5">
-              {activeAmc ? (
-                <div className="rounded-2xl border border-slate-100 p-4">
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <p className="font-bold text-slate-900">{activeAmc.displayId}</p>
-                      <p className="mt-1 text-sm text-slate-500">
-                        {activeAmc.hoursUsed} / {activeAmc.hoursIncluded} hours used
-                      </p>
-                    </div>
-                    <span className="rounded-full bg-green-100 px-2.5 py-1 text-xs font-bold uppercase tracking-wider text-green-700">
-                      {humanizeEnum(activeAmc.status)}
-                    </span>
-                  </div>
-                  <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
-                    <div
-                      className="h-full rounded-full bg-orange-500"
-                      style={{
-                        width: `${activeAmc.hoursIncluded === 0 ? 0 : Math.min(100, Math.round((activeAmc.hoursUsed / activeAmc.hoursIncluded) * 100))}%`,
-                      }}
-                    />
-                  </div>
-                  <p className="mt-3 text-xs text-slate-400">
-                    {formatDate(activeAmc.startDate)} to {formatDate(activeAmc.endDate)}
-                  </p>
-                </div>
-              ) : (
-                <p className="text-sm text-slate-500">No AMC is currently linked to this project.</p>
-              )}
-            </div>
-          </section>
-          ) : null}
-        </div>
         ) : null}
       </div>
     </div>
@@ -499,7 +359,7 @@ function ProjectDetailStat({
   value,
   accent,
 }: {
-  icon: typeof Ticket;
+  icon: LucideIcon;
   label: string;
   value: string;
   accent: 'orange' | 'blue' | 'green';
@@ -519,22 +379,6 @@ function ProjectDetailStat({
       <div>
         <p className="text-sm font-bold uppercase tracking-wider text-slate-500">{label}</p>
         <p className="text-2xl font-black text-slate-900">{value}</p>
-      </div>
-    </div>
-  );
-}
-
-function JuliaCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl border border-slate-100 p-4">
-      <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-50 text-orange-600">
-          <Bot className="h-4 w-4" />
-        </div>
-        <div className="min-w-0">
-          <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{label}</p>
-          <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">{value}</p>
-        </div>
       </div>
     </div>
   );

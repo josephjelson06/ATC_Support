@@ -13,7 +13,8 @@ export default function SectionTabs({
 }) {
   const visibleTabs = tabs.filter((tab) => !tab.roles || (role ? tab.roles.includes(role) : false));
 
-  if (visibleTabs.length === 0) {
+  // Hide the entire strip when there's nothing (or nothing meaningful) to switch between.
+  if (visibleTabs.length <= 1) {
     return null;
   }
 

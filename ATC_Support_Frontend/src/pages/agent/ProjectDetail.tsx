@@ -185,9 +185,8 @@ export default function ProjectDetail() {
               {humanizeEnum(project.status)}
             </span>
             <span
-              className={`rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wider ${
-                project.widgetEnabled ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
-              }`}
+              className={`rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wider ${project.widgetEnabled ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
+                }`}
             >
               {project.widgetEnabled ? 'Widget Enabled' : 'Widget Disabled'}
             </span>
@@ -195,7 +194,7 @@ export default function ProjectDetail() {
         }
       />
 
-      <SectionTabs tabs={projectTabs} role={backendRole} />
+
 
       <div className="flex flex-col items-start gap-6 rounded-3xl border border-slate-200 bg-white p-8 shadow-sm md:flex-row">
         <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-3xl border border-slate-200 bg-slate-100">
@@ -240,7 +239,7 @@ export default function ProjectDetail() {
         <ProjectDetailStat icon={FileText} label="Docs" value={String(docs.length)} accent="blue" />
         <ProjectDetailStat icon={FileQuestion} label="FAQs" value={String(faqs.length)} accent="orange" />
       </div>
-
+      <SectionTabs tabs={projectTabs} role={backendRole} />
       <div className="space-y-6">
         {currentTab === 'overview' ? (
           <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -255,9 +254,8 @@ export default function ProjectDetail() {
                     <p className="mt-1 text-sm text-slate-500">{project.widgetEnabled ? 'The public widget is enabled for this project.' : 'The public widget is currently disabled.'}</p>
                   </div>
                   <span
-                    className={`rounded-full px-2.5 py-1 text-xs font-bold uppercase tracking-wider ${
-                      project.widgetEnabled ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
-                    }`}
+                    className={`rounded-full px-2.5 py-1 text-xs font-bold uppercase tracking-wider ${project.widgetEnabled ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
+                      }`}
                   >
                     {project.widgetEnabled ? 'Enabled' : 'Disabled'}
                   </span>
@@ -324,9 +322,8 @@ export default function ProjectDetail() {
                           <div className="flex flex-wrap items-center gap-2">
                             <p className="font-bold text-slate-900">{doc.title}</p>
                             <span
-                              className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-widest ${
-                                doc.status === 'PUBLISHED' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'
-                              }`}
+                              className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-widest ${doc.status === 'PUBLISHED' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'
+                                }`}
                             >
                               {humanizeEnum(doc.status)}
                             </span>

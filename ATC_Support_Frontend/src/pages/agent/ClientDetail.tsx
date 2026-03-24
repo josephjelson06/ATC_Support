@@ -226,45 +226,41 @@ export default function ClientDetail() {
         }
       />
 
-      <SectionTabs tabs={clientTabs} role={backendRole} />
-
-      {currentTab !== 'overview' ? (
-        <div className="flex flex-col items-start gap-6 rounded-3xl border border-slate-200 bg-white p-8 shadow-sm md:flex-row">
-          <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-3xl border border-slate-200 bg-slate-100">
-            <Building2 className="h-10 w-10 text-slate-400" />
-          </div>
-          <div className="flex-1">
-            <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
-              <div>
-                <div className="flex flex-wrap items-center gap-3">
-                  <h2 className="text-3xl font-bold text-slate-900">{client.name}</h2>
-                </div>
-                <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-slate-500">
-                  {client.industry ? <span>{client.industry}</span> : null}
-                  {client.city ? <span>| {client.city}</span> : null}
-                  {client.email ? <span>| {client.email}</span> : null}
-                  {client.phone ? <span>| {client.phone}</span> : null}
-                  <span>| Created {formatDate(client.createdAt)}</span>
-                  <span>
-                    | {client.projects.length} project{client.projects.length === 1 ? '' : 's'}
-                  </span>
-                </div>
+      <div className="flex flex-col items-start gap-6 rounded-3xl border border-slate-200 bg-white p-8 shadow-sm md:flex-row">
+        <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-3xl border border-slate-200 bg-slate-100">
+          <Building2 className="h-10 w-10 text-slate-400" />
+        </div>
+        <div className="flex-1">
+          <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
+            <div>
+              <div className="flex flex-wrap items-center gap-3">
+                <h2 className="text-3xl font-bold text-slate-900">{client.name}</h2>
+              </div>
+              <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-slate-500">
+                {client.industry ? <span>{client.industry}</span> : null}
+                {client.city ? <span>| {client.city}</span> : null}
+                {client.email ? <span>| {client.email}</span> : null}
+                {client.phone ? <span>| {client.phone}</span> : null}
+                <span>| Created {formatDate(client.createdAt)}</span>
+                <span>
+                  | {client.projects.length} project{client.projects.length === 1 ? '' : 's'}
+                </span>
               </div>
             </div>
-            <p className="mt-5 text-sm text-slate-500">
-              This view keeps the client business profile and linked delivery records in one operational page.
-            </p>
           </div>
+          <p className="mt-5 text-sm text-slate-500">
+            This view keeps the client business profile and linked delivery records in one operational page.
+          </p>
         </div>
-      ) : null}
+      </div>
 
-      {currentTab !== 'overview' ? (
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-          <DetailStat icon={Briefcase} label="Projects" value={String(client.projects.length)} accent="orange" />
-          <DetailStat icon={Users} label="Contacts" value={String(client.contacts.length)} accent="blue" />
-          <DetailStat icon={ShieldCheck} label="Active AMCs" value={String(activeAmcs.length)} accent="green" />
-        </div>
-      ) : null}
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+        <DetailStat icon={Briefcase} label="Projects" value={String(client.projects.length)} accent="orange" />
+        <DetailStat icon={Users} label="Contacts" value={String(client.contacts.length)} accent="blue" />
+        <DetailStat icon={ShieldCheck} label="Active AMCs" value={String(activeAmcs.length)} accent="green" />
+      </div>
+
+      <SectionTabs tabs={clientTabs} role={backendRole} />
 
       <div className="grid grid-cols-1 gap-6">
         {currentTab === 'projects' ? (

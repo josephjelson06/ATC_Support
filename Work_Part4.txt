@@ -11,11 +11,11 @@ To keep in Mind:
 
 ---------------------------------------------------------------------------
 
+- Collapse icon needs to be centralized (basically fix this icon)
+- Remove Account & Security from the Profile DropDown entirely -> (I'll do it myself - Just keep My Profile and Logout)
 Minor Changes:
 - The action tags (Assign To Me, Reassign) -> which are shown in the table must be colored -> so it is distinguishable from the other text in the table
 - Breadcrumbs needs to be added back again for navigation
-- Collapse icon needs to be centralized (basically fix this icon)
-- Remove Account & Security from the Profile DropDown entirely -> (I'll do it myself - Just keep My Profile and Logout)
 - Move the Search bar to towards the left side of the screen (near the sidebar)
 - Fix the dashboard ui and make it similar in theme with the other pages
 - Notification items must contain only unread notifications (if clicked marked as read - and remove from the list) 

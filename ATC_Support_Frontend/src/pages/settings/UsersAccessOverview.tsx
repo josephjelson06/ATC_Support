@@ -34,7 +34,14 @@ export default function UsersAccessOverview() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-4 py-4 sm:px-6 sm:py-6 xl:px-8">
-      <PageHeader title="Users & Access" description="Manage operator accounts, role definitions, and the live permission matrix." />
+      <PageHeader
+        title="Users & Access"
+        description="Manage operator accounts, role definitions, and the live permission matrix."
+        breadcrumbs={[
+          { label: 'Administration', to: appPaths.admin.usersAccess },
+          { label: 'Users & Access' },
+        ]}
+      />
 
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard icon={Users} label="Total Users" value={String(totalUsers)} accent="orange" />

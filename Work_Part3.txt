@@ -18,6 +18,8 @@ For SE2:
     - Left Section: Assigned Tickets (these are tickets assigned to SE2) -> so they are actionable in the dashboard itself
     - Right Section: Weekly stacked bar graph trends
 
+
+Then delete the unwanted dashboards there are.
 ---------------------------------------------------------------------------
 
 

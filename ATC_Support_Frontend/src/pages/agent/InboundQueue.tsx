@@ -307,6 +307,11 @@ export default function InboundQueue() {
       <PageHeader
         title={currentView.title}
         description={currentView.description}
+        breadcrumbs={[
+          { label: 'Operations', to: appPaths.dashboard },
+          { label: 'Tickets', to: appPaths.tickets.queue },
+          { label: currentView.title },
+        ]}
         actions={
           <button
             type="button"
@@ -486,7 +491,7 @@ export default function InboundQueue() {
                                   event.stopPropagation();
                                   void handleAssignToMe(ticket);
                                 }}
-                                className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-600 transition-colors hover:bg-slate-50"
+                                className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-blue-700 transition-colors hover:bg-blue-100"
                               >
                                 <UserPlus className="h-3 w-3" />
                                 Assign to Me
@@ -500,7 +505,7 @@ export default function InboundQueue() {
                                   event.stopPropagation();
                                   openAssignmentModal(ticket);
                                 }}
-                                className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-600 transition-colors hover:bg-slate-50"
+                                className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-orange-700 transition-colors hover:bg-orange-100"
                               >
                                 <RotateCcw className="h-3 w-3" />
                                 {ticket.assignedToId ? 'Reassign' : 'Assign'}

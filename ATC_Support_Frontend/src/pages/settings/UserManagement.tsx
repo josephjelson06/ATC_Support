@@ -11,6 +11,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { useAsyncData } from '../../hooks/useAsyncData';
 import { apiFetch } from '../../lib/api';
 import { formatDateTime, formatRoleLabel, humanizeEnum } from '../../lib/format';
+import { appPaths } from '../../lib/navigation';
 import { compareSortValues, getNextSortDirection, type SortDirection } from '../../lib/tableSort';
 import type {
   ApiProject,
@@ -156,6 +157,11 @@ export default function UserManagement() {
       <PageHeader
         title="Users"
         description="Manage PM and SE accounts, support levels, scope, assignment authority, and project membership."
+        breadcrumbs={[
+          { label: 'Administration', to: appPaths.admin.usersAccess },
+          { label: 'Users & Access', to: appPaths.admin.usersAccess },
+          { label: 'Users' },
+        ]}
         actions={
           canManageUsers ? (
             <button onClick={openCreateModal} className="inline-flex items-center gap-2 rounded-xl bg-orange-600 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-orange-700">

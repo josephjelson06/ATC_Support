@@ -1,4 +1,5 @@
 import PageHeader from '../../components/layout/PageHeader';
+import { appPaths } from '../../lib/navigation';
 
 const matrixRows = [
   { capability: 'View tickets', se1: 'All', se2: 'Queue + mine', se3: 'Project scope', pm: 'All' },
@@ -16,7 +17,15 @@ const matrixRows = [
 export default function PermissionMatrix() {
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-6">
-      <PageHeader title="Permission Matrix" description="Reference matrix for PM authority and SE1 / SE2 / SE3 operational behavior." />
+      <PageHeader
+        title="Permission Matrix"
+        description="Reference matrix for PM authority and SE1 / SE2 / SE3 operational behavior."
+        breadcrumbs={[
+          { label: 'Administration', to: appPaths.admin.usersAccess },
+          { label: 'Users & Access', to: appPaths.admin.usersAccess },
+          { label: 'Permission Matrix' },
+        ]}
+      />
 
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="overflow-x-auto">

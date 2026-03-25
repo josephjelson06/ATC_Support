@@ -39,6 +39,10 @@ export default function Reports() {
       <PageHeader
         title="Reports Overview"
         description="Live summaries from the backend to help you jump into reporting workflows."
+        breadcrumbs={[
+          { label: 'Insights', to: appPaths.reports.overview },
+          { label: 'Reports' },
+        ]}
       />
 
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">

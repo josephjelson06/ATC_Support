@@ -8,6 +8,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { useAsyncData } from '../../hooks/useAsyncData';
 import { apiFetch } from '../../lib/api';
 import { formatDateTime, getTicketPriorityClasses, getTicketStatusClasses, humanizeEnum } from '../../lib/format';
+import { appPaths } from '../../lib/navigation';
 import { compareSortValues, getNextSortDirection, type SortDirection } from '../../lib/tableSort';
 import type { ApiProject, ApiTicket, TicketStatus } from '../../lib/types';
 
@@ -200,6 +201,11 @@ export default function TicketReport() {
       <PageHeader
         title="Ticket Reports"
         description="Filter and export live ticket data from the backend report endpoint."
+        breadcrumbs={[
+          { label: 'Insights', to: appPaths.reports.overview },
+          { label: 'Reports', to: appPaths.reports.overview },
+          { label: 'Ticket Reports' },
+        ]}
         actions={
           <button
             onClick={handleExportCsv}

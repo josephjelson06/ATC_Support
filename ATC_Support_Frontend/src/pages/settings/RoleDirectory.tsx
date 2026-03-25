@@ -1,4 +1,5 @@
 import PageHeader from '../../components/layout/PageHeader';
+import { appPaths } from '../../lib/navigation';
 
 const roleDescriptions = [
   {
@@ -26,7 +27,15 @@ const roleDescriptions = [
 export default function RoleDirectory() {
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-6">
-      <PageHeader title="Roles" description="Live PM / SE role model with SE support levels, scope, and assignment authority." />
+      <PageHeader
+        title="Roles"
+        description="Live PM / SE role model with SE support levels, scope, and assignment authority."
+        breadcrumbs={[
+          { label: 'Administration', to: appPaths.admin.usersAccess },
+          { label: 'Users & Access', to: appPaths.admin.usersAccess },
+          { label: 'Roles' },
+        ]}
+      />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {roleDescriptions.map((role) => (

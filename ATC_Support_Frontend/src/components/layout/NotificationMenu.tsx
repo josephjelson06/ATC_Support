@@ -19,7 +19,7 @@ export default function NotificationMenu() {
   const [isMarkingAll, setIsMarkingAll] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const notificationsQuery = useAsyncData<NotificationListResponse>(
-    () => apiFetch<NotificationListResponse>(`/notifications?limit=${NOTIFICATION_LIMIT}`),
+    () => apiFetch<NotificationListResponse>(`/notifications?limit=${NOTIFICATION_LIMIT}&unreadOnly=true`),
     [],
   );
 
@@ -60,20 +60,8 @@ export default function NotificationMenu() {
         return current;
       }
 
-      let unreadDelta = 0;
-      const nextItems = current.items.map((notification) => {
-        if (notification.id !== notificationId || notification.isRead) {
-          return notification;
-        }
-
-        unreadDelta = 1;
-
-        return {
-          ...notification,
-          isRead: true,
-          readAt: new Date().toISOString(),
-        };
-      });
+      const nextItems = current.items.filter((notification) => notification.id !== notificationId);
+      const unreadDelta = current.items.length === nextItems.length ? 0 : 1;
 
       return {
         ...current,
@@ -144,11 +132,7 @@ export default function NotificationMenu() {
           ? {
               ...current,
               unreadCount: 0,
-              items: current.items.map((notification) => ({
-                ...notification,
-                isRead: true,
-                readAt: notification.readAt || new Date().toISOString(),
-              })),
+              items: [],
             }
           : current,
       );
@@ -218,14 +202,11 @@ export default function NotificationMenu() {
               notifications.map((notification) => (
                 <div
                   key={notification.id}
-                  className={clsx(
-                    'flex items-start gap-3 border-b border-slate-100 px-4 py-3 last:border-b-0',
-                    notification.isRead ? 'bg-white' : 'bg-orange-50/50',
-                  )}
+                  className={clsx('flex items-start gap-3 border-b border-slate-100 bg-orange-50/50 px-4 py-3 last:border-b-0')}
                 >
                   <button type="button" onClick={() => void handleOpenNotification(notification)} className="min-w-0 flex-1 text-left">
                     <div className="flex items-center gap-2">
-                      {!notification.isRead ? <span className="h-2 w-2 rounded-full bg-orange-600" /> : null}
+                      <span className="h-2 w-2 rounded-full bg-orange-600" />
                       <p className="truncate text-sm font-bold text-slate-900">{notification.title}</p>
                     </div>
                     <p className="mt-1 text-xs font-medium uppercase tracking-wider text-slate-400">{humanizeEnum(notification.type)}</p>
@@ -235,16 +216,14 @@ export default function NotificationMenu() {
                     </p>
                   </button>
 
-                  {!notification.isRead ? (
-                    <button
-                      type="button"
-                      onClick={() => void handleMarkRead(notification)}
-                      disabled={activeNotificationId === notification.id}
-                      className="shrink-0 rounded-lg px-2 py-1 text-[11px] font-bold text-slate-500 transition-colors hover:bg-white hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      Mark read
-                    </button>
-                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => void handleMarkRead(notification)}
+                    disabled={activeNotificationId === notification.id}
+                    className="shrink-0 rounded-lg px-2 py-1 text-[11px] font-bold text-slate-500 transition-colors hover:bg-white hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Mark read
+                  </button>
                 </div>
               ))
             )}

@@ -1,26 +1,35 @@
-import { AlertTriangle, CheckCircle2, Clock3, Ticket, Workflow } from 'lucide-react';
+import { useState } from 'react';
+import { AlertTriangle, CheckCircle2, Clock3, RotateCcw, Ticket, UserPlus, Workflow } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
 import PageHeader from '../../../components/layout/PageHeader';
+import { useModal } from '../../../contexts/ModalContext';
 import { useRole } from '../../../contexts/RoleContext';
+import { useToast } from '../../../contexts/ToastContext';
 import { useAsyncData } from '../../../hooks/useAsyncData';
-import { apiFetch } from '../../../lib/api';
-import { formatRelativeTime, getTicketPriorityClasses, getTicketStatusClasses, humanizeEnum } from '../../../lib/format';
+import { apiFetch, getErrorMessage } from '../../../lib/api';
+import { formatRelativeTime, formatRoleLabel, getTicketPriorityClasses, getTicketStatusClasses, humanizeEnum } from '../../../lib/format';
 import { appPaths } from '../../../lib/navigation';
-import type { ApiTicket } from '../../../lib/types';
+import type { ApiTicket, ApiUser, TicketPriority, TicketStatus } from '../../../lib/types';
 
 const DAY_WINDOW = 7;
 
-type TicketOpsDashboardProps = {
-  title: string;
-  description: string;
-  tableTitle: string;
-};
+type DashboardMode = 'dispatch' | 'assigned';
 
-export default function TicketOpsDashboard({ title, description, tableTitle }: TicketOpsDashboardProps) {
-  const { user } = useRole();
+export default function TicketOpsDashboard() {
+  const { backendRole, supportLevel, user, permissions } = useRole();
+  const { openModal, closeModal } = useModal();
+  const { showToast } = useToast();
   const ticketsQuery = useAsyncData(() => apiFetch<ApiTicket[]>('/tickets'), []);
+  const canAssignToSelf = permissions?.canAssignTicketsToSelf ?? false;
+  const canAssignToOthers = permissions?.canAssignTicketsToOthers ?? false;
+  const dashboardMode: DashboardMode = backendRole === 'PM' || supportLevel === 'SE1' ? 'dispatch' : 'assigned';
+
+  const assignableUsersQuery = useAsyncData(
+    async () => (canAssignToOthers ? apiFetch<ApiUser[]>('/users?status=ACTIVE') : []),
+    [canAssignToOthers],
+  );
 
   if (ticketsQuery.isLoading) {
     return <DashboardSkeleton />;
@@ -38,30 +47,34 @@ export default function TicketOpsDashboard({ title, description, tableTitle }: T
   sevenDaysAgo.setHours(0, 0, 0, 0);
 
   const tickets = ticketsQuery.data;
-  const assignedToMe = tickets.filter((ticket) => ticket.assignedTo?.id === user?.id && ticket.status !== 'RESOLVED').length;
-  const newToday = tickets.filter((ticket) => new Date(ticket.createdAt) >= todayStart).length;
-  const inProgress = tickets.filter((ticket) => ticket.status === 'IN_PROGRESS' || ticket.status === 'ASSIGNED' || ticket.status === 'REOPENED').length;
-  const waiting = tickets.filter((ticket) => ticket.status === 'WAITING_ON_CUSTOMER' || ticket.status === 'ESCALATED').length;
-  const resolvedThisWeek = tickets.filter((ticket) => ticket.status === 'RESOLVED' && ticket.resolvedAt && new Date(ticket.resolvedAt) >= sevenDaysAgo).length;
+  const scopedTickets = dashboardMode === 'dispatch' ? tickets : tickets.filter((ticket) => ticket.assignedTo?.id === user?.id);
+  const openTickets = scopedTickets.filter((ticket) => ticket.status !== 'RESOLVED');
+  const unassignedTickets = tickets.filter((ticket) => ticket.status !== 'RESOLVED' && !ticket.assignedToId);
+  const inProgressTickets = scopedTickets.filter((ticket) => ['ASSIGNED', 'IN_PROGRESS', 'REOPENED'].includes(ticket.status)).length;
+  const waitingTickets = scopedTickets.filter((ticket) => ['WAITING_ON_CUSTOMER', 'ESCALATED'].includes(ticket.status)).length;
+  const resolvedThisWeek = scopedTickets.filter((ticket) => ticket.status === 'RESOLVED' && ticket.resolvedAt && new Date(ticket.resolvedAt) >= sevenDaysAgo).length;
+  const newAssignedToMe = scopedTickets.filter((ticket) => ticket.status === 'ASSIGNED' || ticket.status === 'REOPENED').length;
 
-  const briefTickets = [...tickets]
-    .filter(
-      (ticket) =>
-        ticket.assignedTo?.id === user?.id ||
-        ticket.status === 'NEW' ||
-        ticket.status === 'ESCALATED' ||
-        ticket.status === 'WAITING_ON_CUSTOMER' ||
-        !ticket.assignedTo,
-    )
-    .sort((left, right) => {
-      const priorityRank = priorityWeight(right.priority) - priorityWeight(left.priority);
-      if (priorityRank !== 0) {
-        return priorityRank;
+  const tableTickets = [...openTickets].sort((left, right) => {
+    if (dashboardMode === 'dispatch') {
+      const unassignedRank = Number(Boolean(left.assignedToId)) - Number(Boolean(right.assignedToId));
+      if (unassignedRank !== 0) {
+        return unassignedRank;
       }
 
-      return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
-    })
-    .slice(0, 8);
+      const newStatusRank = Number(right.status === 'NEW') - Number(left.status === 'NEW');
+      if (newStatusRank !== 0) {
+        return newStatusRank;
+      }
+    }
+
+    const priorityRank = priorityWeight(right.priority) - priorityWeight(left.priority);
+    if (priorityRank !== 0) {
+      return priorityRank;
+    }
+
+    return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
+  }).slice(0, 8);
 
   const weeklyStackedData = Array.from({ length: DAY_WINDOW }, (_, index) => {
     const date = new Date(sevenDaysAgo);
@@ -69,7 +82,7 @@ export default function TicketOpsDashboard({ title, description, tableTitle }: T
     const nextDate = new Date(date);
     nextDate.setDate(date.getDate() + 1);
 
-    const dayTickets = tickets.filter((ticket) => {
+    const dayTickets = scopedTickets.filter((ticket) => {
       const createdAt = new Date(ticket.createdAt);
       return createdAt >= date && createdAt < nextDate;
     });
@@ -83,38 +96,136 @@ export default function TicketOpsDashboard({ title, description, tableTitle }: T
     };
   });
 
+  const config =
+    dashboardMode === 'dispatch'
+      ? {
+          title: 'Operations Dashboard',
+          description: 'Review open ticket load, dispatch unassigned work, and track weekly status trends.',
+          tableTitle: 'Open & Unassigned Tickets',
+          tableDescription: 'Unassigned work surfaces first so PM and SE1 can assign it directly from the dashboard.',
+          listPath: appPaths.tickets.queue,
+          listLabel: 'Open queue',
+          kpis: [
+            { label: 'Open Tickets', value: String(openTickets.length), note: 'Accessible unresolved workload', icon: Ticket, accent: 'orange' as const },
+            { label: 'Unassigned', value: String(unassignedTickets.length), note: 'Needs dispatch now', icon: UserPlus, accent: 'amber' as const },
+            { label: 'In Progress', value: String(inProgressTickets), note: 'Already in active workflow', icon: Workflow, accent: 'blue' as const },
+            { label: 'Waiting', value: String(waitingTickets), note: 'Customer or escalation hold', icon: Clock3, accent: 'slate' as const },
+            { label: 'Resolved', value: String(resolvedThisWeek), note: 'Resolved in last 7 days', icon: CheckCircle2, accent: 'green' as const },
+          ],
+        }
+      : {
+          title: 'Engineer Dashboard',
+          description: 'Focus on your assigned workload and review your weekly delivery trend.',
+          tableTitle: 'Assigned Tickets',
+          tableDescription: 'Tickets currently in your lane, sorted by urgency for quick action.',
+          listPath: appPaths.tickets.mine,
+          listLabel: 'Open my tickets',
+          kpis: [
+            { label: 'Assigned', value: String(openTickets.length), note: 'Currently owned by you', icon: Ticket, accent: 'orange' as const },
+            { label: 'New to You', value: String(newAssignedToMe), note: 'Assigned or reopened', icon: AlertTriangle, accent: 'amber' as const },
+            { label: 'In Progress', value: String(scopedTickets.filter((ticket) => ticket.status === 'IN_PROGRESS').length), note: 'Active engineering work', icon: Workflow, accent: 'blue' as const },
+            { label: 'Waiting', value: String(waitingTickets), note: 'Paused for customer input', icon: Clock3, accent: 'slate' as const },
+            { label: 'Resolved', value: String(resolvedThisWeek), note: 'Resolved in last 7 days', icon: CheckCircle2, accent: 'green' as const },
+          ],
+        };
+
+  const getAssignableUsersForTicket = (ticket: ApiTicket) =>
+    (assignableUsersQuery.data || [])
+      .filter((listedUser) => listedUser.status === 'ACTIVE')
+      .filter((listedUser) => {
+        if (listedUser.role === 'PM') {
+          return true;
+        }
+
+        if (listedUser.scopeMode !== 'PROJECT_SCOPED') {
+          return true;
+        }
+
+        return (listedUser.projectMemberships || []).some((membership) => membership.projectId === ticket.projectId);
+      })
+      .sort((left, right) =>
+        `${left.role}-${left.supportLevel || ''}-${left.name}`.localeCompare(`${right.role}-${right.supportLevel || ''}-${right.name}`),
+      );
+
+  const updateAssignment = async (ticketId: number, assignedToId: number | null | undefined, successMessage: string) => {
+    try {
+      await apiFetch(`/tickets/${ticketId}/assign`, {
+        method: 'POST',
+        body: assignedToId === undefined ? {} : { assignedToId },
+      });
+      await ticketsQuery.reload();
+      showToast('success', successMessage);
+    } catch (error) {
+      showToast('error', getErrorMessage(error));
+      throw error;
+    }
+  };
+
+  const handleAssignToMe = async (ticket: ApiTicket) => {
+    if (!user) {
+      return;
+    }
+
+    await updateAssignment(ticket.id, user.id, 'Ticket assigned to you.');
+  };
+
+  const openAssignmentModal = (ticket: ApiTicket) => {
+    openModal({
+      title: `Assign ${ticket.displayId}`,
+      size: 'sm',
+      content: (
+        <DashboardAssignmentModalContent
+          ticket={ticket}
+          currentUserId={user?.id ?? null}
+          canAssignToSelf={canAssignToSelf}
+          canAssignToOthers={canAssignToOthers}
+          assignableUsers={getAssignableUsersForTicket(ticket)}
+          isLoadingAssignees={assignableUsersQuery.isLoading}
+          onAssignToMe={() => void handleAssignToMe(ticket).then(closeModal)}
+          onAssignToUser={(assignedToId) => void updateAssignment(ticket.id, assignedToId, 'Ticket assignment updated.').then(closeModal)}
+          onReturnToQueue={() => void updateAssignment(ticket.id, null, 'Ticket returned to queue.').then(closeModal)}
+        />
+      ),
+    });
+  };
+
   return (
-    <div className="space-y-6 px-4 py-4 sm:px-6 sm:py-6 xl:px-8">
-      <PageHeader title={title} description={description} />
+    <div className="mx-auto max-w-7xl space-y-6 px-4 py-4 sm:px-6 sm:py-6 xl:px-8">
+      <PageHeader
+        title={config.title}
+        description={config.description}
+        breadcrumbs={[
+          { label: 'Operations', to: appPaths.dashboard },
+          { label: 'Dashboard' },
+        ]}
+      />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <KpiCard label="Assigned" value={String(assignedToMe)} note="Owned by you" icon={Ticket} accent="orange" />
-        <KpiCard label="New Today" value={String(newToday)} note={todayStart.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} icon={AlertTriangle} accent="amber" />
-        <KpiCard label="In Progress" value={String(inProgress)} note="Active workflow" icon={Workflow} accent="blue" />
-        <KpiCard label="Waiting" value={String(waiting)} note="Customer or escalation hold" icon={Clock3} accent="slate" />
-        <KpiCard label="Resolved" value={String(resolvedThisWeek)} note="Last 7 days" icon={CheckCircle2} accent="green" />
+        {config.kpis.map((kpi) => (
+          <KpiCard key={kpi.label} label={kpi.label} value={kpi.value} note={kpi.note} icon={kpi.icon} accent={kpi.accent} />
+        ))}
       </div>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.25fr),minmax(0,1fr)]">
-        <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex items-center justify-between border-b border-slate-100 px-6 py-5">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.2fr),minmax(0,1fr)]">
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-col gap-4 border-b border-slate-100 px-6 py-5 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <h2 className="text-xl font-black text-slate-900">{tableTitle}</h2>
-              <p className="mt-1 text-sm text-slate-500">Brief view for fast triage before opening full ticket detail.</p>
+              <h2 className="text-xl font-black text-slate-900">{config.tableTitle}</h2>
+              <p className="mt-1 text-sm text-slate-500">{config.tableDescription}</p>
             </div>
             <Link
-              to={appPaths.tickets.queue}
+              to={config.listPath}
               className="inline-flex items-center justify-center rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50"
             >
-              Open list
+              {config.listLabel}
             </Link>
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[680px] text-left">
+            <table className="w-full min-w-[760px] text-left">
               <thead className="border-b border-slate-100 bg-slate-50/80">
                 <tr>
-                  {['Ticket', 'Project', 'Priority', 'Status', 'Updated'].map((heading) => (
+                  {['Ticket', 'Client', 'Project', 'Status', 'Assigned To', 'Received'].map((heading) => (
                     <th key={heading} className="px-5 py-3 text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">
                       {heading}
                     </th>
@@ -122,32 +233,62 @@ export default function TicketOpsDashboard({ title, description, tableTitle }: T
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {briefTickets.length === 0 ? (
+                {tableTickets.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-5 py-10 text-sm text-slate-500">
-                      No tickets match the brief triage view right now.
+                    <td colSpan={6} className="px-5 py-10 text-sm text-slate-500">
+                      {dashboardMode === 'dispatch'
+                        ? 'No open tickets are waiting for dispatch right now.'
+                        : 'No assigned tickets are waiting on you right now.'}
                     </td>
                   </tr>
                 ) : (
-                  briefTickets.map((ticket) => (
+                  tableTickets.map((ticket) => (
                     <tr key={ticket.id} className="transition-colors hover:bg-slate-50">
-                      <td className="px-5 py-4">
-                        <Link to={appPaths.tickets.detail(ticket.id)} className="block">
-                          <p className="font-bold text-slate-900">{ticket.title}</p>
-                          <p className="mt-1 font-mono text-xs text-orange-600">{ticket.displayId}</p>
-                        </Link>
+                      <td className="px-5 py-4 align-top">
+                        <div className="space-y-2">
+                          <Link to={appPaths.tickets.detail(ticket.id)} className="block">
+                            <p className="font-bold text-slate-900 transition-colors hover:text-orange-600">{ticket.title}</p>
+                            <p className="mt-1 font-mono text-xs text-orange-600">{ticket.displayId}</p>
+                          </Link>
+                          {dashboardMode === 'dispatch' && ticket.status !== 'RESOLVED' ? (
+                            <div className="flex flex-wrap gap-2">
+                              {canAssignToSelf && user && ticket.assignedToId !== user.id ? (
+                                <button
+                                  type="button"
+                                  onClick={() => void handleAssignToMe(ticket)}
+                                className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-blue-700 transition-colors hover:bg-blue-100"
+                              >
+                                <UserPlus className="h-3 w-3" />
+                                Assign to Me
+                                </button>
+                              ) : null}
+                              {canAssignToOthers ? (
+                                <button
+                                  type="button"
+                                  onClick={() => openAssignmentModal(ticket)}
+                                className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-orange-700 transition-colors hover:bg-orange-100"
+                              >
+                                <RotateCcw className="h-3 w-3" />
+                                {ticket.assignedToId ? 'Reassign' : 'Assign'}
+                                </button>
+                              ) : null}
+                            </div>
+                          ) : null}
+                        </div>
                       </td>
+                      <td className="px-5 py-4 text-sm text-slate-600">{ticket.project?.client?.name || '-'}</td>
                       <td className="px-5 py-4 text-sm text-slate-600">{ticket.project?.name || '-'}</td>
                       <td className="px-5 py-4">
-                        <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${getTicketPriorityClasses(ticket.priority)}`}>
-                          {humanizeEnum(ticket.priority)}
-                        </span>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${getTicketStatusClasses(ticket.status)}`}>
+                            {humanizeEnum(ticket.status)}
+                          </span>
+                          <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${getTicketPriorityClasses(ticket.priority)}`}>
+                            {humanizeEnum(ticket.priority)}
+                          </span>
+                        </div>
                       </td>
-                      <td className="px-5 py-4">
-                        <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${getTicketStatusClasses(ticket.status)}`}>
-                          {humanizeEnum(ticket.status)}
-                        </span>
-                      </td>
+                      <td className="px-5 py-4 text-sm text-slate-600">{ticket.assignedTo?.name || 'Unassigned'}</td>
                       <td className="px-5 py-4 text-sm text-slate-500">{formatRelativeTime(ticket.createdAt)}</td>
                     </tr>
                   ))
@@ -157,10 +298,14 @@ export default function TicketOpsDashboard({ title, description, tableTitle }: T
           </div>
         </div>
 
-        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <p className="text-xs font-black uppercase tracking-[0.26em] text-slate-400">Weekly Status Mix</p>
           <h2 className="mt-2 text-xl font-black text-slate-900">Stacked ticket flow (7 days)</h2>
-          <p className="mt-1 text-sm text-slate-500">Created tickets split by current workflow state for quick trend reading.</p>
+          <p className="mt-1 text-sm text-slate-500">
+            {dashboardMode === 'dispatch'
+              ? 'Open queue movement across the last seven days.'
+              : 'Your assigned-ticket movement across the last seven days.'}
+          </p>
 
           <div className="mt-6 h-[340px]">
             <ResponsiveContainer width="100%" height="100%">
@@ -178,6 +323,109 @@ export default function TicketOpsDashboard({ title, description, tableTitle }: T
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function DashboardAssignmentModalContent({
+  ticket,
+  currentUserId,
+  canAssignToSelf,
+  canAssignToOthers,
+  assignableUsers,
+  isLoadingAssignees,
+  onAssignToMe,
+  onAssignToUser,
+  onReturnToQueue,
+}: {
+  ticket: ApiTicket;
+  currentUserId: number | null;
+  canAssignToSelf: boolean;
+  canAssignToOthers: boolean;
+  assignableUsers: ApiUser[];
+  isLoadingAssignees: boolean;
+  onAssignToMe: () => void;
+  onAssignToUser: (assignedToId: number) => void;
+  onReturnToQueue: () => void;
+}) {
+  const [selectedAssigneeId, setSelectedAssigneeId] = useState(ticket.assignedToId ? String(ticket.assignedToId) : '');
+  const showAssignToMe = canAssignToSelf && currentUserId && ticket.assignedToId !== currentUserId;
+  const canReturnToQueue = Boolean(ticket.assignedToId);
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+        <p className="text-sm font-bold text-slate-900">{ticket.title}</p>
+        <p className="mt-1 text-xs text-slate-500">
+          {ticket.displayId} | {ticket.project?.client?.name || 'No client'} | {ticket.project?.name || 'No project'}
+        </p>
+      </div>
+
+      {showAssignToMe ? (
+        <button
+          type="button"
+          onClick={onAssignToMe}
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+        >
+          <UserPlus className="h-4 w-4" />
+          Assign to Me
+        </button>
+      ) : null}
+
+      {canAssignToOthers ? (
+        <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Assign or Reassign</p>
+            <p className="mt-1 text-sm text-slate-600">Only active users inside ticket scope appear in this list.</p>
+          </div>
+
+          {isLoadingAssignees ? (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">Loading assignable users...</div>
+          ) : (
+            <>
+              <select
+                value={selectedAssigneeId}
+                onChange={(event) => setSelectedAssigneeId(event.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition-all focus:ring-2 focus:ring-orange-500"
+              >
+                <option value="">Select an assignee</option>
+                {assignableUsers.map((assignableUser) => (
+                  <option key={assignableUser.id} value={assignableUser.id}>
+                    {assignableUser.name} ({formatRoleLabel(assignableUser.role, assignableUser.supportLevel)})
+                  </option>
+                ))}
+              </select>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (!selectedAssigneeId) {
+                    return;
+                  }
+
+                  onAssignToUser(Number(selectedAssigneeId));
+                }}
+                disabled={!selectedAssigneeId}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-orange-700 disabled:cursor-not-allowed disabled:bg-orange-300"
+              >
+                <UserPlus className="h-4 w-4" />
+                {ticket.assignedToId ? 'Update Assignment' : 'Assign Ticket'}
+              </button>
+            </>
+          )}
+        </div>
+      ) : null}
+
+      {canReturnToQueue && canAssignToOthers ? (
+        <button
+          type="button"
+          onClick={onReturnToQueue}
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+        >
+          <RotateCcw className="h-4 w-4" />
+          Return to Queue
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -207,11 +455,11 @@ function KpiCard({
             : 'border-orange-200 bg-orange-50 text-orange-700';
 
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-400">{label}</p>
-          <p className="mt-3 text-4xl font-black text-slate-900">{value}</p>
+          <p className="mt-3 text-3xl font-black text-slate-900">{value}</p>
           <p className="mt-2 text-sm text-slate-500">{note}</p>
         </div>
         <div className={`flex h-12 w-12 items-center justify-center rounded-2xl border ${tone}`}>
@@ -260,7 +508,7 @@ function StackedTooltip({
   );
 }
 
-function priorityWeight(priority: ApiTicket['priority']) {
+function priorityWeight(priority: TicketPriority) {
   switch (priority) {
     case 'CRITICAL':
       return 4;
@@ -275,14 +523,14 @@ function priorityWeight(priority: ApiTicket['priority']) {
 
 function DashboardSkeleton() {
   return (
-    <div className="space-y-6 p-6 animate-pulse">
+    <div className="animate-pulse space-y-6 p-6">
       <div className="h-8 w-64 rounded-xl bg-slate-200" />
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
         {Array.from({ length: 5 }).map((_, index) => (
           <div key={index} className="h-36 rounded-3xl border border-slate-200 bg-white shadow-sm" />
         ))}
       </div>
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.25fr),minmax(0,1fr)]">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.2fr),minmax(0,1fr)]">
         <div className="h-96 rounded-3xl border border-slate-200 bg-white shadow-sm" />
         <div className="h-96 rounded-3xl border border-slate-200 bg-white shadow-sm" />
       </div>

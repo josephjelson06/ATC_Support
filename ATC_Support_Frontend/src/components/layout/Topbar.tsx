@@ -12,7 +12,7 @@ export default function Topbar() {
 
   return (
     <header className="sticky top-0 z-[90] flex h-16 flex-shrink-0 items-center justify-between border-b border-slate-200 bg-white/95 px-4 backdrop-blur sm:px-6">
-      <div className="flex items-center gap-2">
+      <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
         {!isDesktop ? (
           <button
             type="button"
@@ -23,11 +23,11 @@ export default function Topbar() {
             <Menu className="h-5 w-5" />
           </button>
         ) : null}
-      </div>
-
-      <div className="flex min-w-0 items-center gap-2 sm:gap-3 lg:gap-4">
         <QuickLookup role={user?.role ?? null} variant="desktop" />
         <QuickLookup role={user?.role ?? null} variant="mobile" />
+      </div>
+
+      <div className="flex shrink-0 items-center gap-2 sm:gap-3 lg:gap-4">
         <NotificationMenu />
         <UserMenu name={name} designation={designation} onLogout={logout} />
       </div>

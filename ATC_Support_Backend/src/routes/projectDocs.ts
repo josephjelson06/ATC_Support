@@ -1,13 +1,14 @@
-import { KnowledgeStatus, Role } from '@prisma/client';
+import { KnowledgeStatus } from '@prisma/client';
 import { Router } from 'express';
 import { z } from 'zod';
 
 import { prisma } from '../lib/prisma';
-import { requireRole } from '../middleware/role';
 import { validate } from '../middleware/validate';
+import type { AuthenticatedUser } from '../types/auth';
 import { assertProjectAccess } from '../utils/access';
-import { asyncHandler, parseId, notFound } from '../utils/http';
+import { asyncHandler, forbidden, parseId, notFound } from '../utils/http';
 import { serializeUser } from '../utils/serializers';
+import { canManageProjectKnowledge, safeUserSelect } from '../utils/userModel';
 
 const router = Router();
 
@@ -23,16 +24,15 @@ const updateDocSchema = createDocSchema.partial().refine((value) => Object.keys(
 
 const docInclude = {
   createdBy: {
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      role: true,
-      status: true,
-      createdAt: true,
-    },
+    select: safeUserSelect,
   },
 } as const;
+
+const assertProjectKnowledgePermission = (user: AuthenticatedUser | undefined) => {
+  if (!user || !canManageProjectKnowledge(user)) {
+    throw forbidden('You do not have permission to manage project docs.');
+  }
+};
 
 router.get(
   '/projects/:id/docs',
@@ -62,9 +62,9 @@ router.get(
 
 router.post(
   '/projects/:id/docs',
-  requireRole(Role.PM, Role.PL),
   validate(createDocSchema),
   asyncHandler(async (req, res) => {
+    assertProjectKnowledgePermission(req.user);
     const projectId = parseId(req.params.id, 'project id');
     await assertProjectAccess(req.user!, projectId);
     const payload = req.body as z.infer<typeof createDocSchema>;
@@ -89,9 +89,9 @@ router.post(
 
 router.patch(
   '/docs/:id',
-  requireRole(Role.PM, Role.PL),
   validate(updateDocSchema),
   asyncHandler(async (req, res) => {
+    assertProjectKnowledgePermission(req.user);
     const docId = parseId(req.params.id, 'doc id');
     const payload = req.body as z.infer<typeof updateDocSchema>;
     const existingDoc = await prisma.projectDoc.findUnique({
@@ -130,8 +130,8 @@ router.patch(
 
 router.delete(
   '/docs/:id',
-  requireRole(Role.PM, Role.PL),
   asyncHandler(async (req, res) => {
+    assertProjectKnowledgePermission(req.user);
     const docId = parseId(req.params.id, 'doc id');
     const existingDoc = await prisma.projectDoc.findUnique({
       where: {

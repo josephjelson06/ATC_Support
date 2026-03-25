@@ -93,8 +93,8 @@ export function ProjectCrudPanel({ mode, project, onCompleted, onDeleted }: Proj
     [],
   );
 
-  const projectLeads = useMemo(
-    () => (dependenciesQuery.data?.users || []).filter((user) => user.role === 'PL'),
+  const projectSpecialists = useMemo(
+    () => (dependenciesQuery.data?.users || []).filter((user) => user.role === 'SE' && user.supportLevel === 'SE3'),
     [dependenciesQuery.data?.users],
   );
 
@@ -228,11 +228,11 @@ export function ProjectCrudPanel({ mode, project, onCompleted, onDeleted }: Proj
   };
 
   if (dependenciesQuery.isLoading) {
-    return <PanelState title="Loading project options" description="Fetching clients and project leads from the backend." />;
+    return <PanelState title="Loading project options" description="Fetching clients and project specialists from the backend." />;
   }
 
   if (dependenciesQuery.error || !dependenciesQuery.data) {
-    return <PanelError message={dependenciesQuery.error || 'Unable to load clients and project leads.'} onRetry={dependenciesQuery.reload} />;
+    return <PanelError message={dependenciesQuery.error || 'Unable to load clients and project specialists.'} onRetry={dependenciesQuery.reload} />;
   }
 
   const hasClients = dependenciesQuery.data.clients.length > 0;
@@ -260,16 +260,16 @@ export function ProjectCrudPanel({ mode, project, onCompleted, onDeleted }: Proj
             ))}
           </select>
         </Field>
-        <Field label="Project Lead">
+        <Field label="Project Specialist">
           <select
             value={form.assignedToId}
             onChange={handleChange('assignedToId')}
             className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none transition-all focus:ring-2 focus:ring-orange-500"
           >
             <option value="">Unassigned</option>
-            {projectLeads.map((user) => (
+            {projectSpecialists.map((user) => (
               <option key={user.id} value={String(user.id)}>
-                {user.name} ({formatRoleLabel(user.role as BackendRole)})
+                {user.name} ({formatRoleLabel(user.role as BackendRole, user.supportLevel)})
               </option>
             ))}
           </select>

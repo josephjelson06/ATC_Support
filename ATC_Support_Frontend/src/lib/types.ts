@@ -1,4 +1,7 @@
-export type BackendRole = 'PM' | 'PL' | 'SE';
+export type BackendRole = 'PM' | 'SE';
+export type BackendSupportLevel = 'SE1' | 'SE2' | 'SE3';
+export type ScopeMode = 'GLOBAL' | 'PROJECT_SCOPED';
+export type AssignmentAuthority = 'SELF_ONLY' | 'SELF_AND_OTHERS';
 export type BackendUserStatus = 'ACTIVE' | 'INACTIVE';
 export type ClientStatus = 'ACTIVE' | 'INACTIVE';
 export type ProjectStatus = 'ACTIVE' | 'INACTIVE';
@@ -23,14 +26,45 @@ export type NotificationType =
 export type TicketEmailDirection = 'OUTBOUND' | 'INBOUND';
 export type TicketEmailStatus = 'SENT' | 'LOGGED' | 'RECEIVED' | 'FAILED';
 
+export interface UserPermissions {
+  canViewClients: boolean;
+  canViewProjects: boolean;
+  canViewReports: boolean;
+  canViewUsersAccess: boolean;
+  canManageClients: boolean;
+  canManageProjects: boolean;
+  canManageUsers: boolean;
+  canManageProjectKnowledge: boolean;
+  canCreateTickets: boolean;
+  canAssignTicketsToSelf: boolean;
+  canAssignTicketsToOthers: boolean;
+  canEscalateTickets: boolean;
+  canMoveTicketsToWaiting: boolean;
+  canResolveTickets: boolean;
+  canReopenTickets: boolean;
+  hasGlobalProjectScope: boolean;
+  hasProjectScopedAccess: boolean;
+}
+
+export interface ApiProjectMembership {
+  projectId: number;
+  createdAt: string;
+  project?: ApiProject | null;
+}
+
 export interface ApiUser {
   id: number;
   displayId: string;
   name: string;
   email: string;
   role: BackendRole;
+  supportLevel?: BackendSupportLevel | null;
+  scopeMode: ScopeMode;
+  assignmentAuthority: AssignmentAuthority;
   status: BackendUserStatus;
   createdAt: string;
+  permissions: UserPermissions;
+  projectMemberships?: ApiProjectMembership[];
 }
 
 export interface AuthResponse {
@@ -120,6 +154,11 @@ export interface ApiProject {
   createdAt: string;
   client?: ApiClient | null;
   assignedTo?: ApiUser | null;
+  memberships?: Array<{
+    userId: number;
+    createdAt: string;
+    user?: ApiUser | null;
+  }>;
 }
 
 export interface ApiAmc {

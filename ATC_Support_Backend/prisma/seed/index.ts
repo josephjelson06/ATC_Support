@@ -3,6 +3,7 @@ import 'dotenv/config';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 
+import { getAdapterConnectionString, getAdapterSchema } from '../../src/lib/databaseUrl';
 import { seedSmallMode } from './small';
 
 const parseMode = () => {
@@ -13,7 +14,9 @@ const parseMode = () => {
 export async function runSeed() {
   const prisma = new PrismaClient({
     adapter: new PrismaPg({
-      connectionString: process.env.DATABASE_URL ?? '',
+      connectionString: getAdapterConnectionString(process.env.DATABASE_URL ?? ''),
+    }, {
+      schema: getAdapterSchema(process.env.DATABASE_URL ?? ''),
     }),
   });
 

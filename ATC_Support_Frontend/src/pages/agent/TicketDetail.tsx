@@ -26,7 +26,7 @@ import { useRole } from '../../contexts/RoleContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useAsyncData } from '../../hooks/useAsyncData';
 import { apiDownloadFile, apiFetch, getErrorMessage } from '../../lib/api';
-import { formatBytes, formatDateTime, formatRelativeTime, getTicketPriorityClasses, getTicketStatusClasses, humanizeEnum } from '../../lib/format';
+import { formatBytes, formatDateTime, formatRelativeTime, formatRoleLabel, getTicketPriorityClasses, getTicketStatusClasses, humanizeEnum } from '../../lib/format';
 import { appPaths } from '../../lib/navigation';
 import type {
   ApiEscalationHistory,
@@ -34,6 +34,7 @@ import type {
   ApiTicketAttachment,
   ApiTicketEmail,
   ApiTicketMessage,
+  ApiUser,
   TicketDetailTab,
   TicketMessageType,
 } from '../../lib/types';
@@ -57,7 +58,7 @@ export default function TicketDetail() {
   const { id, tab } = useParams();
   const ticketId = Number(id);
   const currentTab = detailTabs.includes((tab as TicketDetailTab) || 'summary') ? ((tab as TicketDetailTab) || 'summary') : 'summary';
-  const { role, user, backendRole } = useRole();
+  const { user, backendRole, permissions } = useRole();
   const { showToast } = useToast();
   const { openModal, closeModal } = useModal();
   const [interactionType, setInteractionType] = useState<'reply' | 'note'>('reply');
@@ -67,8 +68,19 @@ export default function TicketDetail() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const composerRef = useRef<HTMLDivElement | null>(null);
   const ticketQuery = useAsyncData(() => apiFetch<ApiTicket>(`/tickets/${ticketId}`), [ticketId]);
+  const assignableUsersQuery = useAsyncData(
+    async () => (permissions?.canAssignTicketsToOthers ? apiFetch<ApiUser[]>('/users?status=ACTIVE') : []),
+    [permissions?.canAssignTicketsToOthers],
+  );
 
-  const isReadOnly = role === 'Project Manager';
+  const canAssignToSelf = permissions?.canAssignTicketsToSelf ?? false;
+  const canAssignToOthers = permissions?.canAssignTicketsToOthers ?? false;
+  const canMoveToWaitingByPermission = permissions?.canMoveTicketsToWaiting ?? false;
+  const canResolveByPermission = permissions?.canResolveTickets ?? false;
+  const canReopenByPermission = permissions?.canReopenTickets ?? false;
+  const canEscalateByPermission = permissions?.canEscalateTickets ?? false;
+  const canWriteTicket = canAssignToSelf || canAssignToOthers || canMoveToWaitingByPermission || canResolveByPermission || canReopenByPermission || canEscalateByPermission;
+  const isReadOnly = !canWriteTicket;
 
   const ticketMessages = useMemo(() => (ticketQuery.data?.messages || []).slice(), [ticketQuery.data?.messages]);
   const transcriptMessages = useMemo(
@@ -97,6 +109,38 @@ export default function TicketDetail() {
 
     return [...messageEntries, ...escalationEntries].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [ticketMessages, ticketQuery.data?.escalationHistory]);
+  const assignableUsers = useMemo(
+    () =>
+      (assignableUsersQuery.data || [])
+        .filter((listedUser) => listedUser.status === 'ACTIVE')
+        .filter((listedUser) => {
+          if (listedUser.role === 'PM') {
+            return true;
+          }
+
+          if (listedUser.scopeMode !== 'PROJECT_SCOPED') {
+            return true;
+          }
+
+          return (listedUser.projectMemberships || []).some((membership) => membership.projectId === ticketQuery.data?.projectId);
+        })
+        .sort((left, right) =>
+          `${left.role}-${left.supportLevel || ''}-${left.name}`.localeCompare(`${right.role}-${right.supportLevel || ''}-${right.name}`),
+        ),
+    [assignableUsersQuery.data, ticketQuery.data?.projectId],
+  );
+  const canMoveToWaiting = Boolean(
+    ticketQuery.data && canMoveToWaitingByPermission && ticketQuery.data.status !== 'RESOLVED' && ticketQuery.data.status !== 'WAITING_ON_CUSTOMER',
+  );
+  const canAssignToSelfOnTicket = Boolean(ticketQuery.data && canAssignToSelf && ticketQuery.data.status !== 'RESOLVED');
+  const canAssignToOthersOnTicket = Boolean(ticketQuery.data && canAssignToOthers && ticketQuery.data.status !== 'RESOLVED');
+  const canStartWork = Boolean(ticketQuery.data && !isReadOnly && ticketQuery.data.status !== 'RESOLVED');
+  const canResolve = Boolean(ticketQuery.data && canResolveByPermission && ticketQuery.data.status !== 'RESOLVED');
+  const canReopen = Boolean(ticketQuery.data && canReopenByPermission && ticketQuery.data.status === 'RESOLVED');
+  const canEscalate = Boolean(ticketQuery.data && canEscalateByPermission && ticketQuery.data.status !== 'RESOLVED' && ticketQuery.data.project?.assignedToId);
+  const canReturnToQueue = Boolean(
+    ticketQuery.data?.status !== 'RESOLVED' && ticketQuery.data?.assignedToId && (canAssignToOthers || (user && ticketQuery.data.assignedToId === user.id)),
+  );
 
   const resetComposer = () => {
     setMessageText('');
@@ -118,6 +162,16 @@ export default function TicketDetail() {
   const handleAssignToMe = async () => {
     if (!user || isReadOnly) return;
     await performTicketAction(`/tickets/${ticketId}/assign`, { assignedToId: user.id }, 'Ticket assigned successfully.');
+  };
+
+  const handleAssignToUser = async (assignedToId: number) => {
+    if (isReadOnly) return;
+    await performTicketAction(`/tickets/${ticketId}/assign`, { assignedToId }, 'Ticket assignment updated.');
+  };
+
+  const handleReturnToQueue = async () => {
+    if (isReadOnly) return;
+    await performTicketAction(`/tickets/${ticketId}/assign`, { assignedToId: null }, 'Ticket returned to the queue.');
   };
 
   const handleStartWork = async () => {
@@ -146,8 +200,8 @@ export default function TicketDetail() {
   };
 
   const handleEscalate = async () => {
-    const note = window.prompt('Optional escalation note for the project lead:', '') || undefined;
-    await performTicketAction(`/tickets/${ticketId}/escalate`, note?.trim() ? { note: note.trim() } : undefined, 'Ticket escalated to the project lead.');
+    const note = window.prompt('Optional escalation note for the project specialist:', '') || undefined;
+    await performTicketAction(`/tickets/${ticketId}/escalate`, note?.trim() ? { note: note.trim() } : undefined, 'Ticket escalated to the project specialist.');
   };
 
   const jumpToComposer = (nextType: 'reply' | 'note') => {
@@ -165,70 +219,29 @@ export default function TicketDetail() {
       title: 'Change Ticket Status',
       size: 'sm',
       content: (
-        <div className="space-y-3">
-          <p className="text-sm text-slate-500">Choose the next action for this ticket.</p>
-          <div className="space-y-2">
-            {!isReadOnly && user ? (
-              <button
-                onClick={() => void handleAssignToMe().then(closeModal)}
-                className="flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
-              >
-                <UserPlus className="h-4 w-4" />
-                Assign to Me
-              </button>
-            ) : null}
-            {!isReadOnly ? (
-              <button
-                onClick={() => void handleStartWork().then(closeModal)}
-                className="flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
-              >
-                <PlayCircle className="h-4 w-4" />
-                Start Work
-              </button>
-            ) : null}
-            {!isReadOnly && canMoveToWaiting ? (
-              <button
-                onClick={() => void handleWaitingOnCustomer().then(closeModal)}
-                className="flex w-full items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-800 transition-colors hover:bg-amber-100"
-              >
-                <Users className="h-4 w-4" />
-                Waiting on Customer
-              </button>
-            ) : null}
-            {!isReadOnly ? (
-              <button
-                onClick={() => void handleResolve().then(closeModal)}
-                className="flex w-full items-center gap-2 rounded-xl bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-orange-700"
-              >
-                <CheckCircle2 className="h-4 w-4" />
-                Mark as Resolved
-              </button>
-            ) : null}
-            {!isReadOnly && canReopen ? (
-              <button
-                onClick={() => void handleReopen().then(closeModal)}
-                className="flex w-full items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-700 transition-colors hover:bg-rose-100"
-              >
-                <RotateCcw className="h-4 w-4" />
-                Reopen Ticket
-              </button>
-            ) : null}
-            {!isReadOnly && role === 'Support Engineer' ? (
-              <button
-                onClick={() => void handleEscalate().then(closeModal)}
-                className="flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
-              >
-                <AlertCircle className="h-4 w-4" />
-                Escalate to Project Lead
-              </button>
-            ) : null}
-            {isReadOnly ? (
-              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
-                Status updates are disabled for this role.
-              </div>
-            ) : null}
-          </div>
-        </div>
+        <TicketStatusModalContent
+          currentUserId={user?.id ?? null}
+          currentAssigneeId={ticketQuery.data?.assignedToId ?? null}
+          canAssignToSelf={canAssignToSelfOnTicket}
+          canAssignToOthers={canAssignToOthersOnTicket}
+          canReturnToQueue={canReturnToQueue}
+          canStartWork={canStartWork}
+          canMoveToWaiting={canMoveToWaiting}
+          canResolve={canResolve}
+          canReopen={canReopen}
+          canEscalate={canEscalate}
+          isReadOnly={isReadOnly}
+          assignableUsers={assignableUsers}
+          isLoadingAssignees={assignableUsersQuery.isLoading}
+          onAssignToMe={() => void handleAssignToMe().then(closeModal)}
+          onAssignToUser={(assignedToId) => void handleAssignToUser(assignedToId).then(closeModal)}
+          onReturnToQueue={() => void handleReturnToQueue().then(closeModal)}
+          onStartWork={() => void handleStartWork().then(closeModal)}
+          onWaitingOnCustomer={() => void handleWaitingOnCustomer().then(closeModal)}
+          onResolve={() => void handleResolve().then(closeModal)}
+          onReopen={() => void handleReopen().then(closeModal)}
+          onEscalate={() => void handleEscalate().then(closeModal)}
+        />
       ),
     });
   };
@@ -286,8 +299,6 @@ export default function TicketDetail() {
   }
 
   const ticket = ticketQuery.data;
-  const canMoveToWaiting = !isReadOnly && ticket.status !== 'RESOLVED' && ticket.status !== 'WAITING_ON_CUSTOMER';
-  const canReopen = !isReadOnly && ticket.status === 'RESOLVED';
   const requesterName = ticket.requesterName || ticket.chatSession?.clientName || 'Unknown requester';
   const requesterEmail = ticket.requesterEmail || ticket.chatSession?.clientEmail || null;
   const ticketTabs = detailTabs.map((detailTab) => ({ label: tabLabels[detailTab], to: appPaths.tickets.detail(ticketId, detailTab) }));
@@ -668,50 +679,168 @@ export default function TicketDetail() {
 
       <SectionTabs tabs={ticketTabs} role={backendRole} />
 
-      <div className={clsx('grid grid-cols-1 gap-6', currentTab === 'summary' && 'xl:grid-cols-[minmax(0,1fr),340px]')}>
-        <div className="min-w-0 space-y-6">{mainContent}</div>
+      <div className="space-y-6">{mainContent}</div>
+    </div>
+  );
+}
 
-        {currentTab === 'summary' ? (
-          <aside className="space-y-6 xl:sticky xl:top-6 xl:self-start">
-            {/* <DetailCard eyebrow="Actions" title="Ticket Actions" description="Move the ticket forward from this summary workspace.">
-              {!isReadOnly ? (
-                <div className="space-y-3">
-                  <button onClick={() => void handleAssignToMe()} className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-100 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-200">
-                    <UserPlus className="h-4 w-4" />
-                    Assign to Me
-                  </button>
-                  <button onClick={() => void handleStartWork()} className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50">
-                    <PlayCircle className="h-4 w-4" />
-                    Start Work
-                  </button>
-                  {canMoveToWaiting ? (
-                    <button onClick={() => void handleWaitingOnCustomer()} className="flex w-full items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 py-2.5 text-sm font-bold text-amber-800 transition-colors hover:bg-amber-100">
-                      <Users className="h-4 w-4" />
-                      Waiting on Customer
-                    </button>
-                  ) : null}
-                  <button onClick={() => void handleResolve()} className="flex w-full items-center justify-center gap-2 rounded-xl bg-orange-600 py-2.5 text-sm font-bold text-white transition-colors hover:bg-orange-700">
-                    <CheckCircle2 className="h-4 w-4" />
-                    Mark as Resolved
-                  </button>
-                  {canReopen ? (
-                    <button onClick={() => void handleReopen()} className="flex w-full items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50 py-2.5 text-sm font-bold text-rose-700 transition-colors hover:bg-rose-100">
-                      <RotateCcw className="h-4 w-4" />
-                      Reopen Ticket
-                    </button>
-                  ) : null}
-                  {role === 'Support Engineer' ? (
-                    <button onClick={() => void handleEscalate()} className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50">
-                      <AlertCircle className="h-4 w-4" />
-                      Escalate to Project Lead
-                    </button>
-                  ) : null}
-                </div>
-              ) : (
-                <p className="text-sm leading-relaxed text-slate-600">Project managers can review the ticket here, but ticket state changes and replies are disabled.</p>
-              )}
-            </DetailCard> */}
-          </aside>
+function TicketStatusModalContent({
+  currentUserId,
+  currentAssigneeId,
+  canAssignToSelf,
+  canAssignToOthers,
+  canReturnToQueue,
+  canStartWork,
+  canMoveToWaiting,
+  canResolve,
+  canReopen,
+  canEscalate,
+  isReadOnly,
+  assignableUsers,
+  isLoadingAssignees,
+  onAssignToMe,
+  onAssignToUser,
+  onReturnToQueue,
+  onStartWork,
+  onWaitingOnCustomer,
+  onResolve,
+  onReopen,
+  onEscalate,
+}: {
+  currentUserId: number | null;
+  currentAssigneeId: number | null;
+  canAssignToSelf: boolean;
+  canAssignToOthers: boolean;
+  canReturnToQueue: boolean;
+  canStartWork: boolean;
+  canMoveToWaiting: boolean;
+  canResolve: boolean;
+  canReopen: boolean;
+  canEscalate: boolean;
+  isReadOnly: boolean;
+  assignableUsers: ApiUser[];
+  isLoadingAssignees: boolean;
+  onAssignToMe: () => void;
+  onAssignToUser: (assignedToId: number) => void;
+  onReturnToQueue: () => void;
+  onStartWork: () => void;
+  onWaitingOnCustomer: () => void;
+  onResolve: () => void;
+  onReopen: () => void;
+  onEscalate: () => void;
+}) {
+  const [selectedAssigneeId, setSelectedAssigneeId] = useState(currentAssigneeId ? String(currentAssigneeId) : '');
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-slate-500">Choose the next action for this ticket.</p>
+
+      {canAssignToOthers ? (
+        <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Assignment</p>
+            <p className="mt-1 text-sm text-slate-600">PM and SE1 can assign or reassign ownership directly from here.</p>
+          </div>
+          {isLoadingAssignees ? (
+            <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500">Loading assignable users...</div>
+          ) : (
+            <>
+              <select
+                value={selectedAssigneeId}
+                onChange={(event) => setSelectedAssigneeId(event.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition-all focus:ring-2 focus:ring-orange-500"
+              >
+                <option value="">Select an assignee</option>
+                {assignableUsers.map((assignableUser) => (
+                  <option key={assignableUser.id} value={assignableUser.id}>
+                    {assignableUser.name} ({formatRoleLabel(assignableUser.role, assignableUser.supportLevel)})
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={() => {
+                  if (!selectedAssigneeId) return;
+                  onAssignToUser(Number(selectedAssigneeId));
+                }}
+                disabled={!selectedAssigneeId}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <UserPlus className="h-4 w-4" />
+                {currentAssigneeId ? 'Reassign Ticket' : 'Assign Ticket'}
+              </button>
+            </>
+          )}
+        </div>
+      ) : null}
+
+      <div className="space-y-2">
+        {canAssignToSelf && currentUserId && currentAssigneeId !== currentUserId ? (
+          <button
+            onClick={onAssignToMe}
+            className="flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+          >
+            <UserPlus className="h-4 w-4" />
+            Assign to Me
+          </button>
+        ) : null}
+        {canReturnToQueue ? (
+          <button
+            onClick={onReturnToQueue}
+            className="flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+          >
+            <RotateCcw className="h-4 w-4" />
+            Return to Queue
+          </button>
+        ) : null}
+        {canStartWork ? (
+          <button
+            onClick={onStartWork}
+            className="flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+          >
+            <PlayCircle className="h-4 w-4" />
+            Start Work
+          </button>
+        ) : null}
+        {canMoveToWaiting ? (
+          <button
+            onClick={onWaitingOnCustomer}
+            className="flex w-full items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-800 transition-colors hover:bg-amber-100"
+          >
+            <Users className="h-4 w-4" />
+            Waiting on Customer
+          </button>
+        ) : null}
+        {canResolve ? (
+          <button
+            onClick={onResolve}
+            className="flex w-full items-center gap-2 rounded-xl bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-orange-700"
+          >
+            <CheckCircle2 className="h-4 w-4" />
+            Mark as Resolved
+          </button>
+        ) : null}
+        {canReopen ? (
+          <button
+            onClick={onReopen}
+            className="flex w-full items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-700 transition-colors hover:bg-rose-100"
+          >
+            <RotateCcw className="h-4 w-4" />
+            Reopen Ticket
+          </button>
+        ) : null}
+        {canEscalate ? (
+          <button
+            onClick={onEscalate}
+            className="flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+          >
+            <AlertCircle className="h-4 w-4" />
+            Escalate to Project Specialist
+          </button>
+        ) : null}
+        {isReadOnly ? (
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+            Ticket state changes are disabled for this account.
+          </div>
         ) : null}
       </div>
     </div>

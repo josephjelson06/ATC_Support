@@ -7,8 +7,8 @@ import { getErrorMessage } from '../../lib/api';
 
 const seededAccounts = [
   { label: 'Project Manager', email: 'pm@atc.com', password: 'password' },
-  { label: 'Project Lead', email: 'pl1@atc.com', password: 'password' },
-  { label: 'Support Engineer', email: 'se@atc.com', password: 'password' },
+  { label: 'Support Engineer 1', email: 'se@atc.com', password: 'password' },
+  { label: 'Support Engineer 3', email: 'se3@atc.com', password: 'password' },
 ];
 
 export default function LoginPage() {

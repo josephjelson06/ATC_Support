@@ -1,4 +1,5 @@
 import { withDisplayId } from './idPrefix';
+import { buildUserPermissions } from './userModel';
 
 type AnyRecord = {
   id: number;
@@ -15,7 +16,37 @@ export const serializeUser = <T extends AnyRecord | null | undefined>(user: T) =
     return null;
   }
 
-  return withDisplayId(withoutPasswordHash(user), 'USR');
+  const safeUser = withDisplayId(withoutPasswordHash(user), 'USR') as Record<string, unknown>;
+
+  if (
+    typeof safeUser.role === 'string' &&
+    typeof safeUser.scopeMode === 'string' &&
+    typeof safeUser.assignmentAuthority === 'string'
+  ) {
+    safeUser.permissions = buildUserPermissions({
+      role: safeUser.role as never,
+      supportLevel: (safeUser.supportLevel as never) ?? null,
+      scopeMode: safeUser.scopeMode as never,
+      assignmentAuthority: safeUser.assignmentAuthority as never,
+    });
+  }
+
+  if ('projectMemberships' in safeUser && Array.isArray(safeUser.projectMemberships)) {
+    safeUser.projectMemberships = safeUser.projectMemberships.map((membership) => {
+      const projectMembership = membership as Record<string, unknown>;
+
+      return {
+        projectId: projectMembership.projectId,
+        createdAt: projectMembership.createdAt,
+        project:
+          'project' in projectMembership && projectMembership.project
+            ? serializeProject(projectMembership.project as AnyRecord | null | undefined)
+            : null,
+      };
+    });
+  }
+
+  return safeUser;
 };
 
 export const serializeClient = <T extends AnyRecord | null | undefined>(client: T) => {
@@ -45,6 +76,21 @@ export const serializeProject = <T extends AnyRecord | null | undefined>(project
 
   if ('assignedTo' in project) {
     nextProject.assignedTo = serializeUser(project.assignedTo as AnyRecord | null | undefined);
+  }
+
+  if ('memberships' in project && Array.isArray(project.memberships)) {
+    nextProject.memberships = project.memberships.map((membership) => {
+      const projectMembership = membership as Record<string, unknown>;
+
+      return {
+        userId: projectMembership.userId,
+        createdAt: projectMembership.createdAt,
+        user:
+          'user' in projectMembership && projectMembership.user
+            ? serializeUser(projectMembership.user as AnyRecord | null | undefined)
+            : null,
+      };
+    });
   }
 
   return nextProject;

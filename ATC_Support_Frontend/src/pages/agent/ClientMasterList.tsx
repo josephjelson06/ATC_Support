@@ -21,7 +21,7 @@ const PAGE_SIZE = 8;
 export default function ClientMasterList() {
   const navigate = useNavigate();
   const { openModal } = useModal();
-  const { backendRole } = useRole();
+  const { permissions } = useRole();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | ClientStatus>('ALL');
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -59,7 +59,7 @@ export default function ClientMasterList() {
     [page, deferredSearch, statusFilter],
   );
 
-  const canManageClients = backendRole === 'PM';
+  const canManageClients = permissions?.canManageClients ?? false;
   const clientPage = clientsQuery.data?.clients;
   const tickets = clientsQuery.data?.tickets || [];
   const clientItems = clientPage?.items || [];

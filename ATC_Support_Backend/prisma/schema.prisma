@@ -8,8 +8,23 @@ datasource db {
 
 enum Role {
   PM
-  PL
   SE
+}
+
+enum SupportLevel {
+  SE1
+  SE2
+  SE3
+}
+
+enum ScopeMode {
+  GLOBAL
+  PROJECT_SCOPED
+}
+
+enum AssignmentAuthority {
+  SELF_ONLY
+  SELF_AND_OTHERS
 }
 
 enum UserStatus {
@@ -103,9 +118,13 @@ model User {
   email                   String              @unique
   passwordHash            String
   role                    Role
+  supportLevel            SupportLevel?
+  scopeMode               ScopeMode           @default(GLOBAL)
+  assignmentAuthority     AssignmentAuthority @default(SELF_ONLY)
   status                  UserStatus          @default(ACTIVE)
   createdAt               DateTime            @default(now())
   assignedProjects        Project[]           @relation("ProjectLead")
+  projectMemberships      ProjectMember[]
   assignedTickets         Ticket[]            @relation("TicketAssignee")
   ticketMessages          TicketMessage[]
   ticketAttachments       TicketAttachment[]  @relation("TicketAttachmentUploader")
@@ -116,6 +135,8 @@ model User {
   ticketEmails            TicketEmail[]       @relation("TicketEmailActor")
 
   @@index([role])
+  @@index([supportLevel])
+  @@index([scopeMode])
   @@index([status])
 }
 
@@ -212,10 +233,22 @@ model Project {
   faqs                 Faq[]
   docs                 ProjectDoc[]
   chatSessions         ChatSession[]
+  memberships          ProjectMember[]
 
   @@index([clientId])
   @@index([assignedToId])
   @@index([status])
+}
+
+model ProjectMember {
+  userId     Int
+  projectId  Int
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@id([userId, projectId])
+  @@index([projectId])
 }
 
 model Ticket {

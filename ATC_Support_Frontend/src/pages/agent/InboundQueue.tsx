@@ -1,6 +1,6 @@
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
-import { AlertTriangle, CheckCircle2, Plus, Ticket, Users } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Plus, RotateCcw, Ticket, UserPlus, Users } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import { TicketCreatePanel } from '../../components/entities/TicketCreatePanel';
@@ -9,12 +9,14 @@ import PageHeader from '../../components/layout/PageHeader';
 import { PaginationControls } from '../../components/layout/PaginationControls';
 import { SortableTableHeader } from '../../components/layout/SortableTableHeader';
 import { useModal } from '../../contexts/ModalContext';
+import { useRole } from '../../contexts/RoleContext';
+import { useToast } from '../../contexts/ToastContext';
 import { useAsyncData } from '../../hooks/useAsyncData';
-import { apiFetch } from '../../lib/api';
-import { formatRelativeTime, getTicketPriorityClasses, getTicketStatusClasses, humanizeEnum } from '../../lib/format';
+import { apiFetch, getErrorMessage } from '../../lib/api';
+import { formatRelativeTime, formatRoleLabel, getTicketPriorityClasses, getTicketStatusClasses, humanizeEnum } from '../../lib/format';
 import { appPaths } from '../../lib/navigation';
 import { compareSortValues, getNextSortDirection } from '../../lib/tableSort';
-import type { ApiClient, ApiProject, ApiTicket, PaginatedResponse, TicketPriority, TicketStatus } from '../../lib/types';
+import type { ApiClient, ApiProject, ApiTicket, ApiUser, PaginatedResponse, TicketPriority, TicketStatus } from '../../lib/types';
 
 const PAGE_SIZE = 10;
 
@@ -38,7 +40,7 @@ const ticketViewConfig: Record<
   },
   escalated: {
     title: 'Escalated Tickets',
-    description: 'High-attention escalations awaiting project-lead visibility or action.',
+    description: 'High-attention escalations awaiting project specialist visibility or action.',
     fixedStatus: 'ESCALATED',
   },
   waiting: {
@@ -56,7 +58,9 @@ const ticketViewConfig: Record<
 export default function InboundQueue() {
   const { view = 'queue' } = useParams();
   const navigate = useNavigate();
-  const { openModal } = useModal();
+  const { openModal, closeModal } = useModal();
+  const { user, permissions } = useRole();
+  const { showToast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | TicketStatus>('ALL');
   const [priorityFilter, setPriorityFilter] = useState<'ALL' | TicketPriority>('ALL');
@@ -70,11 +74,18 @@ export default function InboundQueue() {
   const [page, setPage] = useState(1);
   const deferredSearch = useDeferredValue(searchQuery);
   const currentView = ticketViewConfig[view] || ticketViewConfig.queue;
+  const canAssignToSelf = permissions?.canAssignTicketsToSelf ?? false;
+  const canAssignToOthers = permissions?.canAssignTicketsToOthers ?? false;
 
   const filterOptionsQuery = useAsyncData(async () => {
     const [clients, projects] = await Promise.all([apiFetch<ApiClient[]>('/clients'), apiFetch<ApiProject[]>('/projects')]);
     return { clients, projects };
   }, []);
+
+  const assignableUsersQuery = useAsyncData(
+    async () => (canAssignToOthers ? apiFetch<ApiUser[]>('/users?status=ACTIVE') : []),
+    [canAssignToOthers],
+  );
 
   const openCreateTicketModal = () => {
     const projects = filterOptionsQuery.data?.projects || [];
@@ -190,6 +201,24 @@ export default function InboundQueue() {
     return items;
   }, [sortColumn, sortDirection, ticketItems]);
 
+  const getAssignableUsersForTicket = (ticket: ApiTicket) =>
+    (assignableUsersQuery.data || [])
+      .filter((listedUser) => listedUser.status === 'ACTIVE')
+      .filter((listedUser) => {
+        if (listedUser.role === 'PM') {
+          return true;
+        }
+
+        if (listedUser.scopeMode !== 'PROJECT_SCOPED') {
+          return true;
+        }
+
+        return (listedUser.projectMemberships || []).some((membership) => membership.projectId === ticket.projectId);
+      })
+      .sort((left, right) =>
+        `${left.role}-${left.supportLevel || ''}-${left.name}`.localeCompare(`${right.role}-${right.supportLevel || ''}-${right.name}`),
+      );
+
   if (ticketsQuery.isLoading) {
     return <QueueSkeleton />;
   }
@@ -232,6 +261,45 @@ export default function InboundQueue() {
   const handleSort = (column: typeof sortColumn) => {
     setSortDirection((currentDirection) => getNextSortDirection(sortColumn === column, currentDirection));
     setSortColumn(column);
+  };
+
+  const updateAssignment = async (ticketId: number, assignedToId: number | null | undefined, successMessage: string) => {
+    try {
+      await apiFetch(`/tickets/${ticketId}/assign`, {
+        method: 'POST',
+        body: assignedToId === undefined ? {} : { assignedToId },
+      });
+      await ticketsQuery.reload();
+      showToast('success', successMessage);
+    } catch (error) {
+      showToast('error', getErrorMessage(error));
+      throw error;
+    }
+  };
+
+  const handleAssignToMe = async (ticket: ApiTicket) => {
+    if (!user) return;
+    await updateAssignment(ticket.id, user.id, 'Ticket assigned to you.');
+  };
+
+  const openAssignmentModal = (ticket: ApiTicket) => {
+    openModal({
+      title: `Assign ${ticket.displayId}`,
+      size: 'sm',
+      content: (
+        <TicketAssignmentModalContent
+          ticket={ticket}
+          currentUserId={user?.id ?? null}
+          canAssignToSelf={canAssignToSelf}
+          canAssignToOthers={canAssignToOthers}
+          assignableUsers={getAssignableUsersForTicket(ticket)}
+          isLoadingAssignees={assignableUsersQuery.isLoading}
+          onAssignToMe={() => void handleAssignToMe(ticket).then(closeModal)}
+          onAssignToUser={(assignedToId) => void updateAssignment(ticket.id, assignedToId, 'Ticket assignment updated.').then(closeModal)}
+          onReturnToQueue={() => void updateAssignment(ticket.id, null, 'Ticket returned to queue.').then(closeModal)}
+        />
+      ),
+    });
   };
 
   return (
@@ -408,7 +476,37 @@ export default function InboundQueue() {
                         </div>
                         <div className="min-w-0">
                           <p className="truncate font-bold text-slate-900 transition-colors group-hover:text-orange-600">{ticket.title}</p>
-                          <p className="mt-1 font-mono text-xs text-slate-500">{ticket.displayId}</p>
+                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <p className="font-mono text-xs text-slate-500">{ticket.displayId}</p>
+                            {ticket.status !== 'RESOLVED' && canAssignToSelf && user && ticket.assignedToId !== user.id ? (
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  void handleAssignToMe(ticket);
+                                }}
+                                className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-600 transition-colors hover:bg-slate-50"
+                              >
+                                <UserPlus className="h-3 w-3" />
+                                Assign to Me
+                              </button>
+                            ) : null}
+                            {ticket.status !== 'RESOLVED' && canAssignToOthers ? (
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  openAssignmentModal(ticket);
+                                }}
+                                className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-600 transition-colors hover:bg-slate-50"
+                              >
+                                <RotateCcw className="h-3 w-3" />
+                                {ticket.assignedToId ? 'Reassign' : 'Assign'}
+                              </button>
+                            ) : null}
+                          </div>
                         </div>
                       </div>
                     </td>
@@ -441,6 +539,104 @@ export default function InboundQueue() {
           onPageChange={setPage}
         />
       </div>
+    </div>
+  );
+}
+
+function TicketAssignmentModalContent({
+  ticket,
+  currentUserId,
+  canAssignToSelf,
+  canAssignToOthers,
+  assignableUsers,
+  isLoadingAssignees,
+  onAssignToMe,
+  onAssignToUser,
+  onReturnToQueue,
+}: {
+  ticket: ApiTicket;
+  currentUserId: number | null;
+  canAssignToSelf: boolean;
+  canAssignToOthers: boolean;
+  assignableUsers: ApiUser[];
+  isLoadingAssignees: boolean;
+  onAssignToMe: () => void;
+  onAssignToUser: (assignedToId: number) => void;
+  onReturnToQueue: () => void;
+}) {
+  const [selectedAssigneeId, setSelectedAssigneeId] = useState(ticket.assignedToId ? String(ticket.assignedToId) : '');
+  const showAssignToMe = canAssignToSelf && currentUserId && ticket.assignedToId !== currentUserId;
+  const canReturnToQueue = Boolean(ticket.assignedToId);
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+        <p className="text-sm font-bold text-slate-900">{ticket.title}</p>
+        <p className="mt-1 text-xs text-slate-500">
+          {ticket.displayId} · {ticket.project?.client?.name || 'No client'} · {ticket.project?.name || 'No project'}
+        </p>
+      </div>
+
+      {showAssignToMe ? (
+        <button
+          type="button"
+          onClick={onAssignToMe}
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+        >
+          <UserPlus className="h-4 w-4" />
+          Assign to Me
+        </button>
+      ) : null}
+
+      {canAssignToOthers ? (
+        <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Assign or Reassign</p>
+            <p className="mt-1 text-sm text-slate-600">Only active users allowed for this ticket scope are listed below.</p>
+          </div>
+          {isLoadingAssignees ? (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">Loading assignable users...</div>
+          ) : (
+            <>
+              <select
+                value={selectedAssigneeId}
+                onChange={(event) => setSelectedAssigneeId(event.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition-all focus:ring-2 focus:ring-orange-500"
+              >
+                <option value="">Select an assignee</option>
+                {assignableUsers.map((assignableUser) => (
+                  <option key={assignableUser.id} value={assignableUser.id}>
+                    {assignableUser.name} ({formatRoleLabel(assignableUser.role, assignableUser.supportLevel)})
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!selectedAssigneeId) return;
+                  onAssignToUser(Number(selectedAssigneeId));
+                }}
+                disabled={!selectedAssigneeId}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-orange-700 disabled:cursor-not-allowed disabled:bg-orange-300"
+              >
+                <UserPlus className="h-4 w-4" />
+                {ticket.assignedToId ? 'Update Assignment' : 'Assign Ticket'}
+              </button>
+            </>
+          )}
+        </div>
+      ) : null}
+
+      {canReturnToQueue && canAssignToOthers ? (
+        <button
+          type="button"
+          onClick={onReturnToQueue}
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+        >
+          <RotateCcw className="h-4 w-4" />
+          Return to Queue
+        </button>
+      ) : null}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import type { BackendRole, TicketPriority, TicketStatus } from './types';
+import type { BackendRole, BackendSupportLevel, TicketPriority, TicketStatus } from './types';
 
 const relativeTimeFormatter = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
 
@@ -66,31 +66,32 @@ export const humanizeEnum = (value?: string | null) =>
     .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
     .join(' ');
 
-export const formatRoleLabel = (role?: BackendRole | null) => {
-  switch (role) {
-    case 'PM':
-      return 'Project Manager';
-    case 'PL':
-      return 'Project Lead';
-    case 'SE':
-      return 'Support Engineer';
+export const formatSupportLevelLabel = (supportLevel?: BackendSupportLevel | null) => {
+  switch (supportLevel) {
+    case 'SE1':
+      return 'Support Engineer 1';
+    case 'SE2':
+      return 'Support Engineer 2';
+    case 'SE3':
+      return 'Support Engineer 3';
     default:
-      return 'User';
+      return 'Support Engineer';
   }
 };
 
-export const getRoleDesignation = (role?: BackendRole | null) => {
+export const formatRoleLabel = (role?: BackendRole | null, supportLevel?: BackendSupportLevel | null) => {
   switch (role) {
     case 'PM':
       return 'Project Manager';
-    case 'PL':
-      return 'Project Lead';
     case 'SE':
-      return 'Support Engineer';
+      return formatSupportLevelLabel(supportLevel);
     default:
       return 'Internal User';
   }
 };
+
+export const getRoleDesignation = (role?: BackendRole | null, supportLevel?: BackendSupportLevel | null) =>
+  formatRoleLabel(role, supportLevel);
 
 export const getTicketPriorityClasses = (priority?: TicketPriority | null) => {
   switch (priority) {

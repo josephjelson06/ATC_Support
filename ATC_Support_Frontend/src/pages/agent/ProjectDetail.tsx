@@ -21,7 +21,7 @@ const detailTabs: ProjectDetailTab[] = ['overview', 'faqs', 'docs'];
 export default function ProjectDetail() {
   const navigate = useNavigate();
   const { openModal } = useModal();
-  const { backendRole } = useRole();
+  const { backendRole, permissions } = useRole();
   const { showToast } = useToast();
   const { id, tab } = useParams();
   const rawTab = (tab as ProjectDetailTab) || 'overview';
@@ -58,9 +58,9 @@ export default function ProjectDetail() {
   }
 
   const { project, docs, faqs } = projectQuery.data;
-  const canManageProjects = backendRole === 'PM';
-  const canManageFaqs = backendRole === 'PM' || backendRole === 'PL';
-  const canManageDocs = backendRole === 'PM' || backendRole === 'PL';
+  const canManageProjects = permissions?.canManageProjects ?? false;
+  const canManageFaqs = permissions?.canManageProjectKnowledge ?? false;
+  const canManageDocs = permissions?.canManageProjectKnowledge ?? false;
   const projectTabs = [
     { label: 'Overview', to: appPaths.projects.detail(project.id, 'overview') },
     { label: 'FAQs', to: appPaths.projects.detail(project.id, 'faqs') },
@@ -208,7 +208,7 @@ export default function ProjectDetail() {
               </div>
               <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-slate-500">
                 {project.client ? <span>Client: {project.client.name}</span> : null}
-                {project.assignedTo ? <span>| Lead: {project.assignedTo.name}</span> : null}
+                {project.assignedTo ? <span>| Project Specialist: {project.assignedTo.name}</span> : null}
                 <span>| Created {formatDate(project.createdAt)}</span>
               </div>
             </div>

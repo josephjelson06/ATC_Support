@@ -21,11 +21,11 @@ const PAGE_SIZE = 8;
 export default function ProjectMasterList() {
   const navigate = useNavigate();
   const { openModal } = useModal();
-  const { role, backendRole } = useRole();
+  const { role, permissions } = useRole();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | ProjectStatus>('ALL');
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [sortColumn, setSortColumn] = useState<'project' | 'client' | 'lead' | 'status' | 'openTickets' | 'created'>('created');
+  const [sortColumn, setSortColumn] = useState<'project' | 'client' | 'specialist' | 'status' | 'openTickets' | 'created'>('created');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [page, setPage] = useState(1);
   const deferredSearch = useDeferredValue(searchQuery);
@@ -59,7 +59,7 @@ export default function ProjectMasterList() {
     [page, deferredSearch, statusFilter],
   );
 
-  const canManageProjects = backendRole === 'PM';
+  const canManageProjects = permissions?.canManageProjects ?? false;
   const projectPage = projectsQuery.data?.projects;
   const tickets = projectsQuery.data?.tickets || [];
   const projectItems = projectPage?.items || [];
@@ -80,7 +80,7 @@ export default function ProjectMasterList() {
           return compareSortValues(left.name, right.name, sortDirection);
         case 'client':
           return compareSortValues(left.client?.name || '', right.client?.name || '', sortDirection);
-        case 'lead':
+        case 'specialist':
           return compareSortValues(left.assignedTo?.name || '', right.assignedTo?.name || '', sortDirection);
         case 'status':
           return compareSortValues(left.status, right.status, sortDirection);
@@ -158,7 +158,7 @@ export default function ProjectMasterList() {
       <DataToolbar
         searchValue={searchQuery}
         onSearchChange={setSearchQuery}
-        searchPlaceholder="Search by project, client, lead, or widget key..."
+        searchPlaceholder="Search by project, client, specialist, or widget key..."
         filtersOpen={filtersOpen}
         onToggleFilters={() => setFiltersOpen((current) => !current)}
         activeFilterCount={activeFilterCount}
@@ -198,7 +198,7 @@ export default function ProjectMasterList() {
               <tr>
                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500"><SortableTableHeader label="Project" active={sortColumn === 'project'} direction={sortDirection} onClick={() => handleSort('project')} /></th>
                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500"><SortableTableHeader label="Client" active={sortColumn === 'client'} direction={sortDirection} onClick={() => handleSort('client')} /></th>
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500"><SortableTableHeader label="Lead" active={sortColumn === 'lead'} direction={sortDirection} onClick={() => handleSort('lead')} /></th>
+                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500"><SortableTableHeader label="Project Specialist" active={sortColumn === 'specialist'} direction={sortDirection} onClick={() => handleSort('specialist')} /></th>
                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500"><SortableTableHeader label="Status" active={sortColumn === 'status'} direction={sortDirection} onClick={() => handleSort('status')} /></th>
                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500"><SortableTableHeader label="Open Tickets" active={sortColumn === 'openTickets'} direction={sortDirection} onClick={() => handleSort('openTickets')} /></th>
                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500"><SortableTableHeader label="Created" active={sortColumn === 'created'} direction={sortDirection} onClick={() => handleSort('created')} /></th>

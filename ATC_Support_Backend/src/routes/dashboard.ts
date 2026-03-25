@@ -2,6 +2,7 @@ import { Role, TicketStatus } from '@prisma/client';
 import { Router } from 'express';
 
 import { prisma } from '../lib/prisma';
+import { hasProjectScopedAccess } from '../utils/userModel';
 import { asyncHandler } from '../utils/http';
 
 const router = Router();
@@ -40,12 +41,12 @@ router.get(
       });
     }
 
-    if (user.role === Role.PL) {
+    if (hasProjectScopedAccess(user)) {
       const [openTickets, resolvedTickets, totalDocs, totalFaqs] = await Promise.all([
         prisma.ticket.count({
           where: {
             project: {
-              assignedToId: user.id,
+              OR: [{ assignedToId: user.id }, { memberships: { some: { userId: user.id } } }],
             },
             status: {
               not: TicketStatus.RESOLVED,
@@ -55,7 +56,7 @@ router.get(
         prisma.ticket.count({
           where: {
             project: {
-              assignedToId: user.id,
+              OR: [{ assignedToId: user.id }, { memberships: { some: { userId: user.id } } }],
             },
             status: TicketStatus.RESOLVED,
           },
@@ -63,14 +64,14 @@ router.get(
         prisma.projectDoc.count({
           where: {
             project: {
-              assignedToId: user.id,
+              OR: [{ assignedToId: user.id }, { memberships: { some: { userId: user.id } } }],
             },
           },
         }),
         prisma.faq.count({
           where: {
             project: {
-              assignedToId: user.id,
+              OR: [{ assignedToId: user.id }, { memberships: { some: { userId: user.id } } }],
             },
           },
         }),

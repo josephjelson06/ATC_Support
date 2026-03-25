@@ -44,7 +44,7 @@ export const notifyNewWidgetTicket = async (
     projectName: string;
     priority: TicketPriority;
     clientName: string;
-    projectLeadId?: number | null;
+    projectSpecialistId?: number | null;
   },
 ) => {
   const supportEngineers = await db.user.findMany({
@@ -58,7 +58,7 @@ export const notifyNewWidgetTicket = async (
   });
 
   await createNotifications(db, {
-    userIds: [...supportEngineers.map((user) => user.id), input.projectLeadId],
+    userIds: [...supportEngineers.map((user) => user.id), input.projectSpecialistId],
     type: NotificationType.TICKET_CREATED,
     title: `New widget ticket: ${input.ticketTitle}`,
     body: `${input.clientName} opened a ${input.priority.toLowerCase()} priority ticket in ${input.projectName}.`,
@@ -91,16 +91,16 @@ export const notifyTicketEscalated = async (
   input: {
     ticketId: number;
     ticketTitle: string;
-    projectLeadId?: number | null;
+    projectSpecialistId?: number | null;
     actorUserId?: number | null;
     actorName: string;
   },
 ) => {
   await createNotifications(db, {
-    userIds: [input.projectLeadId],
+    userIds: [input.projectSpecialistId],
     type: NotificationType.TICKET_ESCALATED,
     title: `Ticket escalated: ${input.ticketTitle}`,
-    body: `${input.actorName} escalated this ticket to project lead review.`,
+    body: `${input.actorName} escalated this ticket to project specialist review.`,
     link: buildTicketLink(input.ticketId),
     excludeUserId: input.actorUserId,
   });

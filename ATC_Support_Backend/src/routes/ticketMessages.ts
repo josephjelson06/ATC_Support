@@ -11,6 +11,7 @@ import { assertTicketAccess } from '../utils/access';
 import { asyncHandler, badRequest, notFound, parseId } from '../utils/http';
 import { serializeTicketAttachment, serializeTicketMessage } from '../utils/serializers';
 import { resolveTicketAttachmentPath, ticketAttachmentUpload } from '../utils/ticketAttachments';
+import { safeUserSelect } from '../utils/userModel';
 
 const router = Router();
 
@@ -18,15 +19,6 @@ const createTicketMessageSchema = z.object({
   content: z.string().trim().optional().default(''),
   type: z.enum([MessageType.REPLY, MessageType.INTERNAL_NOTE]).default(MessageType.REPLY),
 });
-
-const safeUserSelect = {
-  id: true,
-  name: true,
-  email: true,
-  role: true,
-  status: true,
-  createdAt: true,
-} as const;
 
 const messageInclude = {
   user: {
@@ -65,7 +57,7 @@ router.get(
 
 router.post(
   '/tickets/:id/messages',
-  requireRole(Role.SE, Role.PL),
+  requireRole(Role.PM, Role.SE),
   ticketAttachmentUpload.array('attachments', 5),
   asyncHandler(async (req, res) => {
     const ticketId = parseId(req.params.id, 'ticket id');

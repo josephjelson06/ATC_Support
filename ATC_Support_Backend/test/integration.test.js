@@ -135,14 +135,14 @@ test('widget escalation creates a ticket', async () => {
 
 test('ticket notifications can be listed and marked as read', async () => {
   const seLogin = await request.post('/api/auth/login').send({ email: 'se@atc.com', password: 'password' }).expect(200);
-  const plLogin = await request.post('/api/auth/login').send({ email: 'pl1@atc.com', password: 'password' }).expect(200);
+  const projectSpecialistLogin = await request.post('/api/auth/login').send({ email: 'se3@atc.com', password: 'password' }).expect(200);
 
   const seToken = seLogin.body.token;
   const seUser = seLogin.body.user;
-  const plToken = plLogin.body.token;
+  const projectSpecialistToken = projectSpecialistLogin.body.token;
 
   await request.post('/api/notifications/read-all').set('Authorization', `Bearer ${seToken}`).expect(200);
-  await request.post('/api/notifications/read-all').set('Authorization', `Bearer ${plToken}`).expect(200);
+  await request.post('/api/notifications/read-all').set('Authorization', `Bearer ${projectSpecialistToken}`).expect(200);
 
   const createdTicket = await request
     .post('/api/widget/widget_warehouse_portal/escalate')
@@ -185,21 +185,21 @@ test('ticket notifications can be listed and marked as read', async () => {
 
   assert.equal(seNotificationsAfterRead.body.unreadCount, 0);
 
-  const plNotifications = await request
+  const projectSpecialistNotifications = await request
     .get('/api/notifications?limit=10')
-    .set('Authorization', `Bearer ${plToken}`)
+    .set('Authorization', `Bearer ${projectSpecialistToken}`)
     .expect(200);
 
-  const plCreatedNotification = plNotifications.body.items.find(
+  const projectSpecialistCreatedNotification = projectSpecialistNotifications.body.items.find(
     (notification) => notification.type === 'TICKET_CREATED' && notification.link === `/agent/tickets/${ticketId}/summary`,
   );
 
-  assert.ok(plCreatedNotification);
-  assert.equal(plNotifications.body.unreadCount, 1);
+  assert.ok(projectSpecialistCreatedNotification);
+  assert.equal(projectSpecialistNotifications.body.unreadCount, 1);
 
   const clearedNotifications = await request
     .post('/api/notifications/read-all')
-    .set('Authorization', `Bearer ${plToken}`)
+    .set('Authorization', `Bearer ${projectSpecialistToken}`)
     .expect(200);
 
   assert.equal(clearedNotifications.body.updatedCount, 1);
@@ -218,17 +218,17 @@ test('ticket notifications can be listed and marked as read', async () => {
     .send({ note: 'Escalation notification test.' })
     .expect(200);
 
-  const plNotificationsAfterEscalate = await request
+  const projectSpecialistNotificationsAfterEscalate = await request
     .get('/api/notifications?limit=10')
-    .set('Authorization', `Bearer ${plToken}`)
+    .set('Authorization', `Bearer ${projectSpecialistToken}`)
     .expect(200);
 
-  const plEscalationNotification = plNotificationsAfterEscalate.body.items.find(
+  const projectSpecialistEscalationNotification = projectSpecialistNotificationsAfterEscalate.body.items.find(
     (notification) => notification.type === 'TICKET_ESCALATED' && notification.link === `/agent/tickets/${ticketId}/summary`,
   );
 
-  assert.ok(plEscalationNotification);
-  assert.equal(plNotificationsAfterEscalate.body.unreadCount, 1);
+  assert.ok(projectSpecialistEscalationNotification);
+  assert.equal(projectSpecialistNotificationsAfterEscalate.body.unreadCount, 1);
 });
 
 test('ticket email loop logs outbound messages and accepts inbound replies', async () => {
@@ -325,15 +325,15 @@ test('ticket email loop logs outbound messages and accepts inbound replies', asy
 
 test('ticket lifecycle: assign, start, escalate, resolve', async () => {
   const seLogin = await request.post('/api/auth/login').send({ email: 'se@atc.com', password: 'password' }).expect(200);
-  const plLogin = await request.post('/api/auth/login').send({ email: 'pl1@atc.com', password: 'password' }).expect(200);
+  const projectSpecialistLogin = await request.post('/api/auth/login').send({ email: 'se3@atc.com', password: 'password' }).expect(200);
 
   const seToken = seLogin.body.token;
   const seUser = seLogin.body.user;
-  const plToken = plLogin.body.token;
-  const plUser = plLogin.body.user;
+  const projectSpecialistToken = projectSpecialistLogin.body.token;
+  const projectSpecialistUser = projectSpecialistLogin.body.user;
 
   assert.ok(seToken);
-  assert.ok(plToken);
+  assert.ok(projectSpecialistToken);
 
   const createdTicket = await request
     .post('/api/widget/widget_warehouse_portal/escalate')
@@ -363,14 +363,14 @@ test('ticket lifecycle: assign, start, escalate, resolve', async () => {
   const escalated = await request
     .post(`/api/tickets/${ticketId}/escalate`)
     .set('Authorization', `Bearer ${seToken}`)
-    .send({ note: 'Needs PL review.' })
+    .send({ note: 'Needs project specialist review.' })
     .expect(200);
   assert.equal(escalated.body.status, 'ESCALATED');
-  assert.equal(escalated.body.assignedToId, plUser.id);
+  assert.equal(escalated.body.assignedToId, projectSpecialistUser.id);
 
   const resolved = await request
     .post(`/api/tickets/${ticketId}/resolve`)
-    .set('Authorization', `Bearer ${plToken}`)
+    .set('Authorization', `Bearer ${projectSpecialistToken}`)
     .send({ resolutionSummary: 'Resolved in integration test.' })
     .expect(200);
   assert.equal(resolved.body.status, 'RESOLVED');

@@ -8,6 +8,7 @@ import { validate } from '../middleware/validate';
 import { asyncHandler, unauthorized } from '../utils/http';
 import { serializeUser } from '../utils/serializers';
 import { attachRefreshCookie, clearRefreshCookie, getRefreshTokenFromRequest, signAccessToken, signRefreshToken, verifyRefreshToken } from '../utils/session';
+import { safeUserSelect } from '../utils/userModel';
 
 const router = Router();
 
@@ -21,14 +22,7 @@ const changePasswordSchema = z.object({
   newPassword: z.string().min(8),
 });
 
-const userSelect = {
-  id: true,
-  name: true,
-  email: true,
-  role: true,
-  status: true,
-  createdAt: true,
-} as const;
+const userSelect = safeUserSelect;
 
 router.post(
   '/login',

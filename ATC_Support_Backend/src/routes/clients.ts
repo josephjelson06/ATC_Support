@@ -5,9 +5,11 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { requireRole } from '../middleware/role';
 import { validate } from '../middleware/validate';
+import { assertClientAccess, clientScopeForUser } from '../utils/access';
 import { asyncHandler, conflict, parseId, notFound } from '../utils/http';
 import { createPaginatedResponse, getPaginationOptions } from '../utils/pagination';
 import { serializeAmc, serializeClient, serializeProject } from '../utils/serializers';
+import { safeUserSelect } from '../utils/userModel';
 
 const router = Router();
 
@@ -34,6 +36,7 @@ router.get(
     const status = req.query.status ? String(req.query.status) : undefined;
     const pagination = getPaginationOptions(req.query as Record<string, unknown>);
     const where: Prisma.ClientWhereInput = {
+      ...clientScopeForUser(req.user!),
       ...(status ? { status: status as ClientStatus } : {}),
       ...(search
         ? {
@@ -102,6 +105,7 @@ router.get(
   '/:id',
   asyncHandler(async (req, res) => {
     const clientId = parseId(req.params.id, 'client id');
+    await assertClientAccess(req.user!, clientId);
     const client = await prisma.client.findUnique({
       where: {
         id: clientId,
@@ -118,16 +122,7 @@ router.get(
             project: {
               include: {
                 client: true,
-                assignedTo: {
-                  select: {
-                    id: true,
-                    name: true,
-                    email: true,
-                    role: true,
-                    status: true,
-                    createdAt: true,
-                  },
-                },
+                assignedTo: { select: safeUserSelect },
               },
             },
           },
@@ -138,16 +133,7 @@ router.get(
         projects: {
           include: {
             client: true,
-            assignedTo: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-                role: true,
-                status: true,
-                createdAt: true,
-              },
-            },
+            assignedTo: { select: safeUserSelect },
           },
           orderBy: {
             id: 'asc',

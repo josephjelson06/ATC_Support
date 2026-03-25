@@ -2,13 +2,17 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 
 import { apiFetch, authEvents, getErrorMessage, getStoredToken, refreshAccessToken, setStoredToken } from '../lib/api';
 import { formatRoleLabel, getRoleDesignation } from '../lib/format';
-import type { AuthMeResponse, AuthResponse, ApiUser, BackendRole } from '../lib/types';
+import type { AssignmentAuthority, AuthMeResponse, AuthResponse, ApiUser, BackendRole, BackendSupportLevel, ScopeMode, UserPermissions } from '../lib/types';
 
-export type Role = 'Support Engineer' | 'Project Lead' | 'Project Manager';
+export type Role = 'Support Engineer' | 'Project Manager';
 
 interface RoleContextType {
   role: Role;
   backendRole: BackendRole | null;
+  supportLevel: BackendSupportLevel | null;
+  scopeMode: ScopeMode | null;
+  assignmentAuthority: AssignmentAuthority | null;
+  permissions: UserPermissions | null;
   designation: string;
   name: string;
   user: ApiUser | null;
@@ -28,8 +32,6 @@ const toRoleLabel = (role: BackendRole): Role => {
   switch (role) {
     case 'PM':
       return 'Project Manager';
-    case 'PL':
-      return 'Project Lead';
     case 'SE':
     default:
       return 'Support Engineer';
@@ -168,8 +170,12 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     () => ({
       role,
       backendRole: user?.role ?? null,
-      designation: getRoleDesignation(user?.role),
-      name: user?.name || formatRoleLabel(user?.role) || 'Internal User',
+      supportLevel: user?.supportLevel ?? null,
+      scopeMode: user?.scopeMode ?? null,
+      assignmentAuthority: user?.assignmentAuthority ?? null,
+      permissions: user?.permissions ?? null,
+      designation: getRoleDesignation(user?.role, user?.supportLevel),
+      name: user?.name || formatRoleLabel(user?.role, user?.supportLevel) || 'Internal User',
       user,
       token,
       isAuthenticated: Boolean(user && token),

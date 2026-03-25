@@ -132,7 +132,7 @@ export function ClientCrudPanel({ mode, client, onCompleted, onDeleted }: Client
           <div>
             <p className="font-bold text-slate-900">Client profile</p>
             <p className="mt-1">
-              Capture the client organization plus the contact metadata the PM, PL, and SE views now surface.
+              Capture the client organization plus the contact metadata surfaced across PM and support-engineer workflows.
             </p>
           </div>
         </div>

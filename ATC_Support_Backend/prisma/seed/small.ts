@@ -1,5 +1,6 @@
 import bcrypt from 'bcrypt';
 import {
+  AssignmentAuthority,
   AmcStatus,
   ChatRole,
   ChatSessionStatus,
@@ -9,6 +10,8 @@ import {
   NotificationType,
   ProjectStatus,
   Role,
+  ScopeMode,
+  SupportLevel,
   TicketEmailDirection,
   TicketEmailStatus,
   TicketPriority,
@@ -243,39 +246,16 @@ export async function seedSmallMode(prisma: PrismaClient) {
       email: 'pm@atc.com',
       passwordHash,
       role: Role.PM,
+      scopeMode: ScopeMode.GLOBAL,
+      assignmentAuthority: AssignmentAuthority.SELF_AND_OTHERS,
       status: UserStatus.ACTIVE,
     },
   });
 
-  const projectLeads = await Promise.all(
-    [
-      ['Aisha Lead', 'pl1@atc.com'],
-      ['Rahul Lead', 'pl2@atc.com'],
-      ['Neha Lead', 'pl3@atc.com'],
-      ['Varun Lead', 'pl4@atc.com'],
-    ].map(([name, email]) =>
-      prisma.user.create({
-        data: {
-          name,
-          email,
-          passwordHash,
-          role: Role.PL,
-          status: UserStatus.ACTIVE,
-        },
-      }),
-    ),
-  );
-
-  const supportEngineers = await Promise.all(
+  const queueCoordinators = await Promise.all(
     [
       ['Sanjay Support', 'se@atc.com'],
-      ['Mira Support', 'se2@atc.com'],
-      ['Dev Support', 'se3@atc.com'],
-      ['Ira Support', 'se4@atc.com'],
-      ['Kabir Support', 'se5@atc.com'],
-      ['Rhea Support', 'se6@atc.com'],
-      ['Vikram Support', 'se7@atc.com'],
-      ['Pooja Support', 'se8@atc.com'],
+      ['Mira Support', 'se1b@atc.com'],
     ].map(([name, email]) =>
       prisma.user.create({
         data: {
@@ -283,13 +263,60 @@ export async function seedSmallMode(prisma: PrismaClient) {
           email,
           passwordHash,
           role: Role.SE,
+          supportLevel: SupportLevel.SE1,
+          scopeMode: ScopeMode.GLOBAL,
+          assignmentAuthority: AssignmentAuthority.SELF_AND_OTHERS,
           status: UserStatus.ACTIVE,
         },
       }),
     ),
   );
 
-  const allUsers = [pm, ...projectLeads, ...supportEngineers];
+  const specialistEngineers = await Promise.all(
+    [
+      ['Dev Support', 'se2@atc.com'],
+      ['Ira Support', 'se2b@atc.com'],
+    ].map(([name, email]) =>
+      prisma.user.create({
+        data: {
+          name,
+          email,
+          passwordHash,
+          role: Role.SE,
+          supportLevel: SupportLevel.SE2,
+          scopeMode: ScopeMode.GLOBAL,
+          assignmentAuthority: AssignmentAuthority.SELF_ONLY,
+          status: UserStatus.ACTIVE,
+        },
+      }),
+    ),
+  );
+
+  const projectSpecialists = await Promise.all(
+    [
+      ['Aisha Specialist', 'se3@atc.com'],
+      ['Rahul Specialist', 'se3b@atc.com'],
+      ['Neha Specialist', 'se3c@atc.com'],
+      ['Varun Specialist', 'se3d@atc.com'],
+    ].map(([name, email]) =>
+      prisma.user.create({
+        data: {
+          name,
+          email,
+          passwordHash,
+          role: Role.SE,
+          supportLevel: SupportLevel.SE3,
+          scopeMode: ScopeMode.PROJECT_SCOPED,
+          assignmentAuthority: AssignmentAuthority.SELF_ONLY,
+          status: UserStatus.ACTIVE,
+        },
+      }),
+    ),
+  );
+
+  const workingEngineers = [...queueCoordinators, ...specialistEngineers];
+  const allSupportUsers = [...workingEngineers, ...projectSpecialists];
+  const allUsers = [pm, ...allSupportUsers];
   const createdClients = [];
   const createdProjects: SeedProject[] = [];
 
@@ -347,14 +374,14 @@ export async function seedSmallMode(prisma: PrismaClient) {
 
     for (const projectBlueprint of blueprint.projects) {
       const absoluteIndex = createdProjects.length;
-      const projectLead = absoluteIndex === 0 ? projectLeads[0] : projectLeads[absoluteIndex % projectLeads.length];
+      const projectSpecialist = absoluteIndex === 0 ? projectSpecialists[0] : projectSpecialists[absoluteIndex % projectSpecialists.length];
       const widgetKey = projectBlueprint.widgetKey ?? `widget_${slugify(`${blueprint.name}_${projectBlueprint.name}`)}`;
       const isInactive = absoluteIndex === 9 || absoluteIndex === 17 || absoluteIndex === 19;
       const widgetEnabled = !(absoluteIndex === 5 || absoluteIndex === 12 || absoluteIndex === 18);
       const project = await prisma.project.create({
         data: {
           clientId: client.id,
-          assignedToId: projectLead.id,
+          assignedToId: projectSpecialist.id,
           name: projectBlueprint.name,
           description: projectBlueprint.description,
           widgetKey,
@@ -364,6 +391,9 @@ export async function seedSmallMode(prisma: PrismaClient) {
           juliaEscalationHint: buildJuliaEscalationHint(projectBlueprint.name),
           status: isInactive ? ProjectStatus.INACTIVE : ProjectStatus.ACTIVE,
           createdAt: daysAgo(60 - absoluteIndex * 2),
+          memberships: {
+            create: [{ userId: projectSpecialist.id }],
+          },
         },
       });
 
@@ -393,7 +423,7 @@ export async function seedSmallMode(prisma: PrismaClient) {
             content: `${project.name} supports ${blueprint.industry.toLowerCase()} workflows. Common tickets involve access, data mismatch, workflow stalls, and post-release validation. Start with browser/session checks, verify background jobs, confirm role permissions, and escalate client-impacting issues quickly.`,
             status: absoluteIndex % 5 === 4 ? KnowledgeStatus.DRAFT : KnowledgeStatus.PUBLISHED,
             publishedAt: absoluteIndex % 5 === 4 ? null : daysAgo(25 - absoluteIndex),
-            createdById: projectLead.id,
+            createdById: projectSpecialist.id,
             createdAt: daysAgo(28 - absoluteIndex),
           },
         });
@@ -403,7 +433,7 @@ export async function seedSmallMode(prisma: PrismaClient) {
 
   const createdRunbooks = [];
   for (const [index, [title, category]] of RUNBOOK_BLUEPRINTS.entries()) {
-    const author = index % 3 === 0 ? supportEngineers[index % supportEngineers.length] : projectLeads[index % projectLeads.length];
+    const author = index % 3 === 0 ? workingEngineers[index % workingEngineers.length] : projectSpecialists[index % projectSpecialists.length];
     createdRunbooks.push(
       await prisma.runbook.create({
         data: {
@@ -512,7 +542,7 @@ export async function seedSmallMode(prisma: PrismaClient) {
 
   for (const [index, status] of statusPlan.entries()) {
     const project = activeProjects[index % activeProjects.length];
-    const projectLead = projectLeads.find((lead) => lead.id === project.assignedToId)!;
+    const projectSpecialist = projectSpecialists.find((specialist) => specialist.id === project.assignedToId)!;
     const chatSession = index < escalatedChats.length ? escalatedChats[index] : null;
     const createdAt = daysAgo(16 - (index % 12), 7 + (index % 8));
     const priority = pickWeighted(
@@ -524,9 +554,9 @@ export async function seedSmallMode(prisma: PrismaClient) {
       ],
       random,
     );
-    const assignedEngineer = supportEngineers[index % supportEngineers.length];
+    const assignedEngineer = workingEngineers[index % workingEngineers.length];
     const assignedToId =
-      status === TicketStatus.NEW ? null : status === TicketStatus.ESCALATED ? projectLead.id : assignedEngineer.id;
+      status === TicketStatus.NEW ? null : status === TicketStatus.ESCALATED ? projectSpecialist.id : assignedEngineer.id;
     const requesterName = chatSession?.clientName ?? `Requester ${index + 1}`;
     const requesterEmail = chatSession?.clientEmail ?? `requester${index + 1}@${slugify(project.name)}.example.com`;
     const resolutionSummary =
@@ -565,8 +595,8 @@ export async function seedSmallMode(prisma: PrismaClient) {
           fromStatus: TicketStatus.IN_PROGRESS,
           toStatus: TicketStatus.ESCALATED,
           fromAssigneeId: assignedEngineer.id,
-          toAssigneeId: projectLead.id,
-          note: 'Escalated for project lead review after initial troubleshooting did not resolve the issue.',
+          toAssigneeId: projectSpecialist.id,
+          note: 'Escalated for project specialist review after initial troubleshooting did not resolve the issue.',
           createdAt: hoursAfter(createdAt, 4),
         },
       });
@@ -618,14 +648,14 @@ export async function seedSmallMode(prisma: PrismaClient) {
       } else if (index % 3 === 2) {
         entries.push({
           type: MessageType.INTERNAL_NOTE,
-          userId: ticket.assignedToId ?? supportEngineers[0].id,
+          userId: ticket.assignedToId ?? workingEngineers[0].id,
           content: pick(INTERNAL_NOTE_TEMPLATES as unknown as string[], random),
           createdAt,
         });
       } else {
         entries.push({
           type: MessageType.REPLY,
-          userId: ticket.assignedToId ?? supportEngineers[0].id,
+          userId: ticket.assignedToId ?? workingEngineers[0].id,
           content: pick(AGENT_REPLY_TEMPLATES as unknown as string[], random),
           createdAt,
         });
@@ -643,7 +673,7 @@ export async function seedSmallMode(prisma: PrismaClient) {
     const plan = ticketMessagePlans.get(ticket.id)!;
     plan.push({
       type: MessageType.REPLY,
-      userId: ticket.assignedToId ?? supportEngineers[0].id,
+      userId: ticket.assignedToId ?? workingEngineers[0].id,
       content: pick(AGENT_REPLY_TEMPLATES as unknown as string[], random),
       createdAt: hoursAfter(ticket.createdAt, plan.length + 1),
     });
@@ -698,7 +728,7 @@ export async function seedSmallMode(prisma: PrismaClient) {
       data: {
         ticketId: ticket.id,
         ticketMessageId: replyMessage.id,
-        uploadedById: replyMessage.userId ?? supportEngineers[0].id,
+        uploadedById: replyMessage.userId ?? workingEngineers[0].id,
         originalName,
         storedName,
         mimeType,
@@ -789,13 +819,13 @@ export async function seedSmallMode(prisma: PrismaClient) {
   console.log('Seed completed successfully.');
   console.log('Mode: small');
   console.log('Lower-end small-scale seed generated:');
-  console.log('- 1 PM, 4 PL, 8 SE');
+  console.log('- 1 PM, 2 SE1, 2 SE2, 4 SE3');
   console.log('- 8 clients, 20 projects, 15 AMCs');
   console.log('- 30 chats, 120 tickets, 500 ticket messages');
   console.log('- 30 FAQs, 12 runbooks, 18 project docs');
   console.log('- 30 attachments, 50 email events, 80 notifications');
   console.log('Login credentials:');
   console.log(`PM: ${pm.email} / ${password}`);
-  console.log(`SE: ${supportEngineers[0].email} / ${password}`);
-  console.log(`PL: ${projectLeads[0].email} / ${password}`);
+  console.log(`SE1: ${queueCoordinators[0].email} / ${password}`);
+  console.log(`SE3: ${projectSpecialists[0].email} / ${password}`);
 }

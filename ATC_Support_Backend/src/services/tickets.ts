@@ -4,6 +4,7 @@ import { prisma } from '../lib/prisma';
 import { notifyNewWidgetTicket } from './notifications';
 import { buildTicketThreadToken, sendTicketCreatedAcknowledgement } from './ticketEmails';
 import { badRequest, notFound } from '../utils/http';
+import { safeUserSelect } from '../utils/userModel';
 
 type CreateWidgetTicketInput = {
   widgetKey: string;
@@ -102,28 +103,10 @@ export const createWidgetTicket = async (input: CreateWidgetTicketInput) => {
         project: {
           include: {
             client: true,
-            assignedTo: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-                role: true,
-                status: true,
-                createdAt: true,
-              },
-            },
+            assignedTo: { select: safeUserSelect },
           },
         },
-        assignedTo: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            role: true,
-            status: true,
-            createdAt: true,
-          },
-        },
+        assignedTo: { select: safeUserSelect },
         chatSession: true,
       },
     });
@@ -143,7 +126,7 @@ export const createWidgetTicket = async (input: CreateWidgetTicketInput) => {
       projectName: project.name,
       priority: ticket.priority,
       clientName: input.name,
-      projectLeadId: project.assignedToId,
+      projectSpecialistId: project.assignedToId,
     });
 
     await sendTicketCreatedAcknowledgement(transaction, ticket);

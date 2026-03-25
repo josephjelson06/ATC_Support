@@ -1,4 +1,4 @@
-import { MessageType, Prisma, Role, TicketPriority, TicketStatus } from '@prisma/client';
+import { MessageType, Prisma, Role, ScopeMode, TicketPriority, TicketStatus, UserStatus } from '@prisma/client';
 import { Router } from 'express';
 import { z } from 'zod';
 
@@ -9,21 +9,14 @@ import { validate } from '../middleware/validate';
 import { notifyTicketAssigned, notifyTicketEscalated, notifyTicketReopened, notifyTicketResolved } from '../services/notifications';
 import { sendReopenedTicketEmail, sendResolvedTicketEmail, sendWaitingOnCustomerEmail } from '../services/ticketEmails';
 import { createWidgetTicket } from '../services/tickets';
+import type { AuthenticatedUser } from '../types/auth';
 import { assertTicketAccess, ticketScopeForUser } from '../utils/access';
 import { asyncHandler, badRequest, forbidden, notFound, parseId } from '../utils/http';
 import { createPaginatedResponse, getPaginationOptions } from '../utils/pagination';
 import { serializeChatSession, serializeEscalationHistory, serializeTicket, serializeTicketEmail, serializeTicketMessage } from '../utils/serializers';
+import { canAssignTicketsToOthers, safeUserSelect } from '../utils/userModel';
 
 const router = Router();
-
-const safeUserSelect = {
-  id: true,
-  name: true,
-  email: true,
-  role: true,
-  status: true,
-  createdAt: true,
-} as const;
 
 const publicCreateTicketSchema = z.object({
   widgetKey: z.string().min(1),
@@ -169,15 +162,76 @@ const getTicketForWorkflow = async (ticketId: number) => {
   return ticket;
 };
 
-const createSystemMessage = (ticketId: number, content: string) =>
-  prisma.ticketMessage.create({
-    data: {
-      ticketId,
-      userId: null,
-      type: MessageType.SYSTEM,
-      content,
+const assertTicketWorkflowPermission = (
+  user: AuthenticatedUser | undefined,
+  ticket: Awaited<ReturnType<typeof getTicketForWorkflow>>,
+  options: {
+    allowQueueRelease?: boolean;
+    nextAssigneeId?: number | null;
+  } = {},
+) => {
+  if (!user) {
+    throw forbidden('You do not have permission to perform this action.');
+  }
+
+  if (user.role === Role.PM || canAssignTicketsToOthers(user)) {
+    return;
+  }
+
+  if (options.nextAssigneeId === null) {
+    if (options.allowQueueRelease && (ticket.assignedToId === user.id || ticket.assignedToId === null)) {
+      return;
+    }
+
+    throw forbidden('You can only return your own tickets to the queue.');
+  }
+
+  const effectiveAssigneeId = options.nextAssigneeId ?? ticket.assignedToId ?? user.id;
+
+  if (effectiveAssigneeId !== user.id) {
+    throw forbidden('You can only work on tickets assigned to you.');
+  }
+};
+
+const assertTicketAssigneeEligibility = async (
+  ticket: Awaited<ReturnType<typeof getTicketForWorkflow>>,
+  assigneeId: number,
+) => {
+  const assignee = await prisma.user.findUnique({
+    where: {
+      id: assigneeId,
+    },
+    select: {
+      id: true,
+      name: true,
+      role: true,
+      scopeMode: true,
+      status: true,
+      projectMemberships: {
+        where: {
+          projectId: ticket.projectId,
+        },
+        select: {
+          projectId: true,
+        },
+      },
     },
   });
+
+  if (!assignee) {
+    throw badRequest('assignedToId must reference an existing user.');
+  }
+
+  if (assignee.status !== UserStatus.ACTIVE) {
+    throw badRequest('assignedToId must reference an active user.');
+  }
+
+  if (assignee.role === Role.SE && assignee.scopeMode === ScopeMode.PROJECT_SCOPED && assignee.projectMemberships.length === 0) {
+    throw badRequest('Project-scoped engineers can only be assigned tickets from their linked projects.');
+  }
+
+  return assignee;
+};
 
 router.post(
   '/',
@@ -325,7 +379,7 @@ router.get(
 
 router.patch(
   '/:id',
-  requireRole(Role.SE, Role.PL),
+  requireRole(Role.PM, Role.SE),
   validate(updateTicketSchema),
   asyncHandler(async (req, res) => {
     const ticketId = parseId(req.params.id, 'ticket id');
@@ -350,7 +404,7 @@ router.patch(
 
 router.post(
   '/:id/assign',
-  requireRole(Role.SE, Role.PL),
+  requireRole(Role.PM, Role.SE),
   validate(assignTicketSchema),
   asyncHandler(async (req, res) => {
     const ticketId = parseId(req.params.id, 'ticket id');
@@ -362,33 +416,26 @@ router.post(
       throw badRequest('Resolved tickets cannot be reassigned.');
     }
 
-    const nextAssigneeId = payload.assignedToId ?? req.user!.id;
-
-    if (req.user!.role === Role.PL && nextAssigneeId !== req.user!.id) {
-      throw forbidden('Project leads can only assign tickets to themselves.');
-    }
-
-    const assignee = await prisma.user.findUnique({
-      where: {
-        id: nextAssigneeId,
-      },
-      select: {
-        id: true,
-      },
+    const nextAssigneeId = payload.assignedToId === null ? null : payload.assignedToId ?? req.user!.id;
+    assertTicketWorkflowPermission(req.user, ticket, {
+      allowQueueRelease: true,
+      nextAssigneeId,
     });
 
-    if (!assignee) {
-      throw badRequest('assignedToId must reference an existing user.');
+    if (nextAssigneeId !== null) {
+      await assertTicketAssigneeEligibility(ticket, nextAssigneeId);
     }
 
     const updatedTicket = await prisma.$transaction(async (transaction) => {
+      const nextStatus = nextAssigneeId === null ? TicketStatus.NEW : ticket.status === TicketStatus.NEW ? TicketStatus.ASSIGNED : ticket.status;
       const nextTicket = await transaction.ticket.update({
         where: {
           id: ticketId,
         },
         data: {
           assignedToId: nextAssigneeId,
-          status: ticket.status === TicketStatus.NEW ? TicketStatus.ASSIGNED : ticket.status,
+          status: nextStatus,
+          resolvedAt: null,
         },
         include: listInclude,
       });
@@ -398,17 +445,22 @@ router.post(
           ticketId,
           userId: null,
           type: MessageType.SYSTEM,
-          content: `ticket assigned to ${nextAssigneeId}; status changed to ${nextTicket.status}`,
+          content:
+            nextAssigneeId === null
+              ? `ticket returned to queue by ${req.user!.name}; status changed to ${nextTicket.status}`
+              : `ticket assigned to ${nextAssigneeId}; status changed to ${nextTicket.status}`,
         },
       });
 
-      await notifyTicketAssigned(transaction, {
-        ticketId,
-        ticketTitle: ticket.title,
-        assigneeId: nextAssigneeId,
-        actorUserId: req.user!.id,
-        actorName: req.user!.name,
-      });
+      if (nextAssigneeId !== null) {
+        await notifyTicketAssigned(transaction, {
+          ticketId,
+          ticketTitle: ticket.title,
+          assigneeId: nextAssigneeId,
+          actorUserId: req.user!.id,
+          actorName: req.user!.name,
+        });
+      }
 
       return nextTicket;
     });
@@ -419,7 +471,7 @@ router.post(
 
 router.post(
   '/:id/start',
-  requireRole(Role.SE, Role.PL),
+  requireRole(Role.PM, Role.SE),
   asyncHandler(async (req, res) => {
     const ticketId = parseId(req.params.id, 'ticket id');
     await assertTicketAccess(req.user!, ticketId);
@@ -430,10 +482,7 @@ router.post(
     }
 
     const nextAssigneeId = ticket.assignedToId ?? req.user!.id;
-
-    if (req.user!.role === Role.PL && nextAssigneeId !== req.user!.id) {
-      throw forbidden('Project leads can only start tickets assigned to themselves.');
-    }
+    assertTicketWorkflowPermission(req.user, ticket, { nextAssigneeId });
 
     const updatedTicket = await prisma.$transaction(async (transaction) => {
       const nextTicket = await transaction.ticket.update({
@@ -466,7 +515,7 @@ router.post(
 
 router.post(
   '/:id/escalate',
-  requireRole(Role.SE),
+  requireRole(Role.PM, Role.SE),
   validate(escalateTicketSchema),
   asyncHandler(async (req, res) => {
     const ticketId = parseId(req.params.id, 'ticket id');
@@ -478,9 +527,13 @@ router.post(
       throw badRequest('Resolved tickets cannot be escalated.');
     }
 
+    assertTicketWorkflowPermission(req.user, ticket);
+
     if (!ticket.project.assignedToId) {
-      throw badRequest('This project is not assigned to a project lead.');
+      throw badRequest('This project is not assigned to a project specialist.');
     }
+
+    await assertTicketAssigneeEligibility(ticket, ticket.project.assignedToId);
 
     const updatedTicket = await prisma.$transaction(async (transaction) => {
       const nextTicket = await transaction.ticket.update({
@@ -500,7 +553,7 @@ router.post(
           ticketId,
           userId: null,
           type: MessageType.SYSTEM,
-          content: `ticket escalated to project lead${payload.note ? `: ${payload.note}` : ''}`,
+          content: `ticket escalated to project specialist${payload.note ? `: ${payload.note}` : ''}`,
         },
       });
 
@@ -519,7 +572,7 @@ router.post(
       await notifyTicketEscalated(transaction, {
         ticketId,
         ticketTitle: ticket.title,
-        projectLeadId: ticket.project.assignedToId,
+        projectSpecialistId: ticket.project.assignedToId,
         actorUserId: req.user!.id,
         actorName: req.user!.name,
       });
@@ -533,7 +586,7 @@ router.post(
 
 router.post(
   '/:id/waiting-on-customer',
-  requireRole(Role.SE, Role.PL),
+  requireRole(Role.PM, Role.SE),
   validate(waitOnCustomerTicketSchema),
   asyncHandler(async (req, res) => {
     const ticketId = parseId(req.params.id, 'ticket id');
@@ -544,6 +597,8 @@ router.post(
     if (ticket.status === TicketStatus.RESOLVED) {
       throw badRequest('Resolved tickets cannot be moved to waiting on customer.');
     }
+
+    assertTicketWorkflowPermission(req.user, ticket);
 
     const updatedTicket = await prisma.$transaction(async (transaction) => {
       const nextTicket = await transaction.ticket.update({
@@ -585,7 +640,7 @@ router.post(
 
 router.post(
   '/:id/reopen',
-  requireRole(Role.SE, Role.PL),
+  requireRole(Role.PM, Role.SE),
   validate(reopenTicketSchema),
   asyncHandler(async (req, res) => {
     const ticketId = parseId(req.params.id, 'ticket id');
@@ -596,6 +651,8 @@ router.post(
     if (ticket.status !== TicketStatus.RESOLVED) {
       throw badRequest('Only resolved tickets can be reopened.');
     }
+
+    assertTicketWorkflowPermission(req.user, ticket);
 
     const updatedTicket = await prisma.$transaction(async (transaction) => {
       const nextTicket = await transaction.ticket.update({
@@ -648,13 +705,14 @@ router.post(
 
 router.post(
   '/:id/resolve',
-  requireRole(Role.SE, Role.PL),
+  requireRole(Role.PM, Role.SE),
   validate(resolveTicketSchema),
   asyncHandler(async (req, res) => {
     const ticketId = parseId(req.params.id, 'ticket id');
     await assertTicketAccess(req.user!, ticketId);
     const payload = req.body as z.infer<typeof resolveTicketSchema>;
     const ticket = await getTicketForWorkflow(ticketId);
+    assertTicketWorkflowPermission(req.user, ticket);
 
     const updatedTicket = await prisma.$transaction(async (transaction) => {
       const nextTicket = await transaction.ticket.update({

@@ -4,29 +4,31 @@ const roleDescriptions = [
   {
     role: 'Project Manager',
     code: 'PM',
-    summary: 'Portfolio-level oversight, client ownership, project setup, reporting, and administration.',
+    summary: 'System administrator. PM manages clients, projects, users, reassignment, and the overall support portfolio.',
   },
   {
-    role: 'Project Lead',
-    code: 'PL',
-    summary: 'Escalation handling, project-level operational oversight, client visibility, and delivery reporting.',
+    role: 'Support Engineer 1',
+    code: 'SE1',
+    summary: 'Global queue operator. Can see the full queue and assign or reassign tickets to self or others.',
   },
   {
-    role: 'Support Engineer',
-    code: 'SE',
-    summary: 'Primary operator for queue work: assign, reply, update, resolve, and escalate when needed.',
+    role: 'Support Engineer 2',
+    code: 'SE2',
+    summary: 'Global specialist. Can see open queue work and self-owned tickets, but primarily claims and executes work personally.',
   },
-];
+  {
+    role: 'Support Engineer 3',
+    code: 'SE3',
+    summary: 'Project specialist. Works inside assigned project scope, can manage project knowledge, and handles project-owned escalations.',
+  },
+] as const;
 
 export default function RoleDirectory() {
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-6">
-      <PageHeader
-        title="Roles"
-        description="Live role model for the current frontend refactor. This stays aligned to PM, PL, and SE."
-      />
+      <PageHeader title="Roles" description="Live PM / SE role model with SE support levels, scope, and assignment authority." />
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {roleDescriptions.map((role) => (
           <article key={role.code} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="flex items-center justify-between gap-4">

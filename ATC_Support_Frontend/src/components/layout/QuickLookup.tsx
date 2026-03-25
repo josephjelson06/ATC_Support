@@ -69,7 +69,7 @@ export default function QuickLookup({
       const [tickets, projects, clients] = await Promise.all([
         apiFetch<PaginatedResponse<ApiTicket>>(queryString('/tickets')),
         apiFetch<PaginatedResponse<ApiProject>>(queryString('/projects')),
-        role === 'PM' || role === 'PL' ? apiFetch<PaginatedResponse<ApiClient>>(queryString('/clients')) : Promise.resolve(null),
+        role ? apiFetch<PaginatedResponse<ApiClient>>(queryString('/clients')) : Promise.resolve(null),
       ]);
 
       return {
@@ -163,7 +163,7 @@ export default function QuickLookup({
               }))}
               onNavigate={closeLookup}
             />
-            {(role === 'PM' || role === 'PL') && lookupQuery.data.clients.length > 0 ? (
+            {lookupQuery.data.clients.length > 0 ? (
               <LookupSection
                 title="Clients"
                 icon={Users}

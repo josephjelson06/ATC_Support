@@ -1,4 +1,4 @@
-import { AmcStatus, Prisma, ProjectStatus, Role } from '@prisma/client';
+import { AmcStatus, Prisma, ProjectStatus, Role, SupportLevel } from '@prisma/client';
 import { Router } from 'express';
 import { z } from 'zod';
 
@@ -9,6 +9,7 @@ import { assertProjectAccess, projectScopeForUser } from '../utils/access';
 import { asyncHandler, badRequest, conflict, parseId, notFound } from '../utils/http';
 import { createPaginatedResponse, getPaginationOptions } from '../utils/pagination';
 import { serializeProject } from '../utils/serializers';
+import { safeUserSelect } from '../utils/userModel';
 import { generateWidgetKey } from '../utils/widgetKey';
 
 const router = Router();
@@ -50,34 +51,28 @@ const updateProjectSchema = createProjectSchema.omit({ amc: true }).partial().re
 const projectInclude = {
   client: true,
   assignedTo: {
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      role: true,
-      status: true,
-      createdAt: true,
-    },
+    select: safeUserSelect,
   },
 } as const;
 
-const assertProjectLead = async (assignedToId: number | null | undefined) => {
+const assertProjectSpecialist = async (assignedToId: number | null | undefined) => {
   if (!assignedToId) {
     return;
   }
 
-  const projectLead = await prisma.user.findFirst({
+  const projectSpecialist = await prisma.user.findFirst({
     where: {
       id: assignedToId,
-      role: Role.PL,
+      role: Role.SE,
+      supportLevel: SupportLevel.SE3,
     },
     select: {
       id: true,
     },
   });
 
-  if (!projectLead) {
-    throw badRequest('assignedToId must reference a project lead.');
+  if (!projectSpecialist) {
+    throw badRequest('assignedToId must reference an SE3 project specialist.');
   }
 };
 
@@ -159,7 +154,7 @@ router.post(
   validate(createProjectSchema),
   asyncHandler(async (req, res) => {
     const payload = req.body as z.infer<typeof createProjectSchema>;
-    await assertProjectLead(payload.assignedToId);
+    await assertProjectSpecialist(payload.assignedToId);
     const project = await prisma.$transaction(async (tx) => {
       const createdProject = await tx.project.create({
         data: {
@@ -176,6 +171,22 @@ router.post(
         },
         include: projectInclude,
       });
+
+      if (payload.assignedToId) {
+        await tx.projectMember.upsert({
+          where: {
+            userId_projectId: {
+              userId: payload.assignedToId,
+              projectId: createdProject.id,
+            },
+          },
+          update: {},
+          create: {
+            userId: payload.assignedToId,
+            projectId: createdProject.id,
+          },
+        });
+      }
 
       if (payload.amc) {
         await tx.amc.create({
@@ -205,15 +216,35 @@ router.patch(
   asyncHandler(async (req, res) => {
     const projectId = parseId(req.params.id, 'project id');
     const payload = req.body as z.infer<typeof updateProjectSchema>;
-    await assertProjectLead(payload.assignedToId);
-    const project = await prisma.project.update({
-      where: {
-        id: projectId,
-      },
-      data: {
-        ...payload,
-      },
-      include: projectInclude,
+    await assertProjectSpecialist(payload.assignedToId);
+    const project = await prisma.$transaction(async (tx) => {
+      const updatedProject = await tx.project.update({
+        where: {
+          id: projectId,
+        },
+        data: {
+          ...payload,
+        },
+        include: projectInclude,
+      });
+
+      if (payload.assignedToId) {
+        await tx.projectMember.upsert({
+          where: {
+            userId_projectId: {
+              userId: payload.assignedToId,
+              projectId,
+            },
+          },
+          update: {},
+          create: {
+            userId: payload.assignedToId,
+            projectId,
+          },
+        });
+      }
+
+      return updatedProject;
     });
 
     res.json(serializeProject(project));

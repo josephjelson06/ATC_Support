@@ -1,0 +1,20 @@
+Date - 25-03-2026 | Time - 12:50 PM
+
+Work on User Management and Ticket Assignment
+
+
+User and Role Management:
+- Role and Permission Matrix -> Combine and Simplify
+
+
+Ticket Assignment:
+- SE1 and PM can assign tickets to themselves or others
+- SE2 and SE3(PL) can only assign tickets to themselves
+- SE2 and SE3 are basically same roles (just tagged)
+
+We need to decide how many roles are there:
+
+PM -> Admin (all things)
+SE1 -> Support Engineer 1 (all scope -> clients, projects, tickets (assigned to themselves or the ones from client)) -> General Support
+SE2 -> Support Engineer 2 (has scope to all projects, clients, tickets (assigned to themselves or assigned to them)) -> Hardware / Network related support -> Installation / Configuration / Troubleshooting / Training related support
+SE3 -> Support Engineer 3 (PL) (has scope to their clients, projects, tickets (assigned to themselves or assigned to them)) -> Project Related Support -> 

@@ -3,8 +3,10 @@ import { z } from 'zod';
 
 import { prisma } from '../lib/prisma';
 import { validate } from '../middleware/validate';
+import type { AuthenticatedUser } from '../types/auth';
 import { assertProjectAccess } from '../utils/access';
-import { asyncHandler, parseId, notFound } from '../utils/http';
+import { asyncHandler, forbidden, parseId, notFound } from '../utils/http';
+import { canManageProjectKnowledge } from '../utils/userModel';
 
 const router = Router();
 
@@ -17,6 +19,12 @@ const createFaqSchema = z.object({
 const updateFaqSchema = createFaqSchema.partial().refine((value) => Object.keys(value).length > 0, {
   message: 'At least one field is required.',
 });
+
+const assertFaqManagementPermission = (user: AuthenticatedUser | undefined) => {
+  if (!user || !canManageProjectKnowledge(user)) {
+    throw forbidden('You do not have permission to manage FAQs.');
+  }
+};
 
 router.get(
   '/projects/:id/faqs',
@@ -38,6 +46,7 @@ router.post(
   '/projects/:id/faqs',
   validate(createFaqSchema),
   asyncHandler(async (req, res) => {
+    assertFaqManagementPermission(req.user);
     const projectId = parseId(req.params.id, 'project id');
     await assertProjectAccess(req.user!, projectId);
     const payload = req.body as z.infer<typeof createFaqSchema>;
@@ -58,6 +67,7 @@ router.patch(
   '/faqs/:id',
   validate(updateFaqSchema),
   asyncHandler(async (req, res) => {
+    assertFaqManagementPermission(req.user);
     const faqId = parseId(req.params.id, 'faq id');
     const payload = req.body as z.infer<typeof updateFaqSchema>;
     const existingFaq = await prisma.faq.findUnique({
@@ -90,6 +100,7 @@ router.patch(
 router.delete(
   '/faqs/:id',
   asyncHandler(async (req, res) => {
+    assertFaqManagementPermission(req.user);
     const faqId = parseId(req.params.id, 'faq id');
     const existingFaq = await prisma.faq.findUnique({
       where: {

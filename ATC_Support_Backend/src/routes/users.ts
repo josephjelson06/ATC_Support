@@ -1,24 +1,36 @@
 import bcrypt from 'bcrypt';
-import { Prisma, Role, UserStatus } from '@prisma/client';
+import { AssignmentAuthority, Prisma, Role, ScopeMode, SupportLevel, UserStatus } from '@prisma/client';
 import { Router } from 'express';
 import { z } from 'zod';
 
 import { prisma } from '../lib/prisma';
 import { requireRole } from '../middleware/role';
 import { validate } from '../middleware/validate';
-import { asyncHandler, parseId } from '../utils/http';
+import { asyncHandler, notFound, parseId } from '../utils/http';
 import { createPaginatedResponse, getPaginationOptions } from '../utils/pagination';
 import { serializeUser } from '../utils/serializers';
+import { normalizeUserAccessProfile, safeUserSelect } from '../utils/userModel';
 
 const router = Router();
 
 const userSelect = {
-  id: true,
-  name: true,
-  email: true,
-  role: true,
-  status: true,
-  createdAt: true,
+  ...safeUserSelect,
+  projectMemberships: {
+    include: {
+      project: {
+        select: {
+          id: true,
+          clientId: true,
+          name: true,
+          status: true,
+          createdAt: true,
+        },
+      },
+    },
+    orderBy: {
+      projectId: 'asc',
+    },
+  },
 } as const;
 
 const createUserSchema = z.object({
@@ -26,6 +38,10 @@ const createUserSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6),
   role: z.nativeEnum(Role),
+  supportLevel: z.nativeEnum(SupportLevel).nullable().optional(),
+  scopeMode: z.nativeEnum(ScopeMode).optional(),
+  assignmentAuthority: z.nativeEnum(AssignmentAuthority).optional(),
+  projectIds: z.array(z.number().int().positive()).optional(),
   status: z.nativeEnum(UserStatus).optional(),
 });
 
@@ -46,10 +62,12 @@ router.get(
   asyncHandler(async (req, res) => {
     const search = String(req.query.search || '').trim();
     const role = req.query.role ? String(req.query.role) : undefined;
+    const supportLevel = req.query.supportLevel ? String(req.query.supportLevel) : undefined;
     const status = req.query.status ? String(req.query.status) : undefined;
     const pagination = getPaginationOptions(req.query as Record<string, unknown>);
     const where: Prisma.UserWhereInput = {
       ...(role ? { role: role as Role } : {}),
+      ...(supportLevel ? { supportLevel: supportLevel as SupportLevel } : {}),
       ...(status ? { status: status as UserStatus } : {}),
       ...(search
         ? {
@@ -97,16 +115,33 @@ router.post(
   validate(createUserSchema),
   asyncHandler(async (req, res) => {
     const payload = req.body as z.infer<typeof createUserSchema>;
+    const accessProfile = normalizeUserAccessProfile(payload);
     const passwordHash = await bcrypt.hash(payload.password, 10);
-    const user = await prisma.user.create({
-      data: {
-        name: payload.name,
-        email: payload.email.toLowerCase(),
-        passwordHash,
-        role: payload.role,
-        status: payload.status ?? UserStatus.ACTIVE,
-      },
-      select: userSelect,
+    const projectIds = Array.from(new Set(payload.projectIds || []));
+    const user = await prisma.$transaction(async (transaction) => {
+      const createdUser = await transaction.user.create({
+        data: {
+          name: payload.name,
+          email: payload.email.toLowerCase(),
+          passwordHash,
+          role: accessProfile.role,
+          supportLevel: accessProfile.supportLevel,
+          scopeMode: accessProfile.scopeMode,
+          assignmentAuthority: accessProfile.assignmentAuthority,
+          status: accessProfile.status,
+          projectMemberships:
+            projectIds.length > 0
+              ? {
+                  createMany: {
+                    data: projectIds.map((projectId) => ({ projectId })),
+                  },
+                }
+              : undefined,
+        },
+        select: userSelect,
+      });
+
+      return createdUser;
     });
 
     res.status(201).json(serializeUser(user));
@@ -121,6 +156,30 @@ router.patch(
     const userId = parseId(req.params.id, 'user id');
     const payload = req.body as z.infer<typeof updateUserSchema>;
     const data: Record<string, unknown> = {};
+    const existingUser = await prisma.user.findUnique({
+      where: {
+        id: userId,
+      },
+      select: {
+        role: true,
+        supportLevel: true,
+        scopeMode: true,
+        assignmentAuthority: true,
+        status: true,
+      },
+    });
+
+    if (!existingUser) {
+      throw notFound('User not found.');
+    }
+
+    const nextAccessProfile = normalizeUserAccessProfile({
+      role: payload.role ?? existingUser.role,
+      supportLevel: payload.supportLevel ?? existingUser.supportLevel,
+      scopeMode: payload.scopeMode ?? existingUser.scopeMode,
+      assignmentAuthority: payload.assignmentAuthority ?? existingUser.assignmentAuthority,
+      status: payload.status ?? existingUser.status,
+    });
 
     if (payload.name !== undefined) {
       data.name = payload.name;
@@ -131,23 +190,53 @@ router.patch(
     }
 
     if (payload.role !== undefined) {
-      data.role = payload.role;
+      data.role = nextAccessProfile.role;
     }
 
-    if (payload.status !== undefined) {
-      data.status = payload.status;
+    if (payload.supportLevel !== undefined || payload.role !== undefined) {
+      data.supportLevel = nextAccessProfile.supportLevel;
+    }
+
+    if (payload.scopeMode !== undefined || payload.role !== undefined || payload.supportLevel !== undefined) {
+      data.scopeMode = nextAccessProfile.scopeMode;
+    }
+
+    if (payload.assignmentAuthority !== undefined || payload.role !== undefined || payload.supportLevel !== undefined) {
+      data.assignmentAuthority = nextAccessProfile.assignmentAuthority;
+    }
+
+    if (payload.status !== undefined || payload.role !== undefined || payload.supportLevel !== undefined) {
+      data.status = nextAccessProfile.status;
     }
 
     if (payload.password !== undefined) {
       data.passwordHash = await bcrypt.hash(payload.password, 10);
     }
 
-    const user = await prisma.user.update({
-      where: {
-        id: userId,
-      },
-      data,
-      select: userSelect,
+    const projectIds = payload.projectIds ? Array.from(new Set(payload.projectIds)) : null;
+
+    const user = await prisma.$transaction(async (transaction) => {
+      if (projectIds) {
+        await transaction.projectMember.deleteMany({
+          where: {
+            userId,
+          },
+        });
+
+        if (projectIds.length > 0) {
+          await transaction.projectMember.createMany({
+            data: projectIds.map((projectId) => ({ userId, projectId })),
+          });
+        }
+      }
+
+      return transaction.user.update({
+        where: {
+          id: userId,
+        },
+        data,
+        select: userSelect,
+      });
     });
 
     res.json(serializeUser(user));

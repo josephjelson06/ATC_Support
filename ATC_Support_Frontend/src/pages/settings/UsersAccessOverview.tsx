@@ -40,7 +40,7 @@ export default function UsersAccessOverview() {
         <MetricCard icon={Users} label="Total Users" value={String(totalUsers)} accent="orange" />
         <MetricCard icon={Users} label="Active Users" value={String(activeUsers)} accent="green" />
         <MetricCard icon={Users} label="Inactive Users" value={String(inactiveUsers)} accent="slate" />
-        <MetricCard icon={Shield} label="Roles" value="3" accent="blue" />
+        <MetricCard icon={Shield} label="Base Roles" value="2" accent="blue" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -56,8 +56,8 @@ export default function UsersAccessOverview() {
           to={appPaths.admin.roles}
           icon={Shield}
           title="Roles"
-          description="Understand the current PM / PL / SE role model used by route visibility and actions."
-          chips={['PM', 'PL', 'SE']}
+          description="Understand the live PM / SE model, the SE1 / SE2 / SE3 support levels, and how scope is derived."
+          chips={['PM', 'SE', 'SE1/SE2/SE3']}
           tone="blue"
         />
         <OverviewCard

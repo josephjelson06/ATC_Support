@@ -24,7 +24,7 @@ type FormState = {
 export function TicketCreatePanel({ projects, onCompleted }: TicketCreatePanelProps) {
   const { closeModal } = useModal();
   const { showToast } = useToast();
-  const { backendRole } = useRole();
+  const { permissions } = useRole();
 
   const eligibleProjects = useMemo(
     () =>
@@ -96,7 +96,7 @@ export function TicketCreatePanel({ projects, onCompleted }: TicketCreatePanelPr
 
       // Internal staff typically logs tickets for themselves, so we immediately claim it when allowed.
       const ticket =
-        backendRole === 'SE' || backendRole === 'PL'
+        permissions?.canAssignTicketsToSelf
           ? await apiFetch<ApiTicket>(`/tickets/${created.id}/assign`, { method: 'POST', body: {} })
           : created;
 
@@ -242,4 +242,3 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     </label>
   );
 }
-

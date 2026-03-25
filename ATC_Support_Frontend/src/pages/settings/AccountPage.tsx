@@ -4,9 +4,10 @@ import { KeyRound, Mail, ShieldCheck, UserRound } from 'lucide-react';
 import PageHeader from '../../components/layout/PageHeader';
 import { useRole } from '../../contexts/RoleContext';
 import { useToast } from '../../contexts/ToastContext';
+import { formatRoleLabel } from '../../lib/format';
 
 export default function AccountPage() {
-  const { user, backendRole, changePassword } = useRole();
+  const { user, changePassword } = useRole();
   const { showToast } = useToast();
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: '',
@@ -77,7 +78,7 @@ export default function AccountPage() {
           <div className="space-y-4 p-6">
             <ProfileRow icon={UserRound} label="Name" value={user?.name || 'Unknown user'} />
             <ProfileRow icon={Mail} label="Email" value={user?.email || 'Unknown email'} />
-            <ProfileRow icon={ShieldCheck} label="Role" value={backendRole || 'Unknown role'} />
+            <ProfileRow icon={ShieldCheck} label="Role" value={user?.role ? formatRoleLabel(user.role, user.supportLevel) : 'Unknown role'} />
           </div>
         </section>
 

@@ -40,6 +40,9 @@ export const authMiddleware: RequestHandler = asyncHandler(async (req, _res, nex
       name: true,
       email: true,
       role: true,
+      supportLevel: true,
+      scopeMode: true,
+      assignmentAuthority: true,
       status: true,
     },
   });

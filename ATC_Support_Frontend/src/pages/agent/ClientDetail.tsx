@@ -21,7 +21,7 @@ const detailTabs: ClientDetailTab[] = ['overview', 'projects', 'contacts', 'cons
 export default function ClientDetail() {
   const navigate = useNavigate();
   const { openModal } = useModal();
-  const { backendRole } = useRole();
+  const { backendRole, permissions } = useRole();
   const { id, tab } = useParams();
   const rawTab = (tab as ClientDetailTab) || 'overview';
   const currentTab = detailTabs.includes(rawTab) ? rawTab : 'overview';
@@ -52,7 +52,7 @@ export default function ClientDetail() {
 
   const { client } = clientQuery.data;
   const activeAmcs = client.amcs.filter((amc) => amc.status === 'ACTIVE');
-  const canManageClients = backendRole === 'PM';
+  const canManageClients = permissions?.canManageClients ?? false;
   const clientTabs = [
     { label: 'Overview', to: appPaths.clients.detail(client.id, 'overview') },
     { label: 'Projects', to: appPaths.clients.detail(client.id, 'projects') },
@@ -330,7 +330,7 @@ export default function ClientDetail() {
                           >
                             {project.widgetEnabled ? 'Widget On' : 'Widget Off'}
                           </span>
-                          {project.assignedTo ? <span>Lead: {project.assignedTo.name}</span> : null}
+                          {project.assignedTo ? <span>Project Specialist: {project.assignedTo.name}</span> : null}
                         </div>
                       </div>
                       {project.widgetKey ? (

@@ -1,0 +1,51 @@
+Work Plan for (26-03-2026):
+
+Major Task
+After this -> go towards Testing -> Testing is vital (task for )
+
+---------------------------------------------------------------------------
+
+To keep in Mind:
+
+- User and Roles + Permission Matrix are just reference only -> not actionalbe -> not required for now either -> so let it be
+
+---------------------------------------------------------------------------
+
+Minor Changes:
+- The action tags (Assign To Me, Reassign) -> which are shown in the table must be colored -> so it is distinguishable from the other text in the table
+- Breadcrumbs needs to be added back again for navigation
+- Collapse icon needs to be centralized (basically fix this icon)
+- Remove Account & Security from the Profile DropDown entirely -> (I'll do it myself - Just keep My Profile and Logout)
+- Move the Search bar to towards the left side of the screen (near the sidebar)
+- Fix the dashboard ui and make it similar in theme with the other pages
+- Notification items must contain only unread notifications (if clicked marked as read - and remove from the list) 
+- Give option to mark one as read or all as read in the notification -> based on that clear the notification
+
+-------------------------
+
+Next major phase is testing:
+
+---------------
+
+Play out a user journey -> 
+
+- Creating ticket -> solved by FAQ
+- Creating ticket -> solved by ChatBot 
+- Creating ticket -> assigned solved by SE1
+- Creating ticket -> solved by SE2 -> assigned by SE1
+- Creating ticket -> solved by SE3 -> assigned by PM
+- Creating ticket -> assigned and solved by SE1
+
+Play out a user journey ->
+
+- Creating a Client
+- Creating a Project
+- Creating a User -> assigning a Project
+- Creating a Project FAQ | Project Docs
+
+---------------
+
+
+After this succeeds, focus on AI Config and LLM
+
+

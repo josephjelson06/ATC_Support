@@ -1,0 +1,23 @@
+Current Standings: (25-03-2026 : 16:08 Hrs)
+
+Major Changes:
+- Dashboard Needs to be fixed
+  - SE1 and PM dashboard needs to show actions tickets -> Open Tickets and whom can i assign it.
+  - SE2 can just see the tickets they are assigned to and their week highlights
+
+
+- For now, keep simple consistent dashboard across all roles:
+
+For SE1 and PM:
+  - Top Section: KPI Cards
+  - Left Section: Open and Unassigned Tickets (these are tickets to be assigned) -> both for SE1 and PM -> so they are actionable in the dashboard itself
+  - Right Section: Weekly stacked bar graph trends
+
+For SE2:
+    - Top Section: KPI Cards
+    - Left Section: Assigned Tickets (these are tickets assigned to SE2) -> so they are actionable in the dashboard itself
+    - Right Section: Weekly stacked bar graph trends
+
+---------------------------------------------------------------------------
+
+

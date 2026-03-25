@@ -1,4 +1,4 @@
-import { Prisma, ProjectStatus, Role } from '@prisma/client';
+import { AmcStatus, Prisma, ProjectStatus, Role } from '@prisma/client';
 import { Router } from 'express';
 import { z } from 'zod';
 
@@ -13,6 +13,23 @@ import { generateWidgetKey } from '../utils/widgetKey';
 
 const router = Router();
 
+const dateSchema = z
+  .string()
+  .transform((value) => new Date(value))
+  .refine((value) => !Number.isNaN(value.getTime()), { message: 'Invalid date.' });
+
+const amcInputSchema = z
+  .object({
+    hoursIncluded: z.number().int().nonnegative(),
+    hoursUsed: z.number().int().nonnegative().optional(),
+    startDate: dateSchema,
+    endDate: dateSchema,
+    status: z.nativeEnum(AmcStatus).optional(),
+  })
+  .refine((value) => value.endDate >= value.startDate, {
+    message: 'endDate must be on or after startDate.',
+  });
+
 const createProjectSchema = z.object({
   clientId: z.number().int().positive(),
   assignedToId: z.number().int().positive().nullable().optional(),
@@ -23,9 +40,10 @@ const createProjectSchema = z.object({
   juliaFallbackMessage: z.string().trim().optional(),
   juliaEscalationHint: z.string().trim().optional(),
   status: z.nativeEnum(ProjectStatus).optional(),
+  amc: amcInputSchema.nullable().optional(),
 });
 
-const updateProjectSchema = createProjectSchema.partial().refine((value) => Object.keys(value).length > 0, {
+const updateProjectSchema = createProjectSchema.omit({ amc: true }).partial().refine((value) => Object.keys(value).length > 0, {
   message: 'At least one field is required.',
 });
 
@@ -142,20 +160,38 @@ router.post(
   asyncHandler(async (req, res) => {
     const payload = req.body as z.infer<typeof createProjectSchema>;
     await assertProjectLead(payload.assignedToId);
-    const project = await prisma.project.create({
-      data: {
-        clientId: payload.clientId,
-        assignedToId: payload.assignedToId ?? null,
-        name: payload.name,
-        description: payload.description,
-        widgetKey: await generateWidgetKey(),
-        widgetEnabled: payload.widgetEnabled ?? true,
-        juliaGreeting: payload.juliaGreeting,
-        juliaFallbackMessage: payload.juliaFallbackMessage,
-        juliaEscalationHint: payload.juliaEscalationHint,
-        status: payload.status ?? ProjectStatus.ACTIVE,
-      },
-      include: projectInclude,
+    const project = await prisma.$transaction(async (tx) => {
+      const createdProject = await tx.project.create({
+        data: {
+          clientId: payload.clientId,
+          assignedToId: payload.assignedToId ?? null,
+          name: payload.name,
+          description: payload.description,
+          widgetKey: await generateWidgetKey(),
+          widgetEnabled: payload.widgetEnabled ?? true,
+          juliaGreeting: payload.juliaGreeting,
+          juliaFallbackMessage: payload.juliaFallbackMessage,
+          juliaEscalationHint: payload.juliaEscalationHint,
+          status: payload.status ?? ProjectStatus.ACTIVE,
+        },
+        include: projectInclude,
+      });
+
+      if (payload.amc) {
+        await tx.amc.create({
+          data: {
+            clientId: payload.clientId,
+            projectId: createdProject.id,
+            hoursIncluded: payload.amc.hoursIncluded,
+            hoursUsed: payload.amc.hoursUsed ?? 0,
+            startDate: payload.amc.startDate,
+            endDate: payload.amc.endDate,
+            status: payload.amc.status ?? AmcStatus.ACTIVE,
+          },
+        });
+      }
+
+      return createdProject;
     });
 
     res.status(201).json(serializeProject(project));

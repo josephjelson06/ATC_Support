@@ -3,6 +3,7 @@ import { Briefcase, Building2, Clock3, Globe, Mail, MapPin, Pencil, Phone, Plus,
 
 import PageHeader from '../../components/layout/PageHeader';
 import SectionTabs from '../../components/layout/SectionTabs';
+import { AmcCrudPanel } from '../../components/entities/AmcCrudPanel';
 import { ClientContactCrudPanel } from '../../components/entities/ClientContactCrudPanel';
 import { ClientCrudPanel } from '../../components/entities/ClientCrudPanel';
 import { ConsigneeContactCrudPanel } from '../../components/entities/ConsigneeContactCrudPanel';
@@ -73,6 +74,44 @@ export default function ClientDetail() {
           }}
           onDeleted={async () => {
             navigate(appPaths.clients.list);
+          }}
+        />
+      ),
+    });
+  };
+
+  const openCreateAmcModal = () => {
+    openModal({
+      title: `Add AMC for ${client.name}`,
+      size: 'lg',
+      content: (
+        <AmcCrudPanel
+          mode="create"
+          clientId={client.id}
+          projects={client.projects}
+          onCompleted={async () => {
+            clientQuery.reload();
+          }}
+        />
+      ),
+    });
+  };
+
+  const openEditAmcModal = (amc: ApiClientDetail['amcs'][number]) => {
+    openModal({
+      title: `Edit ${amc.displayId}`,
+      size: 'lg',
+      content: (
+        <AmcCrudPanel
+          mode="edit"
+          clientId={client.id}
+          projects={client.projects}
+          amc={amc}
+          onCompleted={async () => {
+            clientQuery.reload();
+          }}
+          onDeleted={async () => {
+            clientQuery.reload();
           }}
         />
       ),
@@ -471,8 +510,17 @@ export default function ClientDetail() {
 
           {currentTab === 'amcs' ? (
           <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-100 p-5">
+            <div className="flex items-center justify-between border-b border-slate-100 p-5">
               <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">AMC Coverage</h2>
+              {canManageClients ? (
+                <button
+                  onClick={openCreateAmcModal}
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold uppercase tracking-wider text-slate-700 transition-colors hover:bg-slate-50"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Add AMC
+                </button>
+              ) : null}
             </div>
             <div className="space-y-4 p-5">
               {client.amcs.length === 0 ? (
@@ -486,11 +534,36 @@ export default function ClientDetail() {
                       <div className="flex items-center justify-between gap-4">
                         <div>
                           <p className="font-bold text-slate-900">{amc.displayId}</p>
-                          <p className="mt-1 text-sm text-slate-500">{amc.project?.name || 'Unassigned AMC'}</p>
+                          {amc.project ? (
+                            <Link to={appPaths.projects.detail(amc.project.id)} className="mt-1 inline-block text-sm text-orange-600 transition-colors hover:text-orange-700">
+                              {amc.project.name}
+                            </Link>
+                          ) : (
+                            <p className="mt-1 text-sm text-slate-500">General client AMC</p>
+                          )}
                         </div>
-                        <span className="rounded-full bg-green-100 px-2.5 py-1 text-xs font-bold uppercase tracking-wider text-green-700">
-                          {humanizeEnum(amc.status)}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`rounded-full px-2.5 py-1 text-xs font-bold uppercase tracking-wider ${
+                              amc.status === 'ACTIVE'
+                                ? 'bg-green-100 text-green-700'
+                                : amc.status === 'EXPIRED'
+                                  ? 'bg-amber-100 text-amber-700'
+                                  : 'bg-rose-100 text-rose-700'
+                            }`}
+                          >
+                            {humanizeEnum(amc.status)}
+                          </span>
+                          {canManageClients ? (
+                            <button
+                              onClick={() => openEditAmcModal(amc)}
+                              className="rounded-lg border border-slate-200 bg-white p-2 text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700"
+                              aria-label={`Edit ${amc.displayId}`}
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                          ) : null}
+                        </div>
                       </div>
                       <div className="mt-4">
                         <div className="flex items-center justify-between text-sm font-medium text-slate-600">

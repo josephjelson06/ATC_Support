@@ -1,14 +1,17 @@
-import { useDeferredValue, useEffect, useState } from 'react';
-import { Pencil, Plus, Search, Shield, Trash2, User as UserIcon } from 'lucide-react';
+import { useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { Pencil, Plus, Shield, Trash2, User as UserIcon } from 'lucide-react';
 
+import { DataFilterField, DataToolbar } from '../../components/layout/DataToolbar';
 import PageHeader from '../../components/layout/PageHeader';
 import { PaginationControls } from '../../components/layout/PaginationControls';
+import { SortableTableHeader } from '../../components/layout/SortableTableHeader';
 import { useModal } from '../../contexts/ModalContext';
 import { useRole } from '../../contexts/RoleContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useAsyncData } from '../../hooks/useAsyncData';
 import { apiFetch } from '../../lib/api';
 import { formatDateTime, formatRoleLabel } from '../../lib/format';
+import { compareSortValues, getNextSortDirection, type SortDirection } from '../../lib/tableSort';
 import type { ApiUser, BackendRole, BackendUserStatus, PaginatedResponse } from '../../lib/types';
 
 type UserFormPayload = {
@@ -18,6 +21,8 @@ type UserFormPayload = {
   status: BackendUserStatus;
   password?: string;
 };
+
+type UserSortColumn = 'user' | 'role' | 'status' | 'created';
 
 const PAGE_SIZE = 10;
 
@@ -29,7 +34,11 @@ export default function UserManagement() {
   const [roleFilter, setRoleFilter] = useState<'ALL' | BackendRole>('ALL');
   const [statusFilter, setStatusFilter] = useState<'ALL' | BackendUserStatus>('ALL');
   const [page, setPage] = useState(1);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [sortColumn, setSortColumn] = useState<UserSortColumn>('created');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const deferredSearch = useDeferredValue(search);
+  const canManageUsers = backendRole === 'PM';
 
   useEffect(() => {
     setPage(1);
@@ -55,7 +64,32 @@ export default function UserManagement() {
 
     return apiFetch<PaginatedResponse<ApiUser>>(`/users?${searchParams.toString()}`);
   }, [page, deferredSearch, roleFilter, statusFilter]);
-  const canManageUsers = backendRole === 'PM';
+
+  const activeFilterCount = [roleFilter !== 'ALL', statusFilter !== 'ALL'].filter(Boolean).length;
+
+  const visibleUsers = useMemo(() => {
+    const users = [...(usersQuery.data?.items || [])];
+
+    return users.sort((left, right) => {
+      switch (sortColumn) {
+        case 'user':
+          return compareSortValues(`${left.name} ${left.displayId}`, `${right.name} ${right.displayId}`, sortDirection);
+        case 'role':
+          return compareSortValues(formatRoleLabel(left.role), formatRoleLabel(right.role), sortDirection);
+        case 'status':
+          return compareSortValues(left.status, right.status, sortDirection);
+        case 'created':
+        default:
+          return compareSortValues(new Date(left.createdAt).getTime(), new Date(right.createdAt).getTime(), sortDirection);
+      }
+    });
+  }, [sortColumn, sortDirection, usersQuery.data?.items]);
+
+  const handleSort = (column: UserSortColumn) => {
+    const isActive = sortColumn === column;
+    setSortColumn(column);
+    setSortDirection(getNextSortDirection(isActive, sortDirection));
+  };
 
   const handleCreate = async (payload: UserFormPayload) => {
     await apiFetch<ApiUser>('/users', {
@@ -176,58 +210,88 @@ export default function UserManagement() {
       ) : null}
 
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="grid grid-cols-1 gap-4 border-b border-slate-100 bg-slate-50 p-4 lg:grid-cols-[minmax(0,1fr),180px,180px]">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search by name, email, or user ID..."
-              className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm outline-none transition-all focus:ring-2 focus:ring-orange-500"
-            />
-          </div>
-          <select
-            value={roleFilter}
-            onChange={(event) => setRoleFilter(event.target.value as 'ALL' | BackendRole)}
-            className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 outline-none transition-all focus:ring-2 focus:ring-orange-500"
+        <div className="border-b border-slate-100 p-4">
+          <DataToolbar
+            searchValue={search}
+            onSearchChange={setSearch}
+            searchPlaceholder="Search by name, email, or user ID..."
+            filtersOpen={filtersOpen}
+            onToggleFilters={() => setFiltersOpen((current) => !current)}
+            activeFilterCount={activeFilterCount}
+            className="border-none shadow-none"
           >
-            <option value="ALL">All Roles</option>
-            <option value="PM">Project Manager</option>
-            <option value="PL">Project Lead</option>
-            <option value="SE">Support Engineer</option>
-          </select>
-          <select
-            value={statusFilter}
-            onChange={(event) => setStatusFilter(event.target.value as 'ALL' | BackendUserStatus)}
-            className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 outline-none transition-all focus:ring-2 focus:ring-orange-500"
-          >
-            <option value="ALL">All Statuses</option>
-            <option value="ACTIVE">Active</option>
-            <option value="INACTIVE">Inactive</option>
-          </select>
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <DataFilterField label="Role">
+                  <select
+                    value={roleFilter}
+                    onChange={(event) => setRoleFilter(event.target.value as 'ALL' | BackendRole)}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 outline-none transition-all focus:ring-2 focus:ring-orange-500"
+                  >
+                    <option value="ALL">All Roles</option>
+                    <option value="PM">Project Manager</option>
+                    <option value="PL">Project Lead</option>
+                    <option value="SE">Support Engineer</option>
+                  </select>
+                </DataFilterField>
+
+                <DataFilterField label="Status">
+                  <select
+                    value={statusFilter}
+                    onChange={(event) => setStatusFilter(event.target.value as 'ALL' | BackendUserStatus)}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 outline-none transition-all focus:ring-2 focus:ring-orange-500"
+                  >
+                    <option value="ALL">All Statuses</option>
+                    <option value="ACTIVE">Active</option>
+                    <option value="INACTIVE">Inactive</option>
+                  </select>
+                </DataFilterField>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRoleFilter('ALL');
+                    setStatusFilter('ALL');
+                  }}
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50"
+                >
+                  Clear Filters
+                </button>
+              </div>
+            </div>
+          </DataToolbar>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] text-left whitespace-nowrap">
+          <table className="w-full min-w-[760px] whitespace-nowrap text-left">
             <thead className="border-b border-slate-200 bg-slate-50">
               <tr>
-                <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500">User</th>
-                <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500">Role</th>
-                <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500">Status</th>
-                <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500">Created</th>
+                <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                  <SortableTableHeader label="User" active={sortColumn === 'user'} direction={sortDirection} onClick={() => handleSort('user')} />
+                </th>
+                <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                  <SortableTableHeader label="Role" active={sortColumn === 'role'} direction={sortDirection} onClick={() => handleSort('role')} />
+                </th>
+                <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                  <SortableTableHeader label="Status" active={sortColumn === 'status'} direction={sortDirection} onClick={() => handleSort('status')} />
+                </th>
+                <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                  <SortableTableHeader label="Created" active={sortColumn === 'created'} direction={sortDirection} onClick={() => handleSort('created')} />
+                </th>
                 <th className="px-6 py-4 text-right text-[10px] font-black uppercase tracking-widest text-slate-500">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {userPage.items.length === 0 ? (
+              {visibleUsers.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-6 py-12 text-center text-sm text-slate-500">
                     No users matched the current filters.
                   </td>
                 </tr>
               ) : (
-                userPage.items.map((user) => (
+                visibleUsers.map((user) => (
                   <tr key={user.id} className="hover:bg-slate-50">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
@@ -242,7 +306,7 @@ export default function UserManagement() {
                         <div>
                           <p className="font-bold text-slate-900">{user.name}</p>
                           <p className="mt-1 text-xs text-slate-500">
-                            {user.displayId} • {user.email}
+                            {user.displayId} - {user.email}
                           </p>
                         </div>
                       </div>
@@ -461,7 +525,7 @@ function UserFormPanel({
             disabled={isSubmitting}
             className="rounded-xl bg-orange-600 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-orange-700 disabled:cursor-not-allowed disabled:bg-orange-300"
           >
-            {isSubmitting ? 'Saving…' : mode === 'create' ? 'Create User' : 'Save Changes'}
+            {isSubmitting ? 'Saving...' : mode === 'create' ? 'Create User' : 'Save Changes'}
           </button>
         </div>
       </div>

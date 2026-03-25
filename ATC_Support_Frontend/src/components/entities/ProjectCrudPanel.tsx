@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react';
-import { Info, RefreshCw, Trash2 } from 'lucide-react';
+import { CalendarRange, Info, RefreshCw, ShieldCheck, Trash2 } from 'lucide-react';
 
 import { useModal } from '../../contexts/ModalContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useAsyncData } from '../../hooks/useAsyncData';
 import { apiFetch, getErrorMessage } from '../../lib/api';
 import { formatRoleLabel } from '../../lib/format';
-import type { ApiClient, ApiProject, ApiUser, BackendRole, ProjectStatus } from '../../lib/types';
+import type { AmcStatus, ApiClient, ApiProject, ApiUser, BackendRole, ProjectStatus } from '../../lib/types';
 
 type ProjectCrudPanelProps = {
   mode: 'create' | 'edit';
@@ -39,11 +39,31 @@ type FormState = {
   juliaFallbackMessage: string;
   juliaEscalationHint: string;
   status: ProjectStatus;
+  createAmc: boolean;
+  amcHoursIncluded: string;
+  amcHoursUsed: string;
+  amcStartDate: string;
+  amcEndDate: string;
+  amcStatus: AmcStatus;
+};
+
+const toDateInput = (value: Date) => value.toISOString().slice(0, 10);
+
+const buildDefaultAmcDates = () => {
+  const startDate = new Date();
+  const endDate = new Date();
+  endDate.setFullYear(endDate.getFullYear() + 1);
+
+  return {
+    startDate: toDateInput(startDate),
+    endDate: toDateInput(endDate),
+  };
 };
 
 export function ProjectCrudPanel({ mode, project, onCompleted, onDeleted }: ProjectCrudPanelProps) {
   const { closeModal } = useModal();
   const { showToast } = useToast();
+  const defaultAmcDates = useMemo(buildDefaultAmcDates, []);
   const [form, setForm] = useState<FormState>({
     clientId: project?.clientId ? String(project.clientId) : '',
     assignedToId: project?.assignedToId ? String(project.assignedToId) : '',
@@ -54,6 +74,12 @@ export function ProjectCrudPanel({ mode, project, onCompleted, onDeleted }: Proj
     juliaFallbackMessage: project?.juliaFallbackMessage || '',
     juliaEscalationHint: project?.juliaEscalationHint || '',
     status: project?.status || 'ACTIVE',
+    createAmc: mode === 'create',
+    amcHoursIncluded: '24',
+    amcHoursUsed: '0',
+    amcStartDate: defaultAmcDates.startDate,
+    amcEndDate: defaultAmcDates.endDate,
+    amcStatus: 'ACTIVE',
   });
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -83,7 +109,7 @@ export function ProjectCrudPanel({ mode, project, onCompleted, onDeleted }: Proj
     };
 
   const handleCheckboxChange =
-    (field: 'widgetEnabled') =>
+    (field: 'widgetEnabled' | 'createAmc') =>
     (event: React.ChangeEvent<HTMLInputElement>) => {
       const value = event.target.checked;
       setForm((current) => ({
@@ -106,6 +132,31 @@ export function ProjectCrudPanel({ mode, project, onCompleted, onDeleted }: Proj
       return;
     }
 
+    if (mode === 'create' && form.createAmc) {
+      const hoursIncluded = Number(form.amcHoursIncluded);
+      const hoursUsed = Number(form.amcHoursUsed);
+
+      if (!Number.isInteger(hoursIncluded) || hoursIncluded < 0) {
+        setError('AMC hours included must be a non-negative whole number.');
+        return;
+      }
+
+      if (!Number.isInteger(hoursUsed) || hoursUsed < 0) {
+        setError('AMC hours used must be a non-negative whole number.');
+        return;
+      }
+
+      if (!form.amcStartDate || !form.amcEndDate) {
+        setError('AMC start date and end date are required.');
+        return;
+      }
+
+      if (form.amcEndDate < form.amcStartDate) {
+        setError('AMC end date must be on or after the AMC start date.');
+        return;
+      }
+    }
+
     setIsSaving(true);
 
     try {
@@ -119,6 +170,16 @@ export function ProjectCrudPanel({ mode, project, onCompleted, onDeleted }: Proj
         juliaFallbackMessage: form.juliaFallbackMessage.trim() || undefined,
         juliaEscalationHint: form.juliaEscalationHint.trim() || undefined,
         status: form.status,
+        amc:
+          mode === 'create' && form.createAmc
+            ? {
+                hoursIncluded: Number(form.amcHoursIncluded),
+                hoursUsed: Number(form.amcHoursUsed),
+                startDate: form.amcStartDate,
+                endDate: form.amcEndDate,
+                status: form.amcStatus,
+              }
+            : undefined,
       };
 
       const savedProject =
@@ -291,6 +352,86 @@ export function ProjectCrudPanel({ mode, project, onCompleted, onDeleted }: Proj
           />
         </Field>
       </div>
+
+      {mode === 'create' ? (
+        <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3">
+            <input
+              type="checkbox"
+              checked={form.createAmc}
+              onChange={handleCheckboxChange('createAmc')}
+              className="mt-1 h-4 w-4 rounded border-slate-300 text-orange-600 focus:ring-orange-500"
+            />
+            <div>
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 text-green-600" />
+                <p className="text-sm font-bold text-slate-900">Create AMC for this project</p>
+              </div>
+              <p className="mt-1 text-xs text-slate-500">
+                Keep this on to create the linked AMC in the same save. The AMC will belong to the selected client and point to this new project.
+              </p>
+            </div>
+          </label>
+
+          {form.createAmc ? (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <Field label="AMC Hours Included">
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={form.amcHoursIncluded}
+                  onChange={handleChange('amcHoursIncluded')}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none transition-all focus:ring-2 focus:ring-orange-500"
+                />
+              </Field>
+              <Field label="AMC Hours Used">
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={form.amcHoursUsed}
+                  onChange={handleChange('amcHoursUsed')}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none transition-all focus:ring-2 focus:ring-orange-500"
+                />
+              </Field>
+              <Field label="AMC Start Date">
+                <div className="relative">
+                  <CalendarRange className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="date"
+                    value={form.amcStartDate}
+                    onChange={handleChange('amcStartDate')}
+                    className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm outline-none transition-all focus:ring-2 focus:ring-orange-500"
+                  />
+                </div>
+              </Field>
+              <Field label="AMC End Date">
+                <div className="relative">
+                  <CalendarRange className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="date"
+                    value={form.amcEndDate}
+                    onChange={handleChange('amcEndDate')}
+                    className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm outline-none transition-all focus:ring-2 focus:ring-orange-500"
+                  />
+                </div>
+              </Field>
+              <Field label="AMC Status">
+                <select
+                  value={form.amcStatus}
+                  onChange={handleChange('amcStatus')}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none transition-all focus:ring-2 focus:ring-orange-500"
+                >
+                  <option value="ACTIVE">Active</option>
+                  <option value="EXPIRED">Expired</option>
+                  <option value="CANCELLED">Cancelled</option>
+                </select>
+              </Field>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {mode === 'edit' && project?.widgetKey ? (
         <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">

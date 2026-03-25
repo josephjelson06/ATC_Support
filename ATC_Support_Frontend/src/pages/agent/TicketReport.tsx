@@ -1,11 +1,14 @@
 import { useMemo, useState } from 'react';
-import { Download, RefreshCw, Search } from 'lucide-react';
+import { Download, RefreshCw } from 'lucide-react';
 
+import { DataFilterField, DataToolbar } from '../../components/layout/DataToolbar';
 import PageHeader from '../../components/layout/PageHeader';
+import { SortableTableHeader } from '../../components/layout/SortableTableHeader';
 import { useToast } from '../../contexts/ToastContext';
 import { useAsyncData } from '../../hooks/useAsyncData';
 import { apiFetch } from '../../lib/api';
 import { formatDateTime, getTicketPriorityClasses, getTicketStatusClasses, humanizeEnum } from '../../lib/format';
+import { compareSortValues, getNextSortDirection, type SortDirection } from '../../lib/tableSort';
 import type { ApiProject, ApiTicket, TicketStatus } from '../../lib/types';
 
 type Filters = {
@@ -16,6 +19,8 @@ type Filters = {
   search: string;
 };
 
+type ReportSortColumn = 'ticket' | 'client' | 'project' | 'priority' | 'status' | 'assignee' | 'created' | 'resolved';
+
 const defaultFilters: Filters = {
   projectId: '',
   status: '',
@@ -23,6 +28,25 @@ const defaultFilters: Filters = {
   toDate: '',
   search: '',
 };
+
+const ticketStatuses: TicketStatus[] = ['NEW', 'ASSIGNED', 'IN_PROGRESS', 'WAITING_ON_CUSTOMER', 'ESCALATED', 'REOPENED', 'RESOLVED'];
+
+const priorityRank = {
+  LOW: 1,
+  MEDIUM: 2,
+  HIGH: 3,
+  CRITICAL: 4,
+} as const;
+
+const statusRank = {
+  NEW: 1,
+  ASSIGNED: 2,
+  IN_PROGRESS: 3,
+  WAITING_ON_CUSTOMER: 4,
+  ESCALATED: 5,
+  REOPENED: 6,
+  RESOLVED: 7,
+} as const;
 
 const buildReportPath = (filters: Filters) => {
   const params = new URLSearchParams();
@@ -80,25 +104,55 @@ export default function TicketReport() {
   const { showToast } = useToast();
   const [draftFilters, setDraftFilters] = useState<Filters>(defaultFilters);
   const [appliedFilters, setAppliedFilters] = useState<Filters>(defaultFilters);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [sortColumn, setSortColumn] = useState<ReportSortColumn>('created');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
   const projectsQuery = useAsyncData(() => apiFetch<ApiProject[]>('/projects'), []);
   const reportQuery = useAsyncData(() => apiFetch<ApiTicket[]>(buildReportPath(appliedFilters)), [appliedFilters]);
 
+  const activeFilterCount = [draftFilters.projectId, draftFilters.status, draftFilters.fromDate, draftFilters.toDate].filter(Boolean).length;
+
   const visibleTickets = useMemo(() => {
-    const tickets = reportQuery.data || [];
+    const tickets = [...(reportQuery.data || [])];
+    const search = draftFilters.search.trim().toLowerCase();
 
-    if (!draftFilters.search.trim()) {
-      return tickets;
-    }
+    const filteredTickets = search
+      ? tickets.filter((ticket) =>
+          `${ticket.displayId} ${ticket.title} ${ticket.project?.name || ''} ${ticket.project?.client?.name || ''} ${ticket.assignedTo?.name || ''}`
+            .toLowerCase()
+            .includes(search),
+        )
+      : tickets;
 
-    const search = draftFilters.search.toLowerCase();
+    return filteredTickets.sort((left, right) => {
+      switch (sortColumn) {
+        case 'ticket':
+          return compareSortValues(`${left.title} ${left.displayId}`, `${right.title} ${right.displayId}`, sortDirection);
+        case 'client':
+          return compareSortValues(left.project?.client?.name, right.project?.client?.name, sortDirection);
+        case 'project':
+          return compareSortValues(left.project?.name, right.project?.name, sortDirection);
+        case 'priority':
+          return compareSortValues(priorityRank[left.priority], priorityRank[right.priority], sortDirection);
+        case 'status':
+          return compareSortValues(statusRank[left.status], statusRank[right.status], sortDirection);
+        case 'assignee':
+          return compareSortValues(left.assignedTo?.name || 'Unassigned', right.assignedTo?.name || 'Unassigned', sortDirection);
+        case 'resolved':
+          return compareSortValues(left.resolvedAt ? new Date(left.resolvedAt).getTime() : null, right.resolvedAt ? new Date(right.resolvedAt).getTime() : null, sortDirection);
+        case 'created':
+        default:
+          return compareSortValues(new Date(left.createdAt).getTime(), new Date(right.createdAt).getTime(), sortDirection);
+      }
+    });
+  }, [draftFilters.search, reportQuery.data, sortColumn, sortDirection]);
 
-    return tickets.filter((ticket) =>
-      `${ticket.displayId} ${ticket.title} ${ticket.project?.name || ''} ${ticket.project?.client?.name || ''} ${ticket.assignedTo?.name || ''}`
-        .toLowerCase()
-        .includes(search),
-    );
-  }, [draftFilters.search, reportQuery.data]);
+  const handleSort = (column: ReportSortColumn) => {
+    const isActive = sortColumn === column;
+    setSortColumn(column);
+    setSortDirection(getNextSortDirection(isActive, sortDirection));
+  };
 
   const handleApplyFilters = () => {
     setAppliedFilters((current) => ({
@@ -149,9 +203,9 @@ export default function TicketReport() {
         actions={
           <button
             onClick={handleExportCsv}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-900 text-white rounded-xl text-sm font-bold hover:bg-slate-800 transition-colors"
+            className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-slate-800"
           >
-            <Download className="w-4 h-4" />
+            <Download className="h-4 w-4" />
             Export CSV
           </button>
         }
@@ -161,100 +215,91 @@ export default function TicketReport() {
         <SummaryCard label="Visible Tickets" value={String(visibleTickets.length)} />
         <SummaryCard label="Resolved" value={String(visibleTickets.filter((ticket) => ticket.status === 'RESOLVED').length)} />
         <SummaryCard label="Open" value={String(visibleTickets.filter((ticket) => ticket.status !== 'RESOLVED').length)} />
-        <SummaryCard label="Avg Resolution" value={averageResolutionHours ? `${averageResolutionHours}h` : '—'} />
+        <SummaryCard label="Avg Resolution" value={averageResolutionHours ? `${averageResolutionHours}h` : '--'} />
       </div>
 
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
-          <div className="xl:col-span-2">
-            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Search</label>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+      <DataToolbar
+        searchValue={draftFilters.search}
+        onSearchChange={(value) => setDraftFilters((current) => ({ ...current, search: value }))}
+        searchPlaceholder="Search ticket, client, project, or assignee..."
+        filtersOpen={filtersOpen}
+        onToggleFilters={() => setFiltersOpen((current) => !current)}
+        activeFilterCount={activeFilterCount}
+      >
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <DataFilterField label="Project">
+              <select
+                value={draftFilters.projectId}
+                onChange={(event) => setDraftFilters((current) => ({ ...current, projectId: event.target.value }))}
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 outline-none transition-all focus:ring-2 focus:ring-orange-500"
+              >
+                <option value="">All projects</option>
+                {(projectsQuery.data || []).map((project) => (
+                  <option key={project.id} value={String(project.id)}>
+                    {project.name}
+                  </option>
+                ))}
+              </select>
+            </DataFilterField>
+
+            <DataFilterField label="Status">
+              <select
+                value={draftFilters.status}
+                onChange={(event) => setDraftFilters((current) => ({ ...current, status: event.target.value as Filters['status'] }))}
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 outline-none transition-all focus:ring-2 focus:ring-orange-500"
+              >
+                <option value="">All statuses</option>
+                {ticketStatuses.map((status) => (
+                  <option key={status} value={status}>
+                    {humanizeEnum(status)}
+                  </option>
+                ))}
+              </select>
+            </DataFilterField>
+
+            <DataFilterField label="From">
               <input
-                type="text"
-                value={draftFilters.search}
-                onChange={(event) => setDraftFilters((current) => ({ ...current, search: event.target.value }))}
-                placeholder="Search ticket, client, project, or assignee…"
-                className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500 outline-none"
+                type="date"
+                value={draftFilters.fromDate}
+                onChange={(event) => setDraftFilters((current) => ({ ...current, fromDate: event.target.value }))}
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition-all focus:ring-2 focus:ring-orange-500"
               />
-            </div>
+            </DataFilterField>
+
+            <DataFilterField label="To">
+              <input
+                type="date"
+                value={draftFilters.toDate}
+                onChange={(event) => setDraftFilters((current) => ({ ...current, toDate: event.target.value }))}
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none transition-all focus:ring-2 focus:ring-orange-500"
+              />
+            </DataFilterField>
           </div>
 
-          <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Project</label>
-            <select
-              value={draftFilters.projectId}
-              onChange={(event) => setDraftFilters((current) => ({ ...current, projectId: event.target.value }))}
-              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500 outline-none bg-white"
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={handleApplyFilters}
+              className="rounded-xl bg-orange-600 px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-orange-700"
             >
-              <option value="">All projects</option>
-              {(projectsQuery.data || []).map((project) => (
-                <option key={project.id} value={String(project.id)}>
-                  {project.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Status</label>
-            <select
-              value={draftFilters.status}
-              onChange={(event) => setDraftFilters((current) => ({ ...current, status: event.target.value as Filters['status'] }))}
-              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500 outline-none bg-white"
+              Apply Filters
+            </button>
+            <button
+              onClick={handleResetFilters}
+              className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50"
             >
-              <option value="">All statuses</option>
-              {(['NEW', 'ASSIGNED', 'IN_PROGRESS', 'WAITING_ON_CUSTOMER', 'ESCALATED', 'REOPENED', 'RESOLVED'] as TicketStatus[]).map((status) => (
-                <option key={status} value={status}>
-                  {humanizeEnum(status)}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">From</label>
-            <input
-              type="date"
-              value={draftFilters.fromDate}
-              onChange={(event) => setDraftFilters((current) => ({ ...current, fromDate: event.target.value }))}
-              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500 outline-none"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">To</label>
-            <input
-              type="date"
-              value={draftFilters.toDate}
-              onChange={(event) => setDraftFilters((current) => ({ ...current, toDate: event.target.value }))}
-              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500 outline-none"
-            />
+              Reset
+            </button>
+            <button
+              onClick={reportQuery.reload}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Refresh
+            </button>
           </div>
         </div>
-
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            onClick={handleApplyFilters}
-            className="px-5 py-2.5 bg-orange-600 text-white rounded-xl text-sm font-bold hover:bg-orange-700 transition-colors"
-          >
-            Apply Filters
-          </button>
-          <button
-            onClick={handleResetFilters}
-            className="px-5 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-50 transition-colors"
-          >
-            Reset
-          </button>
-          <button
-            onClick={reportQuery.reload}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl text-sm font-bold hover:bg-slate-50 transition-colors"
-          >
-            <RefreshCw className="w-4 h-4" />
-            Refresh
-          </button>
-        </div>
-      </div>
+      </DataToolbar>
 
       {reportQuery.isLoading ? (
         <ReportSkeleton />
@@ -263,17 +308,33 @@ export default function TicketReport() {
       ) : (
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[980px] text-left whitespace-nowrap">
-              <thead className="bg-slate-50 border-b border-slate-200">
+            <table className="w-full min-w-[980px] whitespace-nowrap text-left">
+              <thead className="border-b border-slate-200 bg-slate-50">
                 <tr>
-                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Ticket</th>
-                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Client</th>
-                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Project</th>
-                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Priority</th>
-                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Assignee</th>
-                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Created</th>
-                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Resolved</th>
+                  <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">
+                    <SortableTableHeader label="Ticket" active={sortColumn === 'ticket'} direction={sortDirection} onClick={() => handleSort('ticket')} />
+                  </th>
+                  <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">
+                    <SortableTableHeader label="Client" active={sortColumn === 'client'} direction={sortDirection} onClick={() => handleSort('client')} />
+                  </th>
+                  <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">
+                    <SortableTableHeader label="Project" active={sortColumn === 'project'} direction={sortDirection} onClick={() => handleSort('project')} />
+                  </th>
+                  <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">
+                    <SortableTableHeader label="Priority" active={sortColumn === 'priority'} direction={sortDirection} onClick={() => handleSort('priority')} />
+                  </th>
+                  <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">
+                    <SortableTableHeader label="Status" active={sortColumn === 'status'} direction={sortDirection} onClick={() => handleSort('status')} />
+                  </th>
+                  <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">
+                    <SortableTableHeader label="Assignee" active={sortColumn === 'assignee'} direction={sortDirection} onClick={() => handleSort('assignee')} />
+                  </th>
+                  <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">
+                    <SortableTableHeader label="Created" active={sortColumn === 'created'} direction={sortDirection} onClick={() => handleSort('created')} />
+                  </th>
+                  <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">
+                    <SortableTableHeader label="Resolved" active={sortColumn === 'resolved'} direction={sortDirection} onClick={() => handleSort('resolved')} />
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -285,28 +346,28 @@ export default function TicketReport() {
                   </tr>
                 ) : (
                   visibleTickets.map((ticket) => (
-                    <tr key={ticket.id} className="hover:bg-slate-50 transition-colors">
+                    <tr key={ticket.id} className="transition-colors hover:bg-slate-50">
                       <td className="px-6 py-4">
                         <div>
                           <p className="font-bold text-slate-900">{ticket.title}</p>
-                          <p className="text-xs text-orange-600 font-mono font-bold mt-1">{ticket.displayId}</p>
+                          <p className="mt-1 font-mono text-xs font-bold text-orange-600">{ticket.displayId}</p>
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-sm text-slate-600">{ticket.project?.client?.name || '—'}</td>
-                      <td className="px-6 py-4 text-sm text-slate-600">{ticket.project?.name || '—'}</td>
+                      <td className="px-6 py-4 text-sm text-slate-600">{ticket.project?.client?.name || '--'}</td>
+                      <td className="px-6 py-4 text-sm text-slate-600">{ticket.project?.name || '--'}</td>
                       <td className="px-6 py-4">
-                        <span className={`px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${getTicketPriorityClasses(ticket.priority)}`}>
+                        <span className={`rounded-full px-2.5 py-1 text-xs font-bold uppercase tracking-wider ${getTicketPriorityClasses(ticket.priority)}`}>
                           {humanizeEnum(ticket.priority)}
                         </span>
                       </td>
                       <td className="px-6 py-4">
-                        <span className={`px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${getTicketStatusClasses(ticket.status)}`}>
+                        <span className={`rounded-full px-2.5 py-1 text-xs font-bold uppercase tracking-wider ${getTicketStatusClasses(ticket.status)}`}>
                           {humanizeEnum(ticket.status)}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-sm text-slate-600">{ticket.assignedTo?.name || 'Unassigned'}</td>
                       <td className="px-6 py-4 text-sm text-slate-600">{formatDateTime(ticket.createdAt)}</td>
-                      <td className="px-6 py-4 text-sm text-slate-600">{ticket.resolvedAt ? formatDateTime(ticket.resolvedAt) : '—'}</td>
+                      <td className="px-6 py-4 text-sm text-slate-600">{ticket.resolvedAt ? formatDateTime(ticket.resolvedAt) : '--'}</td>
                     </tr>
                   ))
                 )}
@@ -321,23 +382,23 @@ export default function TicketReport() {
 
 function SummaryCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-      <p className="text-sm font-bold text-slate-500 uppercase tracking-wider">{label}</p>
-      <p className="text-2xl font-black text-slate-900 mt-2">{value}</p>
+    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <p className="text-sm font-bold uppercase tracking-wider text-slate-500">{label}</p>
+      <p className="mt-2 text-2xl font-black text-slate-900">{value}</p>
     </div>
   );
 }
 
 function ReportSkeleton() {
-  return <div className="h-[28rem] bg-white rounded-2xl border border-slate-200 shadow-sm animate-pulse" />;
+  return <div className="h-[28rem] animate-pulse rounded-2xl border border-slate-200 bg-white shadow-sm" />;
 }
 
 function ReportError({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
-    <div className="bg-white border border-red-200 rounded-2xl shadow-sm p-6 text-center">
+    <div className="rounded-2xl border border-red-200 bg-white p-6 text-center shadow-sm">
       <h2 className="text-lg font-bold text-slate-900">Report unavailable</h2>
-      <p className="text-sm text-slate-500 mt-2">{message}</p>
-      <button onClick={onRetry} className="mt-4 px-4 py-2 bg-orange-600 text-white rounded-xl font-bold text-sm hover:bg-orange-700 transition-colors">
+      <p className="mt-2 text-sm text-slate-500">{message}</p>
+      <button onClick={onRetry} className="mt-4 rounded-xl bg-orange-600 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-orange-700">
         Retry
       </button>
     </div>

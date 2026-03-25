@@ -1,16 +1,19 @@
-import { useDeferredValue, useEffect, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Briefcase, KeyRound, Plus, Search, Ticket, UserRoundCog } from 'lucide-react';
+import { Briefcase, KeyRound, Plus, Ticket, UserRoundCog } from 'lucide-react';
 
 import { ProjectCrudPanel } from '../../components/entities/ProjectCrudPanel';
+import { DataFilterField, DataToolbar } from '../../components/layout/DataToolbar';
 import PageHeader from '../../components/layout/PageHeader';
 import { PaginationControls } from '../../components/layout/PaginationControls';
+import { SortableTableHeader } from '../../components/layout/SortableTableHeader';
 import { useModal } from '../../contexts/ModalContext';
 import { useRole } from '../../contexts/RoleContext';
 import { useAsyncData } from '../../hooks/useAsyncData';
 import { apiFetch } from '../../lib/api';
 import { formatDate, humanizeEnum } from '../../lib/format';
 import { appPaths } from '../../lib/navigation';
+import { compareSortValues, getNextSortDirection } from '../../lib/tableSort';
 import type { ApiProject, ApiTicket, PaginatedResponse, ProjectStatus } from '../../lib/types';
 
 const PAGE_SIZE = 8;
@@ -21,6 +24,9 @@ export default function ProjectMasterList() {
   const { role, backendRole } = useRole();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | ProjectStatus>('ALL');
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [sortColumn, setSortColumn] = useState<'project' | 'client' | 'lead' | 'status' | 'openTickets' | 'created'>('created');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [page, setPage] = useState(1);
   const deferredSearch = useDeferredValue(searchQuery);
 
@@ -54,6 +60,39 @@ export default function ProjectMasterList() {
   );
 
   const canManageProjects = backendRole === 'PM';
+  const projectPage = projectsQuery.data?.projects;
+  const tickets = projectsQuery.data?.tickets || [];
+  const projectItems = projectPage?.items || [];
+  const openTicketCountByProject = tickets.reduce<Record<number, number>>((counts, ticket) => {
+    if (!ticket.projectId || ticket.status === 'RESOLVED') {
+      return counts;
+    }
+
+    counts[ticket.projectId] = (counts[ticket.projectId] || 0) + 1;
+    return counts;
+  }, {});
+  const visibleProjects = useMemo(() => {
+    const items = [...projectItems];
+
+    items.sort((left, right) => {
+      switch (sortColumn) {
+        case 'project':
+          return compareSortValues(left.name, right.name, sortDirection);
+        case 'client':
+          return compareSortValues(left.client?.name || '', right.client?.name || '', sortDirection);
+        case 'lead':
+          return compareSortValues(left.assignedTo?.name || '', right.assignedTo?.name || '', sortDirection);
+        case 'status':
+          return compareSortValues(left.status, right.status, sortDirection);
+        case 'openTickets':
+          return compareSortValues(openTicketCountByProject[left.id] || 0, openTicketCountByProject[right.id] || 0, sortDirection);
+        case 'created':
+          return compareSortValues(new Date(left.createdAt).getTime(), new Date(right.createdAt).getTime(), sortDirection);
+      }
+    });
+
+    return items;
+  }, [openTicketCountByProject, projectItems, sortColumn, sortDirection]);
 
   const openCreateModal = () => {
     openModal({
@@ -79,19 +118,16 @@ export default function ProjectMasterList() {
     return <ProjectsError message={projectsQuery.error || 'Unable to load projects.'} onRetry={projectsQuery.reload} />;
   }
 
-  const { projects: projectPage, tickets } = projectsQuery.data;
-  const openTicketCountByProject = tickets.reduce<Record<number, number>>((counts, ticket) => {
-    if (!ticket.projectId || ticket.status === 'RESOLVED') {
-      return counts;
-    }
+  const resolvedProjectPage = projectsQuery.data.projects;
+  const activeProjectsOnPage = resolvedProjectPage.items.filter((project) => project.status === 'ACTIVE').length;
+  const widgetEnabledProjectsOnPage = resolvedProjectPage.items.filter((project) => project.widgetEnabled).length;
+  const totalOpenTicketsOnPage = resolvedProjectPage.items.reduce((sum, project) => sum + (openTicketCountByProject[project.id] || 0), 0);
+  const activeFilterCount = statusFilter !== 'ALL' ? 1 : 0;
 
-    counts[ticket.projectId] = (counts[ticket.projectId] || 0) + 1;
-    return counts;
-  }, {});
-
-  const activeProjectsOnPage = projectPage.items.filter((project) => project.status === 'ACTIVE').length;
-  const widgetEnabledProjectsOnPage = projectPage.items.filter((project) => project.widgetEnabled).length;
-  const totalOpenTicketsOnPage = projectPage.items.reduce((sum, project) => sum + (openTicketCountByProject[project.id] || 0), 0);
+  const handleSort = (column: typeof sortColumn) => {
+    setSortDirection((currentDirection) => getNextSortDirection(sortColumn === column, currentDirection));
+    setSortColumn(column);
+  };
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-4 py-4 sm:px-6 sm:py-6 xl:px-8">
@@ -113,56 +149,70 @@ export default function ProjectMasterList() {
       />
 
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
-        <ProjectStat icon={Briefcase} label="Projects" value={String(projectPage.total)} accent="orange" />
+        <ProjectStat icon={Briefcase} label="Projects" value={String(resolvedProjectPage.total)} accent="orange" />
         <ProjectStat icon={Ticket} label="Open Tickets on Page" value={String(totalOpenTicketsOnPage)} accent="blue" />
         <ProjectStat icon={UserRoundCog} label="Active on Page" value={String(activeProjectsOnPage)} accent="green" />
         <ProjectStat icon={KeyRound} label="Widget Enabled on Page" value={String(widgetEnabledProjectsOnPage)} accent="blue" />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr),220px]">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="Search by project, client, lead, or widget key..."
-            className="w-full rounded-2xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm shadow-sm outline-none focus:ring-2 focus:ring-orange-500"
-          />
+      <DataToolbar
+        searchValue={searchQuery}
+        onSearchChange={setSearchQuery}
+        searchPlaceholder="Search by project, client, lead, or widget key..."
+        filtersOpen={filtersOpen}
+        onToggleFilters={() => setFiltersOpen((current) => !current)}
+        activeFilterCount={activeFilterCount}
+      >
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 gap-3 md:max-w-[220px]">
+            <DataFilterField label="Status">
+              <select
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value as 'ALL' | ProjectStatus)}
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm outline-none focus:ring-2 focus:ring-orange-500"
+              >
+                <option value="ALL">All Statuses</option>
+                <option value="ACTIVE">Active</option>
+                <option value="INACTIVE">Inactive</option>
+              </select>
+            </DataFilterField>
+          </div>
+          {activeFilterCount > 0 ? (
+            <div className="flex justify-start">
+              <button
+                type="button"
+                onClick={() => setStatusFilter('ALL')}
+                className="inline-flex items-center justify-center rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 transition-colors hover:bg-slate-50"
+              >
+                Clear filters
+              </button>
+            </div>
+          ) : null}
         </div>
-        <select
-          value={statusFilter}
-          onChange={(event) => setStatusFilter(event.target.value as 'ALL' | ProjectStatus)}
-          className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm outline-none focus:ring-2 focus:ring-orange-500"
-        >
-          <option value="ALL">All Statuses</option>
-          <option value="ACTIVE">Active</option>
-          <option value="INACTIVE">Inactive</option>
-        </select>
-      </div>
+      </DataToolbar>
 
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[760px] text-left whitespace-nowrap">
             <thead className="border-b border-slate-200 bg-slate-50">
               <tr>
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">Project</th>
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">Client</th>
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">Lead</th>
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">Status</th>
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">Open Tickets</th>
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">Created</th>
+                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500"><SortableTableHeader label="Project" active={sortColumn === 'project'} direction={sortDirection} onClick={() => handleSort('project')} /></th>
+                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500"><SortableTableHeader label="Client" active={sortColumn === 'client'} direction={sortDirection} onClick={() => handleSort('client')} /></th>
+                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500"><SortableTableHeader label="Lead" active={sortColumn === 'lead'} direction={sortDirection} onClick={() => handleSort('lead')} /></th>
+                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500"><SortableTableHeader label="Status" active={sortColumn === 'status'} direction={sortDirection} onClick={() => handleSort('status')} /></th>
+                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500"><SortableTableHeader label="Open Tickets" active={sortColumn === 'openTickets'} direction={sortDirection} onClick={() => handleSort('openTickets')} /></th>
+                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500"><SortableTableHeader label="Created" active={sortColumn === 'created'} direction={sortDirection} onClick={() => handleSort('created')} /></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {projectPage.items.length === 0 ? (
+              {visibleProjects.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-6 py-12 text-center text-sm text-slate-500">
                     No projects matched that search.
                   </td>
                 </tr>
               ) : (
-                projectPage.items.map((project) => (
+                visibleProjects.map((project) => (
                   <tr key={project.id} className="transition-colors hover:bg-slate-50">
                     <td className="px-6 py-4">
                       <Link to={appPaths.projects.detail(project.id)} className="block group">
@@ -190,11 +240,11 @@ export default function ProjectMasterList() {
           </table>
         </div>
         <PaginationControls
-          page={projectPage.page}
-          totalPages={projectPage.totalPages}
-          totalItems={projectPage.total}
+          page={resolvedProjectPage.page}
+          totalPages={resolvedProjectPage.totalPages}
+          totalItems={resolvedProjectPage.total}
           itemLabel="projects"
-          pageSize={projectPage.pageSize}
+          pageSize={resolvedProjectPage.pageSize}
           onPageChange={setPage}
         />
       </div>

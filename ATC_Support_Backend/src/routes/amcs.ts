@@ -41,6 +41,27 @@ const updateAmcSchema = z
     message: 'At least one field is required.',
   });
 
+const assertNoActiveAmcConflict = async (projectId: number | null | undefined, excludeAmcId?: number) => {
+  if (!projectId) {
+    return;
+  }
+
+  const existingActiveAmc = await prisma.amc.findFirst({
+    where: {
+      projectId,
+      status: AmcStatus.ACTIVE,
+      ...(excludeAmcId ? { id: { not: excludeAmcId } } : {}),
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  if (existingActiveAmc) {
+    throw badRequest('This project already has an active AMC. Expire or cancel the existing AMC before adding another active one.');
+  }
+};
+
 const assertProjectBelongsToClient = async (clientId: number, projectId: number | null | undefined) => {
   if (!projectId) {
     return;
@@ -103,6 +124,9 @@ router.post(
     const clientId = parseId(req.params.id, 'client id');
     const payload = req.body as z.infer<typeof createAmcSchema>;
     await assertProjectBelongsToClient(clientId, payload.projectId);
+    if ((payload.status ?? AmcStatus.ACTIVE) === AmcStatus.ACTIVE) {
+      await assertNoActiveAmcConflict(payload.projectId);
+    }
     const amc = await prisma.amc.create({
       data: {
         clientId,
@@ -150,8 +174,10 @@ router.patch(
       select: {
         id: true,
         clientId: true,
+        projectId: true,
         startDate: true,
         endDate: true,
+        status: true,
       },
     });
 
@@ -163,9 +189,15 @@ router.patch(
 
     const nextStartDate = payload.startDate ?? existingAmc.startDate;
     const nextEndDate = payload.endDate ?? existingAmc.endDate;
+    const nextProjectId = payload.projectId === undefined ? existingAmc.projectId : payload.projectId;
+    const nextStatus = payload.status ?? existingAmc.status;
 
     if (nextEndDate < nextStartDate) {
       throw badRequest('endDate must be on or after startDate.');
+    }
+
+    if (nextStatus === AmcStatus.ACTIVE) {
+      await assertNoActiveAmcConflict(nextProjectId, amcId);
     }
 
     const amc = await prisma.amc.update({

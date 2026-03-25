@@ -1,16 +1,19 @@
-import { useDeferredValue, useEffect, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Briefcase, Building2, Plus, Search, ShieldCheck, Ticket } from 'lucide-react';
+import { Briefcase, Building2, Plus, ShieldCheck, Ticket } from 'lucide-react';
 
 import { ClientCrudPanel } from '../../components/entities/ClientCrudPanel';
+import { DataFilterField, DataToolbar } from '../../components/layout/DataToolbar';
 import PageHeader from '../../components/layout/PageHeader';
 import { PaginationControls } from '../../components/layout/PaginationControls';
+import { SortableTableHeader } from '../../components/layout/SortableTableHeader';
 import { useModal } from '../../contexts/ModalContext';
 import { useRole } from '../../contexts/RoleContext';
 import { useAsyncData } from '../../hooks/useAsyncData';
 import { apiFetch } from '../../lib/api';
 import { formatDate, humanizeEnum } from '../../lib/format';
 import { appPaths } from '../../lib/navigation';
+import { compareSortValues, getNextSortDirection } from '../../lib/tableSort';
 import type { ApiClient, ApiTicket, ClientStatus, PaginatedResponse } from '../../lib/types';
 
 const PAGE_SIZE = 8;
@@ -21,6 +24,9 @@ export default function ClientMasterList() {
   const { backendRole } = useRole();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | ClientStatus>('ALL');
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [sortColumn, setSortColumn] = useState<'client' | 'industry' | 'email' | 'status' | 'projects' | 'created'>('created');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [page, setPage] = useState(1);
   const deferredSearch = useDeferredValue(searchQuery);
 
@@ -54,6 +60,41 @@ export default function ClientMasterList() {
   );
 
   const canManageClients = backendRole === 'PM';
+  const clientPage = clientsQuery.data?.clients;
+  const tickets = clientsQuery.data?.tickets || [];
+  const clientItems = clientPage?.items || [];
+  const openTicketCountByClient = tickets.reduce<Record<number, number>>((counts, ticket) => {
+    const clientId = ticket.project?.client?.id;
+
+    if (!clientId || ticket.status === 'RESOLVED') {
+      return counts;
+    }
+
+    counts[clientId] = (counts[clientId] || 0) + 1;
+    return counts;
+  }, {});
+  const visibleClients = useMemo(() => {
+    const items = [...clientItems];
+
+    items.sort((left, right) => {
+      switch (sortColumn) {
+        case 'client':
+          return compareSortValues(left.name, right.name, sortDirection);
+        case 'industry':
+          return compareSortValues(left.industry || '', right.industry || '', sortDirection);
+        case 'email':
+          return compareSortValues(left.email || '', right.email || '', sortDirection);
+        case 'status':
+          return compareSortValues(left.status, right.status, sortDirection);
+        case 'projects':
+          return compareSortValues(left._count?.projects || 0, right._count?.projects || 0, sortDirection);
+        case 'created':
+          return compareSortValues(new Date(left.createdAt).getTime(), new Date(right.createdAt).getTime(), sortDirection);
+      }
+    });
+
+    return items;
+  }, [clientItems, sortColumn, sortDirection]);
 
   const openCreateModal = () => {
     openModal({
@@ -79,21 +120,16 @@ export default function ClientMasterList() {
     return <ClientsError message={clientsQuery.error || 'Unable to load clients.'} onRetry={clientsQuery.reload} />;
   }
 
-  const { clients: clientPage, tickets } = clientsQuery.data;
-  const openTicketCountByClient = tickets.reduce<Record<number, number>>((counts, ticket) => {
-    const clientId = ticket.project?.client?.id;
+  const resolvedClientPage = clientsQuery.data.clients;
+  const totalProjectsOnPage = resolvedClientPage.items.reduce((sum, client) => sum + (client._count?.projects || 0), 0);
+  const totalAmcsOnPage = resolvedClientPage.items.reduce((sum, client) => sum + (client._count?.amcs || 0), 0);
+  const totalOpenTicketsOnPage = resolvedClientPage.items.reduce((sum, client) => sum + (openTicketCountByClient[client.id] || 0), 0);
+  const activeFilterCount = (statusFilter !== 'ALL' ? 1 : 0);
 
-    if (!clientId || ticket.status === 'RESOLVED') {
-      return counts;
-    }
-
-    counts[clientId] = (counts[clientId] || 0) + 1;
-    return counts;
-  }, {});
-
-  const totalProjectsOnPage = clientPage.items.reduce((sum, client) => sum + (client._count?.projects || 0), 0);
-  const totalAmcsOnPage = clientPage.items.reduce((sum, client) => sum + (client._count?.amcs || 0), 0);
-  const totalOpenTicketsOnPage = clientPage.items.reduce((sum, client) => sum + (openTicketCountByClient[client.id] || 0), 0);
+  const handleSort = (column: typeof sortColumn) => {
+    setSortDirection((currentDirection) => getNextSortDirection(sortColumn === column, currentDirection));
+    setSortColumn(column);
+  };
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-4 py-4 sm:px-6 sm:py-6 xl:px-8">
@@ -115,56 +151,70 @@ export default function ClientMasterList() {
       />
 
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
-        <SummaryCard icon={Building2} label="Clients" value={String(clientPage.total)} accent="blue" />
+        <SummaryCard icon={Building2} label="Clients" value={String(resolvedClientPage.total)} accent="blue" />
         <SummaryCard icon={Briefcase} label="Projects on Page" value={String(totalProjectsOnPage)} accent="orange" />
         <SummaryCard icon={ShieldCheck} label="AMCs on Page" value={String(totalAmcsOnPage)} accent="green" />
         <SummaryCard icon={Ticket} label="Open Tickets on Page" value={String(totalOpenTicketsOnPage)} accent="orange" />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr),220px]">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="Search by client, city, industry, email, or ID..."
-            className="w-full rounded-2xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm shadow-sm outline-none focus:ring-2 focus:ring-orange-500"
-          />
+      <DataToolbar
+        searchValue={searchQuery}
+        onSearchChange={setSearchQuery}
+        searchPlaceholder="Search by client, city, industry, email, or ID..."
+        filtersOpen={filtersOpen}
+        onToggleFilters={() => setFiltersOpen((current) => !current)}
+        activeFilterCount={activeFilterCount}
+      >
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 gap-3 md:max-w-[220px]">
+            <DataFilterField label="Status">
+              <select
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value as 'ALL' | ClientStatus)}
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm outline-none focus:ring-2 focus:ring-orange-500"
+              >
+                <option value="ALL">All Statuses</option>
+                <option value="ACTIVE">Active</option>
+                <option value="INACTIVE">Inactive</option>
+              </select>
+            </DataFilterField>
+          </div>
+          {activeFilterCount > 0 ? (
+            <div className="flex justify-start">
+              <button
+                type="button"
+                onClick={() => setStatusFilter('ALL')}
+                className="inline-flex items-center justify-center rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 transition-colors hover:bg-slate-50"
+              >
+                Clear filters
+              </button>
+            </div>
+          ) : null}
         </div>
-        <select
-          value={statusFilter}
-          onChange={(event) => setStatusFilter(event.target.value as 'ALL' | ClientStatus)}
-          className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm outline-none focus:ring-2 focus:ring-orange-500"
-        >
-          <option value="ALL">All Statuses</option>
-          <option value="ACTIVE">Active</option>
-          <option value="INACTIVE">Inactive</option>
-        </select>
-      </div>
+      </DataToolbar>
 
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[760px] text-left whitespace-nowrap">
             <thead className="border-b border-slate-200 bg-slate-50">
               <tr>
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">Client</th>
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">Industry</th>
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">Email</th>
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">Status</th>
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">Projects</th>
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">Created</th>
+                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500"><SortableTableHeader label="Client" active={sortColumn === 'client'} direction={sortDirection} onClick={() => handleSort('client')} /></th>
+                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500"><SortableTableHeader label="Industry" active={sortColumn === 'industry'} direction={sortDirection} onClick={() => handleSort('industry')} /></th>
+                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500"><SortableTableHeader label="Email" active={sortColumn === 'email'} direction={sortDirection} onClick={() => handleSort('email')} /></th>
+                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500"><SortableTableHeader label="Status" active={sortColumn === 'status'} direction={sortDirection} onClick={() => handleSort('status')} /></th>
+                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500"><SortableTableHeader label="Projects" active={sortColumn === 'projects'} direction={sortDirection} onClick={() => handleSort('projects')} /></th>
+                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500"><SortableTableHeader label="Created" active={sortColumn === 'created'} direction={sortDirection} onClick={() => handleSort('created')} /></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {clientPage.items.length === 0 ? (
+              {visibleClients.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-6 py-12 text-center text-sm text-slate-500">
                     No clients matched that search.
                   </td>
                 </tr>
               ) : (
-                clientPage.items.map((client) => (
+                visibleClients.map((client) => (
                   <tr key={client.id} className="transition-colors hover:bg-slate-50">
                     <td className="px-6 py-4">
                       <Link to={appPaths.clients.detail(client.id)} className="group flex items-center gap-3">
@@ -197,11 +247,11 @@ export default function ClientMasterList() {
           </table>
         </div>
         <PaginationControls
-          page={clientPage.page}
-          totalPages={clientPage.totalPages}
-          totalItems={clientPage.total}
+          page={resolvedClientPage.page}
+          totalPages={resolvedClientPage.totalPages}
+          totalItems={resolvedClientPage.total}
           itemLabel="clients"
-          pageSize={clientPage.pageSize}
+          pageSize={resolvedClientPage.pageSize}
           onPageChange={setPage}
         />
       </div>

@@ -2,6 +2,7 @@ export type BackendRole = 'PM' | 'PL' | 'SE';
 export type BackendUserStatus = 'ACTIVE' | 'INACTIVE';
 export type ClientStatus = 'ACTIVE' | 'INACTIVE';
 export type ProjectStatus = 'ACTIVE' | 'INACTIVE';
+export type AmcStatus = 'ACTIVE' | 'EXPIRED' | 'CANCELLED';
 export type TicketDetailTab = 'summary' | 'conversation' | 'attachments' | 'email' | 'history';
 export type ClientDetailTab = 'overview' | 'projects' | 'contacts' | 'consignees' | 'amcs';
 export type ProjectDetailTab = 'overview' | 'faqs' | 'docs';
@@ -130,7 +131,7 @@ export interface ApiAmc {
   hoursUsed: number;
   startDate: string;
   endDate: string;
-  status: string;
+  status: AmcStatus;
   project?: ApiProject | null;
 }
 

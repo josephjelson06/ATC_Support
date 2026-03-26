@@ -1,0 +1,63 @@
+Date: 26-02-2026
+
+Time: 13:00
+
+1. Testing the CRUD of all the modules
+
+- Test the CRUD as SE3
+- Test the CRUD as SE1
+- Test the CRUD as PM
+
+
+Observations:
+1. When does Chat Session with Julia end -> if it is not escalated?
+2. Also, if it ends, does the chat get saved? If the issue is not linked to a ticket?
+3. If no, then how do we decouple the chat from the ticket?
+
+
+FAQ TESTING:
+- VALIDATION Passed -> Sort Order > 0 | 
+- Same Sort Order -> X
+- Modal for Delete Confirmation -> X
+
+Ticket Status -> Needs to be shortened
+
+
+Clients:
+1. Consignee Contacts should be selected from the list of contacts created for that client -> currently it is a free text field.
+2. Tags should be there for the clients -> Need to research on this.
+3. Question -> Should ClientContact and ConsigneeContact be separate?
+
+- Search Bar -> Inside User Page -> for Searching Project
+- Search Engineers who are linked to a project -> In user management page
+
+
+
+
+
+
+----------------------------------------
+Time: 14:05
+
+
+Seeding:
+
+Create 6 sample client project -> actual ones
+
+Clients
+
+Client 1 -> Project 1, Project 2, Project 3
+Client 2 -> Project 4, Project 5
+Client 3 -> Project 6
+
+
+
+7 Users -> (6 SE + 1 PM) -> Done
+PM -> PM1
+SE1 -> SE1
+SE2 -> SE2_1, SE2_2
+SE3 -> SE3_1, SE3_2, SE3_3, SE3_4, SE3_5, SE3_6
+
+-----------------------------------------------------
+
+

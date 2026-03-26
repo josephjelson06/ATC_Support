@@ -1,6 +1,6 @@
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
-import { AlertTriangle, CheckCircle2, Plus, RotateCcw, Ticket, UserPlus, Users } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Plus, RotateCcw, Ticket, Trash2, UserPlus, Users } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import { TicketCreatePanel } from '../../components/entities/TicketCreatePanel';
@@ -72,6 +72,7 @@ export default function InboundQueue() {
   const [sortColumn, setSortColumn] = useState<'ticket' | 'client' | 'project' | 'priority' | 'status' | 'assignedTo' | 'created'>('created');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [page, setPage] = useState(1);
+  const [selectedTicketIds, setSelectedTicketIds] = useState<number[]>([]);
   const deferredSearch = useDeferredValue(searchQuery);
   const currentView = ticketViewConfig[view] || ticketViewConfig.queue;
   const canAssignToSelf = permissions?.canAssignTicketsToSelf ?? false;
@@ -119,6 +120,10 @@ export default function InboundQueue() {
     setAssignmentFilter(currentView.assignedToMe ? 'ME' : 'ALL');
     setPage(1);
   }, [currentView.assignedToMe, currentView.fixedStatus, view]);
+
+  useEffect(() => {
+    setSelectedTicketIds([]);
+  }, [assignmentFilter, clientFilter, createdWithinDays, currentView.assignedToMe, currentView.fixedStatus, deferredSearch, page, priorityFilter, projectFilter, statusFilter, view]);
 
   const ticketsQuery = useAsyncData(async () => {
     const searchParams = new URLSearchParams({
@@ -263,6 +268,23 @@ export default function InboundQueue() {
     setSortColumn(column);
   };
 
+  const visibleTicketIds = visibleTickets.map((ticket) => ticket.id);
+  const allVisibleSelected = visibleTicketIds.length > 0 && visibleTicketIds.every((ticketId) => selectedTicketIds.includes(ticketId));
+
+  const toggleTicketSelection = (ticketId: number) => {
+    setSelectedTicketIds((current) =>
+      current.includes(ticketId) ? current.filter((listedTicketId) => listedTicketId !== ticketId) : [...current, ticketId],
+    );
+  };
+
+  const toggleAllVisibleTickets = () => {
+    setSelectedTicketIds((current) =>
+      allVisibleSelected
+        ? current.filter((ticketId) => !visibleTicketIds.includes(ticketId))
+        : Array.from(new Set([...current, ...visibleTicketIds])),
+    );
+  };
+
   const updateAssignment = async (ticketId: number, assignedToId: number | null | undefined, successMessage: string) => {
     try {
       await apiFetch(`/tickets/${ticketId}/assign`, {
@@ -280,6 +302,38 @@ export default function InboundQueue() {
   const handleAssignToMe = async (ticket: ApiTicket) => {
     if (!user) return;
     await updateAssignment(ticket.id, user.id, 'Ticket assigned to you.');
+  };
+
+  const handleBulkDelete = async () => {
+    if (!selectedTicketIds.length) return;
+
+    const shouldDelete = window.confirm(`Delete ${selectedTicketIds.length} selected ticket${selectedTicketIds.length === 1 ? '' : 's'}? This cannot be undone.`);
+
+    if (!shouldDelete) {
+      return;
+    }
+
+    const results = await Promise.allSettled(
+      selectedTicketIds.map((ticketId) =>
+        apiFetch<void>(`/tickets/${ticketId}`, {
+          method: 'DELETE',
+        }),
+      ),
+    );
+
+    const successCount = results.filter((result) => result.status === 'fulfilled').length;
+    const failedResults = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
+
+    if (successCount > 0) {
+      showToast('success', `${successCount} ticket${successCount === 1 ? '' : 's'} deleted.`);
+    }
+
+    if (failedResults.length > 0) {
+      showToast('error', getErrorMessage(failedResults[0].reason));
+    }
+
+    setSelectedTicketIds([]);
+    await ticketsQuery.reload();
   };
 
   const openAssignmentModal = (ticket: ApiTicket) => {
@@ -446,11 +500,28 @@ export default function InboundQueue() {
         </div>
       </DataToolbar>
 
+      {selectedTicketIds.length > 0 ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
+          <p className="text-sm font-semibold text-red-800">{selectedTicketIds.length} ticket{selectedTicketIds.length === 1 ? '' : 's'} selected</p>
+          <button
+            type="button"
+            onClick={() => void handleBulkDelete()}
+            className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-white px-3 py-2 text-sm font-bold text-red-700 transition-colors hover:bg-red-100"
+          >
+            <Trash2 className="h-4 w-4" />
+            Bulk Delete
+          </button>
+        </div>
+      ) : null}
+
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[860px] text-left whitespace-nowrap">
+          <table className="w-full min-w-[920px] text-left whitespace-nowrap">
             <thead className="border-b border-slate-200 bg-slate-50">
               <tr>
+                <th className="w-14 px-6 py-4">
+                  <input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisibleTickets} className="h-4 w-4 rounded border-slate-300 text-orange-600 focus:ring-orange-500" />
+                </th>
                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500"><SortableTableHeader label="Ticket" active={sortColumn === 'ticket'} direction={sortDirection} onClick={() => handleSort('ticket')} /></th>
                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500"><SortableTableHeader label="Client" active={sortColumn === 'client'} direction={sortDirection} onClick={() => handleSort('client')} /></th>
                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500"><SortableTableHeader label="Project" active={sortColumn === 'project'} direction={sortDirection} onClick={() => handleSort('project')} /></th>
@@ -463,7 +534,7 @@ export default function InboundQueue() {
             <tbody className="divide-y divide-slate-100">
               {visibleTickets.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-sm text-slate-500">
+                  <td colSpan={8} className="px-6 py-12 text-center text-sm text-slate-500">
                     No tickets match your current filters.
                   </td>
                 </tr>
@@ -474,6 +545,14 @@ export default function InboundQueue() {
                     onClick={() => navigate(appPaths.tickets.detail(ticket.id))}
                     className="group cursor-pointer transition-colors hover:bg-slate-50"
                   >
+                    <td className="px-6 py-4" onClick={(event) => event.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={selectedTicketIds.includes(ticket.id)}
+                        onChange={() => toggleTicketSelection(ticket.id)}
+                        className="h-4 w-4 rounded border-slate-300 text-orange-600 focus:ring-orange-500"
+                      />
+                    </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-500">

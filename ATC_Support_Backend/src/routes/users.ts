@@ -8,6 +8,7 @@ import { requireRole } from '../middleware/role';
 import { validate } from '../middleware/validate';
 import { asyncHandler, notFound, parseId } from '../utils/http';
 import { createPaginatedResponse, getPaginationOptions } from '../utils/pagination';
+import { parseSearchEntityId } from '../utils/search';
 import { serializeUser } from '../utils/serializers';
 import { normalizeUserAccessProfile, safeUserSelect } from '../utils/userModel';
 
@@ -61,19 +62,31 @@ router.get(
   '/',
   asyncHandler(async (req, res) => {
     const search = String(req.query.search || '').trim();
+    const searchId = parseSearchEntityId(search);
     const role = req.query.role ? String(req.query.role) : undefined;
     const supportLevel = req.query.supportLevel ? String(req.query.supportLevel) : undefined;
     const status = req.query.status ? String(req.query.status) : undefined;
+    const projectId = req.query.projectId ? Number(req.query.projectId) : undefined;
     const pagination = getPaginationOptions(req.query as Record<string, unknown>);
     const where: Prisma.UserWhereInput = {
       ...(role ? { role: role as Role } : {}),
       ...(supportLevel ? { supportLevel: supportLevel as SupportLevel } : {}),
       ...(status ? { status: status as UserStatus } : {}),
+      ...(projectId
+        ? {
+            projectMemberships: {
+              some: {
+                projectId,
+              },
+            },
+          }
+        : {}),
       ...(search
         ? {
             OR: [
               { name: { contains: search, mode: Prisma.QueryMode.insensitive } },
               { email: { contains: search, mode: Prisma.QueryMode.insensitive } },
+              ...(searchId ? [{ id: searchId }] : []),
             ],
           }
         : {}),

@@ -1,3 +1,4 @@
+import { rm } from 'fs/promises';
 import { MessageType, Prisma, Role, ScopeMode, TicketPriority, TicketStatus, UserStatus } from '@prisma/client';
 import { Router } from 'express';
 import { z } from 'zod';
@@ -13,7 +14,9 @@ import type { AuthenticatedUser } from '../types/auth';
 import { assertTicketAccess, ticketScopeForUser } from '../utils/access';
 import { asyncHandler, badRequest, forbidden, notFound, parseId } from '../utils/http';
 import { createPaginatedResponse, getPaginationOptions } from '../utils/pagination';
+import { parseSearchEntityId } from '../utils/search';
 import { serializeChatSession, serializeEscalationHistory, serializeTicket, serializeTicketEmail, serializeTicketMessage } from '../utils/serializers';
+import { resolveTicketAttachmentPath } from '../utils/ticketAttachments';
 import { canAssignTicketsToOthers, safeUserSelect } from '../utils/userModel';
 
 const router = Router();
@@ -249,6 +252,7 @@ router.get(
   '/',
   asyncHandler(async (req, res) => {
     const search = String(req.query.search || '').trim();
+    const searchId = parseSearchEntityId(search);
     const normalizedSearch = search.toUpperCase().replace(/\s+/g, '_');
     const matchedStatus = Object.values(TicketStatus).find((value) => value === normalizedSearch);
     const matchedPriority = Object.values(TicketPriority).find((value) => value === normalizedSearch);
@@ -313,6 +317,7 @@ router.get(
           { description: { contains: search, mode: Prisma.QueryMode.insensitive } },
           { project: { name: { contains: search, mode: Prisma.QueryMode.insensitive } } },
           { project: { client: { name: { contains: search, mode: Prisma.QueryMode.insensitive } } } },
+          ...(searchId ? [{ id: searchId }] : []),
           ...(matchedStatus ? [{ status: matchedStatus }] : []),
           ...(matchedPriority ? [{ priority: matchedPriority }] : []),
         ],
@@ -399,6 +404,53 @@ router.patch(
     });
 
     res.json(serializeTicket(updatedTicket));
+  }),
+);
+
+router.delete(
+  '/:id',
+  requireRole(Role.PM, Role.SE),
+  asyncHandler(async (req, res) => {
+    const ticketId = parseId(req.params.id, 'ticket id');
+    await assertTicketAccess(req.user!, ticketId);
+
+    const attachments = await prisma.ticketAttachment.findMany({
+      where: {
+        ticketId,
+      },
+      select: {
+        storedName: true,
+      },
+    });
+
+    const ticket = await prisma.ticket.findUnique({
+      where: {
+        id: ticketId,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!ticket) {
+      throw notFound('Ticket not found.');
+    }
+
+    await prisma.ticket.delete({
+      where: {
+        id: ticketId,
+      },
+    });
+
+    await Promise.allSettled(
+      attachments.map((attachment) =>
+        rm(resolveTicketAttachmentPath(attachment.storedName), {
+          force: true,
+        }),
+      ),
+    );
+
+    res.status(204).send();
   }),
 );
 

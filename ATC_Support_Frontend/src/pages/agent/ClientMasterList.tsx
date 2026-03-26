@@ -1,6 +1,6 @@
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Briefcase, Building2, Plus, ShieldCheck, Ticket } from 'lucide-react';
+import { Briefcase, Building2, Plus, ShieldCheck, Ticket, Trash2 } from 'lucide-react';
 
 import { ClientCrudPanel } from '../../components/entities/ClientCrudPanel';
 import { DataFilterField, DataToolbar } from '../../components/layout/DataToolbar';
@@ -9,8 +9,9 @@ import { PaginationControls } from '../../components/layout/PaginationControls';
 import { SortableTableHeader } from '../../components/layout/SortableTableHeader';
 import { useModal } from '../../contexts/ModalContext';
 import { useRole } from '../../contexts/RoleContext';
+import { useToast } from '../../contexts/ToastContext';
 import { useAsyncData } from '../../hooks/useAsyncData';
-import { apiFetch } from '../../lib/api';
+import { apiFetch, getErrorMessage } from '../../lib/api';
 import { formatDate, humanizeEnum } from '../../lib/format';
 import { appPaths } from '../../lib/navigation';
 import { compareSortValues, getNextSortDirection } from '../../lib/tableSort';
@@ -22,17 +23,23 @@ export default function ClientMasterList() {
   const navigate = useNavigate();
   const { openModal } = useModal();
   const { permissions } = useRole();
+  const { showToast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | ClientStatus>('ALL');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [sortColumn, setSortColumn] = useState<'client' | 'industry' | 'email' | 'status' | 'projects' | 'created'>('created');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [page, setPage] = useState(1);
+  const [selectedClientIds, setSelectedClientIds] = useState<number[]>([]);
   const deferredSearch = useDeferredValue(searchQuery);
 
   useEffect(() => {
     setPage(1);
   }, [deferredSearch, statusFilter]);
+
+  useEffect(() => {
+    setSelectedClientIds([]);
+  }, [page, deferredSearch, statusFilter]);
 
   const clientsQuery = useAsyncData(
     async () => {
@@ -131,6 +138,55 @@ export default function ClientMasterList() {
     setSortColumn(column);
   };
 
+  const visibleClientIds = visibleClients.map((client) => client.id);
+  const allVisibleSelected = visibleClientIds.length > 0 && visibleClientIds.every((clientId) => selectedClientIds.includes(clientId));
+
+  const toggleClientSelection = (clientId: number) => {
+    setSelectedClientIds((current) =>
+      current.includes(clientId) ? current.filter((listedClientId) => listedClientId !== clientId) : [...current, clientId],
+    );
+  };
+
+  const toggleAllVisibleClients = () => {
+    setSelectedClientIds((current) =>
+      allVisibleSelected
+        ? current.filter((clientId) => !visibleClientIds.includes(clientId))
+        : Array.from(new Set([...current, ...visibleClientIds])),
+    );
+  };
+
+  const handleBulkDelete = async () => {
+    if (!selectedClientIds.length) return;
+
+    const shouldDelete = window.confirm(`Delete ${selectedClientIds.length} selected client${selectedClientIds.length === 1 ? '' : 's'}? This cannot be undone.`);
+
+    if (!shouldDelete) {
+      return;
+    }
+
+    const results = await Promise.allSettled(
+      selectedClientIds.map((clientId) =>
+        apiFetch<void>(`/clients/${clientId}`, {
+          method: 'DELETE',
+        }),
+      ),
+    );
+
+    const successCount = results.filter((result) => result.status === 'fulfilled').length;
+    const failedResults = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
+
+    if (successCount > 0) {
+      showToast('success', `${successCount} client${successCount === 1 ? '' : 's'} deleted.`);
+    }
+
+    if (failedResults.length > 0) {
+      showToast('error', getErrorMessage(failedResults[0].reason));
+    }
+
+    setSelectedClientIds([]);
+    await clientsQuery.reload();
+  };
+
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-4 py-4 sm:px-6 sm:py-6 xl:px-8">
       <PageHeader
@@ -193,11 +249,30 @@ export default function ClientMasterList() {
         </div>
       </DataToolbar>
 
+      {canManageClients && selectedClientIds.length > 0 ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
+          <p className="text-sm font-semibold text-red-800">{selectedClientIds.length} client{selectedClientIds.length === 1 ? '' : 's'} selected</p>
+          <button
+            type="button"
+            onClick={() => void handleBulkDelete()}
+            className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-white px-3 py-2 text-sm font-bold text-red-700 transition-colors hover:bg-red-100"
+          >
+            <Trash2 className="h-4 w-4" />
+            Bulk Delete
+          </button>
+        </div>
+      ) : null}
+
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] text-left whitespace-nowrap">
+          <table className="w-full min-w-[820px] text-left whitespace-nowrap">
             <thead className="border-b border-slate-200 bg-slate-50">
               <tr>
+                {canManageClients ? (
+                  <th className="w-14 px-6 py-4">
+                    <input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisibleClients} className="h-4 w-4 rounded border-slate-300 text-orange-600 focus:ring-orange-500" />
+                  </th>
+                ) : null}
                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500"><SortableTableHeader label="Client" active={sortColumn === 'client'} direction={sortDirection} onClick={() => handleSort('client')} /></th>
                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500"><SortableTableHeader label="Industry" active={sortColumn === 'industry'} direction={sortDirection} onClick={() => handleSort('industry')} /></th>
                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500"><SortableTableHeader label="Email" active={sortColumn === 'email'} direction={sortDirection} onClick={() => handleSort('email')} /></th>
@@ -209,13 +284,23 @@ export default function ClientMasterList() {
             <tbody className="divide-y divide-slate-100">
               {visibleClients.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-sm text-slate-500">
+                  <td colSpan={canManageClients ? 7 : 6} className="px-6 py-12 text-center text-sm text-slate-500">
                     No clients matched that search.
                   </td>
                 </tr>
               ) : (
                 visibleClients.map((client) => (
                   <tr key={client.id} className="transition-colors hover:bg-slate-50">
+                    {canManageClients ? (
+                      <td className="px-6 py-4">
+                        <input
+                          type="checkbox"
+                          checked={selectedClientIds.includes(client.id)}
+                          onChange={() => toggleClientSelection(client.id)}
+                          className="h-4 w-4 rounded border-slate-300 text-orange-600 focus:ring-orange-500"
+                        />
+                      </td>
+                    ) : null}
                     <td className="px-6 py-4">
                       <Link to={appPaths.clients.detail(client.id)} className="group flex items-center gap-3">
                         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-500">

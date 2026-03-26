@@ -8,6 +8,7 @@ import { validate } from '../middleware/validate';
 import { assertProjectAccess, projectScopeForUser } from '../utils/access';
 import { asyncHandler, badRequest, conflict, parseId, notFound } from '../utils/http';
 import { createPaginatedResponse, getPaginationOptions } from '../utils/pagination';
+import { parseSearchEntityId } from '../utils/search';
 import { serializeProject } from '../utils/serializers';
 import { safeUserSelect } from '../utils/userModel';
 import { generateWidgetKey } from '../utils/widgetKey';
@@ -80,6 +81,7 @@ router.get(
   '/',
   asyncHandler(async (req, res) => {
     const search = String(req.query.search || '').trim();
+    const searchId = parseSearchEntityId(search);
     const status = req.query.status ? String(req.query.status) : undefined;
     const clientId = req.query.clientId ? Number(req.query.clientId) : undefined;
     const pagination = getPaginationOptions(req.query as Record<string, unknown>);
@@ -93,6 +95,9 @@ router.get(
               { name: { contains: search, mode: Prisma.QueryMode.insensitive } },
               { description: { contains: search, mode: Prisma.QueryMode.insensitive } },
               { client: { name: { contains: search, mode: Prisma.QueryMode.insensitive } } },
+              { assignedTo: { name: { contains: search, mode: Prisma.QueryMode.insensitive } } },
+              { widgetKey: { contains: search, mode: Prisma.QueryMode.insensitive } },
+              ...(searchId ? [{ id: searchId }] : []),
             ],
           }
         : {}),

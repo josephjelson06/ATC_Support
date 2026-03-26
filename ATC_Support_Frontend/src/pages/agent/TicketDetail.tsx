@@ -12,6 +12,7 @@ import {
   PlayCircle,
   RotateCcw,
   Send,
+  Trash2,
   UserPlus,
   Users,
   X,
@@ -202,6 +203,22 @@ export default function TicketDetail() {
   const handleEscalate = async () => {
     const note = window.prompt('Optional escalation note for the project specialist:', '') || undefined;
     await performTicketAction(`/tickets/${ticketId}/escalate`, note?.trim() ? { note: note.trim() } : undefined, 'Ticket escalated to the project specialist.');
+  };
+
+  const handleDeleteTicket = async () => {
+    const shouldDelete = window.confirm(`Delete ${ticket.displayId}? This cannot be undone.`);
+
+    if (!shouldDelete) {
+      return;
+    }
+
+    try {
+      await apiFetch<void>(`/tickets/${ticketId}`, { method: 'DELETE' });
+      showToast('success', 'Ticket deleted successfully.');
+      navigate(appPaths.tickets.queue);
+    } catch (error) {
+      showToast('error', getErrorMessage(error));
+    }
   };
 
   const jumpToComposer = (nextType: 'reply' | 'note') => {
@@ -637,6 +654,13 @@ export default function TicketDetail() {
             >
               <Lock className="h-4 w-4" />
               Internal Note
+            </button>
+            <button
+              onClick={() => void handleDeleteTicket()}
+              className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold uppercase tracking-wider text-red-700 transition-colors hover:bg-red-100"
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete Ticket
             </button>
           </div>
         }

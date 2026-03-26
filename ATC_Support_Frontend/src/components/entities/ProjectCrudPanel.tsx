@@ -21,9 +21,6 @@ type ProjectCrudPanelProps = {
     | 'widgetKey'
     | 'widgetEnabled'
     | 'embedCode'
-    | 'juliaGreeting'
-    | 'juliaFallbackMessage'
-    | 'juliaEscalationHint'
   >;
   onCompleted?: (project: ApiProject, mode: 'create' | 'edit') => void | Promise<void>;
   onDeleted?: (projectId: number) => void | Promise<void>;
@@ -35,9 +32,6 @@ type FormState = {
   name: string;
   description: string;
   widgetEnabled: boolean;
-  juliaGreeting: string;
-  juliaFallbackMessage: string;
-  juliaEscalationHint: string;
   status: ProjectStatus;
   createAmc: boolean;
   amcHoursIncluded: string;
@@ -70,9 +64,6 @@ export function ProjectCrudPanel({ mode, project, onCompleted, onDeleted }: Proj
     name: project?.name || '',
     description: project?.description || '',
     widgetEnabled: project?.widgetEnabled ?? true,
-    juliaGreeting: project?.juliaGreeting || '',
-    juliaFallbackMessage: project?.juliaFallbackMessage || '',
-    juliaEscalationHint: project?.juliaEscalationHint || '',
     status: project?.status || 'ACTIVE',
     createAmc: mode === 'create',
     amcHoursIncluded: '24',
@@ -166,9 +157,6 @@ export function ProjectCrudPanel({ mode, project, onCompleted, onDeleted }: Proj
         name: form.name.trim(),
         description: form.description.trim() || undefined,
         widgetEnabled: form.widgetEnabled,
-        juliaGreeting: form.juliaGreeting.trim() || undefined,
-        juliaFallbackMessage: form.juliaFallbackMessage.trim() || undefined,
-        juliaEscalationHint: form.juliaEscalationHint.trim() || undefined,
         status: form.status,
         amc:
           mode === 'create' && form.createAmc
@@ -296,61 +284,29 @@ export function ProjectCrudPanel({ mode, project, onCompleted, onDeleted }: Proj
         />
       </Field>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr),220px]">
-        <Field label="Julia Greeting">
-          <textarea
-            value={form.juliaGreeting}
-            onChange={handleChange('juliaGreeting')}
-            rows={3}
-            placeholder="Welcome to Warehouse Portal support. I can help with known issues before routing you to the team."
-            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition-all focus:ring-2 focus:ring-orange-500"
-          />
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-[220px,minmax(0,1fr)]">
+        <Field label="Status">
+          <select
+            value={form.status}
+            onChange={handleChange('status')}
+            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none transition-all focus:ring-2 focus:ring-orange-500"
+          >
+            <option value="ACTIVE">Active</option>
+            <option value="INACTIVE">Inactive</option>
+          </select>
         </Field>
-        <div className="space-y-4">
-          <Field label="Status">
-            <select
-              value={form.status}
-              onChange={handleChange('status')}
-              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none transition-all focus:ring-2 focus:ring-orange-500"
-            >
-              <option value="ACTIVE">Active</option>
-              <option value="INACTIVE">Inactive</option>
-            </select>
-          </Field>
-          <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-            <input
-              type="checkbox"
-              checked={form.widgetEnabled}
-              onChange={handleCheckboxChange('widgetEnabled')}
-              className="mt-1 h-4 w-4 rounded border-slate-300 text-orange-600 focus:ring-orange-500"
-            />
-            <div>
-              <p className="text-sm font-bold text-slate-900">Widget Enabled</p>
-              <p className="mt-1 text-xs text-slate-500">Disable this to block FAQ, Julia chat, and escalation for this project.</p>
-            </div>
-          </label>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <Field label="Julia Fallback Message">
-          <textarea
-            value={form.juliaFallbackMessage}
-            onChange={handleChange('juliaFallbackMessage')}
-            rows={4}
-            placeholder="I couldn't find a confident answer in the published knowledge. Please escalate and the team will pick it up."
-            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition-all focus:ring-2 focus:ring-orange-500"
+        <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+          <input
+            type="checkbox"
+            checked={form.widgetEnabled}
+            onChange={handleCheckboxChange('widgetEnabled')}
+            className="mt-1 h-4 w-4 rounded border-slate-300 text-orange-600 focus:ring-orange-500"
           />
-        </Field>
-        <Field label="Julia Escalation Hint">
-          <textarea
-            value={form.juliaEscalationHint}
-            onChange={handleChange('juliaEscalationHint')}
-            rows={4}
-            placeholder="If the issue affects production, include the exact screen, user, and time of failure."
-            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition-all focus:ring-2 focus:ring-orange-500"
-          />
-        </Field>
+          <div>
+            <p className="text-sm font-bold text-slate-900">Widget Enabled</p>
+            <p className="mt-1 text-xs text-slate-500">Disable this to block FAQ, widget chat, and escalation for this project.</p>
+          </div>
+        </label>
       </div>
 
       {mode === 'create' ? (

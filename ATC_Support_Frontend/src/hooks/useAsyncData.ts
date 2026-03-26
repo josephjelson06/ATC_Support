@@ -5,9 +5,11 @@ import { getErrorMessage } from '../lib/api';
 export function useAsyncData<T>(fetcher: () => Promise<T>, deps: DependencyList = []) {
   const [data, setData] = useState<T | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const fetcherRef = useRef(fetcher);
+  const dataRef = useRef<T | null>(null);
 
   const reload = useCallback(() => {
     setReloadKey((current) => current + 1);
@@ -18,10 +20,21 @@ export function useAsyncData<T>(fetcher: () => Promise<T>, deps: DependencyList 
   }, [fetcher]);
 
   useEffect(() => {
+    dataRef.current = data;
+  }, [data]);
+
+  useEffect(() => {
     let isActive = true;
 
     const run = async () => {
-      setIsLoading(true);
+      const hasExistingData = dataRef.current !== null;
+
+      if (hasExistingData) {
+        setIsRefreshing(true);
+      } else {
+        setIsLoading(true);
+      }
+
       setError(null);
 
       try {
@@ -37,6 +50,7 @@ export function useAsyncData<T>(fetcher: () => Promise<T>, deps: DependencyList 
       } finally {
         if (isActive) {
           setIsLoading(false);
+          setIsRefreshing(false);
         }
       }
     };
@@ -52,6 +66,7 @@ export function useAsyncData<T>(fetcher: () => Promise<T>, deps: DependencyList 
     data,
     setData,
     isLoading,
+    isRefreshing,
     error,
     reload,
   };

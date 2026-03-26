@@ -53,6 +53,7 @@ export default function UserManagement() {
   const [roleFilter, setRoleFilter] = useState<'ALL' | BackendRole>('ALL');
   const [supportLevelFilter, setSupportLevelFilter] = useState<'ALL' | BackendSupportLevel>('ALL');
   const [statusFilter, setStatusFilter] = useState<'ALL' | BackendUserStatus>('ALL');
+  const [projectFilter, setProjectFilter] = useState<'ALL' | string>('ALL');
   const [page, setPage] = useState(1);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [sortColumn, setSortColumn] = useState<UserSortColumn>('created');
@@ -62,7 +63,9 @@ export default function UserManagement() {
 
   useEffect(() => {
     setPage(1);
-  }, [deferredSearch, roleFilter, supportLevelFilter, statusFilter]);
+  }, [deferredSearch, roleFilter, supportLevelFilter, statusFilter, projectFilter]);
+
+  const projectsFilterQuery = useAsyncData(() => apiFetch<ApiProject[]>('/projects'), []);
 
   const usersQuery = useAsyncData(async () => {
     const searchParams = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE) });
@@ -70,8 +73,9 @@ export default function UserManagement() {
     if (roleFilter !== 'ALL') searchParams.set('role', roleFilter);
     if (supportLevelFilter !== 'ALL') searchParams.set('supportLevel', supportLevelFilter);
     if (statusFilter !== 'ALL') searchParams.set('status', statusFilter);
+    if (projectFilter !== 'ALL') searchParams.set('projectId', projectFilter);
     return apiFetch<PaginatedResponse<ApiUser>>(`/users?${searchParams.toString()}`);
-  }, [page, deferredSearch, roleFilter, supportLevelFilter, statusFilter]);
+  }, [page, deferredSearch, roleFilter, supportLevelFilter, statusFilter, projectFilter]);
 
   const visibleUsers = useMemo(() => {
     const users = [...(usersQuery.data?.items || [])];
@@ -96,7 +100,7 @@ export default function UserManagement() {
     });
   }, [sortColumn, sortDirection, usersQuery.data?.items]);
 
-  const activeFilterCount = [roleFilter !== 'ALL', supportLevelFilter !== 'ALL', statusFilter !== 'ALL'].filter(Boolean).length;
+  const activeFilterCount = [roleFilter !== 'ALL', supportLevelFilter !== 'ALL', statusFilter !== 'ALL', projectFilter !== 'ALL'].filter(Boolean).length;
 
   const handleSort = (column: UserSortColumn) => {
     const isActive = sortColumn === column;
@@ -190,7 +194,7 @@ export default function UserManagement() {
             className="border-none shadow-none"
           >
             <div className="space-y-4">
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <DataFilterField label="Role">
                   <select value={roleFilter} onChange={(event) => setRoleFilter(event.target.value as 'ALL' | BackendRole)} className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 outline-none transition-all focus:ring-2 focus:ring-orange-500">
                     <option value="ALL">All Roles</option>
@@ -213,9 +217,19 @@ export default function UserManagement() {
                     <option value="INACTIVE">Inactive</option>
                   </select>
                 </DataFilterField>
+                <DataFilterField label="Project Membership">
+                  <select value={projectFilter} onChange={(event) => setProjectFilter(event.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 outline-none transition-all focus:ring-2 focus:ring-orange-500">
+                    <option value="ALL">All Projects</option>
+                    {(projectsFilterQuery.data || []).map((project) => (
+                      <option key={project.id} value={String(project.id)}>
+                        {project.name}
+                      </option>
+                    ))}
+                  </select>
+                </DataFilterField>
               </div>
               <div className="flex flex-wrap items-center gap-3">
-                <button type="button" onClick={() => { setRoleFilter('ALL'); setSupportLevelFilter('ALL'); setStatusFilter('ALL'); }} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50">
+                <button type="button" onClick={() => { setRoleFilter('ALL'); setSupportLevelFilter('ALL'); setStatusFilter('ALL'); setProjectFilter('ALL'); }} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50">
                   Clear Filters
                 </button>
               </div>
@@ -330,6 +344,7 @@ function UserFormPanel({
       supportLevel,
       scopeMode: preset.scopeMode,
       assignmentAuthority: preset.assignmentAuthority,
+      projectIds: preset.scopeMode === 'GLOBAL' ? [] : current.projectIds,
     }));
   };
 
@@ -350,6 +365,7 @@ function UserFormPanel({
             role,
             scopeMode: supportLevelPresets[current.supportLevel].scopeMode,
             assignmentAuthority: supportLevelPresets[current.supportLevel].assignmentAuthority,
+            projectIds: supportLevelPresets[current.supportLevel].scopeMode === 'GLOBAL' ? [] : current.projectIds,
           },
     );
   };
@@ -357,10 +373,22 @@ function UserFormPanel({
   const updateSelectField =
     (field: 'status' | 'scopeMode' | 'assignmentAuthority') =>
     (event: ChangeEvent<HTMLSelectElement>) =>
-      setFormState((current) => ({
-        ...current,
-        [field]: event.target.value,
-      }));
+      setFormState((current) => {
+        const nextValue = event.target.value;
+
+        if (field === 'scopeMode') {
+          return {
+            ...current,
+            scopeMode: nextValue as ScopeMode,
+            projectIds: nextValue === 'GLOBAL' ? [] : current.projectIds,
+          };
+        }
+
+        return {
+          ...current,
+          [field]: nextValue,
+        };
+      });
 
   const toggleProject = (projectId: number) =>
     setFormState((current) => ({
@@ -430,6 +458,7 @@ function UserFormPanel({
   if (projectsQuery.error || !projectsQuery.data) return <ErrorState message={projectsQuery.error || 'Unable to load projects.'} onRetry={projectsQuery.reload} />;
 
   const showEngineerFields = formState.role === 'SE';
+  const projectMembershipDisabled = !showEngineerFields || formState.scopeMode === 'GLOBAL';
   const availableProjects = [...projectsQuery.data].sort((left, right) => `${left.client?.name || ''} ${left.name}`.localeCompare(`${right.client?.name || ''} ${right.name}`));
 
   return (
@@ -489,11 +518,17 @@ function UserFormPanel({
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="text-sm font-bold text-slate-900">Project Membership</p>
-                <p className="mt-1 text-xs text-slate-500">Project-scoped engineers only see linked projects, clients, and tickets. Global engineers can still be linked for responsibility mapping.</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {projectMembershipDisabled
+                    ? 'Project membership is only enabled for project-scoped support engineers.'
+                    : 'Project-scoped engineers only see linked projects, clients, and tickets.'}
+                </p>
               </div>
-              <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-600">{formState.projectIds.length} selected</span>
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-600">
+                {projectMembershipDisabled ? 'Disabled' : `${formState.projectIds.length} selected`}
+              </span>
             </div>
-            <div className="mt-4 max-h-64 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-4">
+            <div className={`mt-4 max-h-64 overflow-y-auto rounded-2xl border border-slate-200 p-4 ${projectMembershipDisabled ? 'bg-slate-100' : 'bg-white'}`}>
               {availableProjects.length === 0 ? (
                 <p className="text-sm text-slate-500">No projects available yet.</p>
               ) : (
@@ -501,11 +536,11 @@ function UserFormPanel({
                   {availableProjects.map((project) => {
                     const checked = formState.projectIds.includes(project.id);
                     return (
-                      <label key={project.id} className={`flex cursor-pointer items-start gap-3 rounded-xl border px-3 py-3 transition-colors ${checked ? 'border-orange-200 bg-orange-50' : 'border-slate-200 bg-white hover:bg-slate-50'}`}>
-                        <input type="checkbox" checked={checked} onChange={() => toggleProject(project.id)} className="mt-1 h-4 w-4 rounded border-slate-300 text-orange-600 focus:ring-orange-500" />
+                      <label key={project.id} className={`flex items-start gap-3 rounded-xl border px-3 py-3 transition-colors ${projectMembershipDisabled ? 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400' : checked ? 'cursor-pointer border-orange-200 bg-orange-50' : 'cursor-pointer border-slate-200 bg-white hover:bg-slate-50'}`}>
+                        <input type="checkbox" checked={checked} disabled={projectMembershipDisabled} onChange={() => toggleProject(project.id)} className="mt-1 h-4 w-4 rounded border-slate-300 text-orange-600 focus:ring-orange-500 disabled:cursor-not-allowed disabled:opacity-60" />
                         <div className="min-w-0">
-                          <p className="text-sm font-semibold text-slate-900">{project.name}</p>
-                          <p className="mt-1 truncate text-xs text-slate-500">{project.client?.name || 'No client'} - {project.displayId}</p>
+                          <p className={`text-sm font-semibold ${projectMembershipDisabled ? 'text-slate-500' : 'text-slate-900'}`}>{project.name}</p>
+                          <p className={`mt-1 truncate text-xs ${projectMembershipDisabled ? 'text-slate-400' : 'text-slate-500'}`}>{project.client?.name || 'No client'} - {project.displayId}</p>
                         </div>
                       </label>
                     );

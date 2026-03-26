@@ -8,6 +8,7 @@ import { validate } from '../middleware/validate';
 import { assertClientAccess, clientScopeForUser } from '../utils/access';
 import { asyncHandler, conflict, parseId, notFound } from '../utils/http';
 import { createPaginatedResponse, getPaginationOptions } from '../utils/pagination';
+import { parseSearchEntityId } from '../utils/search';
 import { serializeAmc, serializeClient, serializeProject } from '../utils/serializers';
 import { safeUserSelect } from '../utils/userModel';
 
@@ -33,6 +34,7 @@ router.get(
   '/',
   asyncHandler(async (req, res) => {
     const search = String(req.query.search || '').trim();
+    const searchId = parseSearchEntityId(search);
     const status = req.query.status ? String(req.query.status) : undefined;
     const pagination = getPaginationOptions(req.query as Record<string, unknown>);
     const where: Prisma.ClientWhereInput = {
@@ -45,6 +47,7 @@ router.get(
               { industry: { contains: search, mode: Prisma.QueryMode.insensitive } },
               { city: { contains: search, mode: Prisma.QueryMode.insensitive } },
               { email: { contains: search, mode: Prisma.QueryMode.insensitive } },
+              ...(searchId ? [{ id: searchId }] : []),
             ],
           }
         : {}),

@@ -1,6 +1,6 @@
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Briefcase, KeyRound, Plus, Ticket, UserRoundCog } from 'lucide-react';
+import { Briefcase, KeyRound, Plus, Ticket, Trash2, UserRoundCog } from 'lucide-react';
 
 import { ProjectCrudPanel } from '../../components/entities/ProjectCrudPanel';
 import { DataFilterField, DataToolbar } from '../../components/layout/DataToolbar';
@@ -9,8 +9,9 @@ import { PaginationControls } from '../../components/layout/PaginationControls';
 import { SortableTableHeader } from '../../components/layout/SortableTableHeader';
 import { useModal } from '../../contexts/ModalContext';
 import { useRole } from '../../contexts/RoleContext';
+import { useToast } from '../../contexts/ToastContext';
 import { useAsyncData } from '../../hooks/useAsyncData';
-import { apiFetch } from '../../lib/api';
+import { apiFetch, getErrorMessage } from '../../lib/api';
 import { formatDate, humanizeEnum } from '../../lib/format';
 import { appPaths } from '../../lib/navigation';
 import { compareSortValues, getNextSortDirection } from '../../lib/tableSort';
@@ -22,17 +23,23 @@ export default function ProjectMasterList() {
   const navigate = useNavigate();
   const { openModal } = useModal();
   const { role, permissions } = useRole();
+  const { showToast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | ProjectStatus>('ALL');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [sortColumn, setSortColumn] = useState<'project' | 'client' | 'specialist' | 'status' | 'openTickets' | 'created'>('created');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [page, setPage] = useState(1);
+  const [selectedProjectIds, setSelectedProjectIds] = useState<number[]>([]);
   const deferredSearch = useDeferredValue(searchQuery);
 
   useEffect(() => {
     setPage(1);
   }, [deferredSearch, statusFilter]);
+
+  useEffect(() => {
+    setSelectedProjectIds([]);
+  }, [page, deferredSearch, statusFilter]);
 
   const projectsQuery = useAsyncData(
     async () => {
@@ -129,6 +136,55 @@ export default function ProjectMasterList() {
     setSortColumn(column);
   };
 
+  const visibleProjectIds = visibleProjects.map((project) => project.id);
+  const allVisibleSelected = visibleProjectIds.length > 0 && visibleProjectIds.every((projectId) => selectedProjectIds.includes(projectId));
+
+  const toggleProjectSelection = (projectId: number) => {
+    setSelectedProjectIds((current) =>
+      current.includes(projectId) ? current.filter((listedProjectId) => listedProjectId !== projectId) : [...current, projectId],
+    );
+  };
+
+  const toggleAllVisibleProjects = () => {
+    setSelectedProjectIds((current) =>
+      allVisibleSelected
+        ? current.filter((projectId) => !visibleProjectIds.includes(projectId))
+        : Array.from(new Set([...current, ...visibleProjectIds])),
+    );
+  };
+
+  const handleBulkDelete = async () => {
+    if (!selectedProjectIds.length) return;
+
+    const shouldDelete = window.confirm(`Delete ${selectedProjectIds.length} selected project${selectedProjectIds.length === 1 ? '' : 's'}? This cannot be undone.`);
+
+    if (!shouldDelete) {
+      return;
+    }
+
+    const results = await Promise.allSettled(
+      selectedProjectIds.map((projectId) =>
+        apiFetch<void>(`/projects/${projectId}`, {
+          method: 'DELETE',
+        }),
+      ),
+    );
+
+    const successCount = results.filter((result) => result.status === 'fulfilled').length;
+    const failedResults = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
+
+    if (successCount > 0) {
+      showToast('success', `${successCount} project${successCount === 1 ? '' : 's'} deleted.`);
+    }
+
+    if (failedResults.length > 0) {
+      showToast('error', getErrorMessage(failedResults[0].reason));
+    }
+
+    setSelectedProjectIds([]);
+    await projectsQuery.reload();
+  };
+
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-4 py-4 sm:px-6 sm:py-6 xl:px-8">
       <PageHeader
@@ -191,11 +247,30 @@ export default function ProjectMasterList() {
         </div>
       </DataToolbar>
 
+      {canManageProjects && selectedProjectIds.length > 0 ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3">
+          <p className="text-sm font-semibold text-red-800">{selectedProjectIds.length} project{selectedProjectIds.length === 1 ? '' : 's'} selected</p>
+          <button
+            type="button"
+            onClick={() => void handleBulkDelete()}
+            className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-white px-3 py-2 text-sm font-bold text-red-700 transition-colors hover:bg-red-100"
+          >
+            <Trash2 className="h-4 w-4" />
+            Bulk Delete
+          </button>
+        </div>
+      ) : null}
+
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] text-left whitespace-nowrap">
+          <table className="w-full min-w-[820px] text-left whitespace-nowrap">
             <thead className="border-b border-slate-200 bg-slate-50">
               <tr>
+                {canManageProjects ? (
+                  <th className="w-14 px-6 py-4">
+                    <input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisibleProjects} className="h-4 w-4 rounded border-slate-300 text-orange-600 focus:ring-orange-500" />
+                  </th>
+                ) : null}
                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500"><SortableTableHeader label="Project" active={sortColumn === 'project'} direction={sortDirection} onClick={() => handleSort('project')} /></th>
                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500"><SortableTableHeader label="Client" active={sortColumn === 'client'} direction={sortDirection} onClick={() => handleSort('client')} /></th>
                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500"><SortableTableHeader label="Project Specialist" active={sortColumn === 'specialist'} direction={sortDirection} onClick={() => handleSort('specialist')} /></th>
@@ -207,13 +282,23 @@ export default function ProjectMasterList() {
             <tbody className="divide-y divide-slate-100">
               {visibleProjects.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-sm text-slate-500">
+                  <td colSpan={canManageProjects ? 7 : 6} className="px-6 py-12 text-center text-sm text-slate-500">
                     No projects matched that search.
                   </td>
                 </tr>
               ) : (
                 visibleProjects.map((project) => (
                   <tr key={project.id} className="transition-colors hover:bg-slate-50">
+                    {canManageProjects ? (
+                      <td className="px-6 py-4">
+                        <input
+                          type="checkbox"
+                          checked={selectedProjectIds.includes(project.id)}
+                          onChange={() => toggleProjectSelection(project.id)}
+                          className="h-4 w-4 rounded border-slate-300 text-orange-600 focus:ring-orange-500"
+                        />
+                      </td>
+                    ) : null}
                     <td className="px-6 py-4">
                       <Link to={appPaths.projects.detail(project.id)} className="block group">
                         <p className="font-bold text-slate-900 transition-colors group-hover:text-orange-600">{project.name}</p>

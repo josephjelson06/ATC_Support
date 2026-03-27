@@ -1,15 +1,22 @@
+import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { Bot, FileQuestion, MessageSquareShare, ShieldCheck } from 'lucide-react';
 
 import { useAsyncData } from '../../hooks/useAsyncData';
 import { apiFetch } from '../../lib/api';
-import { DEFAULT_WIDGET_KEY } from '../../lib/config';
+import { useResolvedWidgetKey } from '../../hooks/useResolvedWidgetKey';
+import { buildWidgetRequestHeaders } from '../../lib/widgetRuntime';
 import type { WidgetFaqResponse } from '../../lib/types';
 
 export default function ClientDashboard() {
-  const widgetQuery = useAsyncData(
-    () => apiFetch<WidgetFaqResponse>(`/widget/${DEFAULT_WIDGET_KEY}/faqs`, { auth: false }),
+  const widgetKey = useResolvedWidgetKey();
+  const widgetRequestHeaders = useMemo(
+    () => buildWidgetRequestHeaders(typeof window !== 'undefined' ? window.location.origin : ''),
     [],
+  );
+  const widgetQuery = useAsyncData(
+    () => apiFetch<WidgetFaqResponse>(`/widget/${widgetKey}/faqs`, { auth: false, headers: widgetRequestHeaders }),
+    [widgetKey, widgetRequestHeaders],
   );
 
   if (widgetQuery.isLoading) {
@@ -44,6 +51,7 @@ export default function ClientDashboard() {
   }
 
   const { project, faqs } = widgetQuery.data;
+  const isJuliaReady = project.juliaReadiness?.isReady ?? false;
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-8">
@@ -53,7 +61,7 @@ export default function ClientDashboard() {
           <p className="text-slate-500 mt-2">This public support area is now powered by the same project data the widget uses.</p>
         </div>
         <Link
-          to="/submit-ticket"
+          to={`/submit-ticket?widgetKey=${encodeURIComponent(widgetKey)}`}
           className="bg-orange-600 hover:bg-orange-700 text-white px-6 py-3 rounded-2xl font-bold transition-colors shadow-sm text-center"
         >
           Create support ticket
@@ -62,7 +70,7 @@ export default function ClientDashboard() {
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <OverviewCard icon={FileQuestion} label="Project FAQs" value={String(faqs.length)} accent="orange" />
-        <OverviewCard icon={Bot} label="AI Support" value="Julia" accent="purple" />
+        <OverviewCard icon={Bot} label="AI Support" value={isJuliaReady ? 'Ready' : 'Needs Setup'} accent={isJuliaReady ? 'green' : 'purple'} />
         <OverviewCard icon={ShieldCheck} label="Project Status" value={project.status} accent="green" />
         <OverviewCard icon={MessageSquareShare} label="Support Path" value="FAQ → AI → Human" accent="blue" />
       </div>
@@ -112,10 +120,10 @@ export default function ClientDashboard() {
           <div className="bg-slate-900 text-white rounded-3xl shadow-sm p-6">
             <h2 className="text-xl font-bold">Need human help now?</h2>
             <p className="text-sm text-slate-300 mt-3 leading-relaxed">
-              The standalone ticket form now submits straight to the backend using this project’s widget key.
+              The standalone ticket form now submits straight to the backend using this project's runtime widget key.
             </p>
             <Link
-              to="/submit-ticket"
+              to={`/submit-ticket?widgetKey=${encodeURIComponent(widgetKey)}`}
               className="mt-5 inline-flex items-center justify-center px-5 py-3 bg-orange-600 hover:bg-orange-700 rounded-2xl font-bold transition-colors"
             >
               Submit a direct escalation

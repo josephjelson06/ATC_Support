@@ -52,12 +52,21 @@ By the end of Phase A, ATC should be able to:
 - Groq is the planned LLM provider
 - `llama-3.1-8b-instant` is the default recommended first model
 - project knowledge intake still needs formalization
-- packaged widget delivery still needs productization
+- Julia readiness rules are now implemented in backend project/widget responses
+- project detail now includes `Julia Readiness Summary`
+- project detail now includes a dedicated Julia config surface for greeting, fallback, escalation hint, and allowed widget origins
+- packaged launcher script now exists at `widget.js`
+- project detail now exposes project-scoped handoff artifacts and preview/test URLs
+- public support/testing pages now resolve project scope from runtime widget key instead of one hardcoded sample key
+- allowed-domain enforcement is now active across widget FAQ/chat/escalation and the direct public ticket form
+- localhost origins are now seeded by default for internal packaged-widget validation
+- sample-project validation and first real PL handoff are the next execution step
 
 ## Exit Criteria For Phase A
 - a PL can hand over a complete project knowledge pack
 - Julia can be configured per project in a repeatable way
 - Julia can be embedded with a script tag and widget key
+- Julia can be restricted to explicitly approved widget origins
 - Julia answers from approved project knowledge only
 - Julia gives a clear fallback when uncertain
 - Julia stores the full chat session
@@ -68,8 +77,9 @@ By the end of Phase A, ATC should be able to:
 2. Finalize dashboard management/config responsibilities for `PL`.
 3. Finalize project knowledge intake checklist.
 4. Finalize AI-editor prompt for reverse-engineering project documentation.
-5. Build and test on sample project.
-6. Hand off embed package to first PL project.
+5. Build dashboard readiness/config workflow.
+6. Build and test on sample project.
+7. Hand off embed package to first PL project.
 
 ## Risks To Watch
 - knowledge packs arrive incomplete or inconsistent

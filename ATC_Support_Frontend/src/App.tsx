@@ -16,6 +16,7 @@ const LoginPage = lazy(() => import('./pages/auth/LoginPage'));
 const ClientLanding = lazy(() => import('./pages/client/ClientLanding'));
 const ClientDashboard = lazy(() => import('./pages/client/ClientDashboard'));
 const FallbackTicketForm = lazy(() => import('./pages/client/FallbackTicketForm'));
+const WidgetHostPage = lazy(() => import('./pages/client/WidgetHostPage'));
 
 const Dashboard = lazy(() => import('./pages/agent/Dashboard'));
 const InboundQueue = lazy(() => import('./pages/agent/InboundQueue'));
@@ -119,6 +120,8 @@ function AppRoutes() {
             </PublicOnlyRoute>
           }
         />
+
+        <Route path="/widget-host" element={<WidgetHostPage />} />
 
         <Route element={<ClientLayout />}>
           <Route path="/" element={<ClientLanding />} />

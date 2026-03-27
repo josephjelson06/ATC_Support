@@ -229,6 +229,7 @@ const ATTACHMENT_BLUEPRINTS = [
 const buildJuliaGreeting = (projectName: string) => `Hi, I am Julia for ${projectName}. Tell me what is blocking your work and I will search the available project knowledge first.`;
 const buildJuliaFallback = (projectName: string) => `I do not have enough ${projectName} context to answer confidently. I can help escalate this to the delivery team.`;
 const buildJuliaEscalationHint = (projectName: string) => `If ${projectName} is affecting production, access, billing, or approval flow, escalating is usually the fastest next step.`;
+const DEFAULT_WIDGET_ALLOWED_DOMAINS = ['http://localhost:3000', 'http://127.0.0.1:3000'];
 
 type SeedUser = Awaited<ReturnType<PrismaClient['user']['create']>>;
 type SeedProject = Awaited<ReturnType<PrismaClient['project']['create']>>;
@@ -386,6 +387,7 @@ export async function seedSmallMode(prisma: PrismaClient) {
           description: projectBlueprint.description,
           widgetKey,
           widgetEnabled,
+          widgetAllowedDomains: DEFAULT_WIDGET_ALLOWED_DOMAINS,
           juliaGreeting: buildJuliaGreeting(projectBlueprint.name),
           juliaFallbackMessage: buildJuliaFallback(projectBlueprint.name),
           juliaEscalationHint: buildJuliaEscalationHint(projectBlueprint.name),

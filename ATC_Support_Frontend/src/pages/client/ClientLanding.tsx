@@ -1,15 +1,22 @@
+import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { Bot, FileQuestion, Headset } from 'lucide-react';
 
 import { useAsyncData } from '../../hooks/useAsyncData';
 import { apiFetch } from '../../lib/api';
-import { DEFAULT_WIDGET_KEY } from '../../lib/config';
+import { useResolvedWidgetKey } from '../../hooks/useResolvedWidgetKey';
+import { buildWidgetRequestHeaders } from '../../lib/widgetRuntime';
 import type { WidgetFaqResponse } from '../../lib/types';
 
 export default function ClientLanding() {
-  const widgetQuery = useAsyncData(
-    () => apiFetch<WidgetFaqResponse>(`/widget/${DEFAULT_WIDGET_KEY}/faqs`, { auth: false }),
+  const widgetKey = useResolvedWidgetKey();
+  const widgetRequestHeaders = useMemo(
+    () => buildWidgetRequestHeaders(typeof window !== 'undefined' ? window.location.origin : ''),
     [],
+  );
+  const widgetQuery = useAsyncData(
+    () => apiFetch<WidgetFaqResponse>(`/widget/${widgetKey}/faqs`, { auth: false, headers: widgetRequestHeaders }),
+    [widgetKey, widgetRequestHeaders],
   );
 
   if (widgetQuery.isLoading) {
@@ -46,6 +53,7 @@ export default function ClientLanding() {
   }
 
   const { project, faqs } = widgetQuery.data;
+  const isJuliaReady = project.juliaReadiness?.isReady ?? false;
 
   return (
     <div className="min-h-screen flex items-center justify-center p-8">
@@ -68,8 +76,12 @@ export default function ClientLanding() {
           />
           <FeatureCard
             icon={Bot}
-            title="Julia AI is ready"
-            description="Use the widget in the bottom-right corner for guided troubleshooting."
+            title={isJuliaReady ? 'Julia AI is ready' : 'Julia AI needs setup'}
+            description={
+              isJuliaReady
+                ? 'Use the widget in the bottom-right corner for guided troubleshooting.'
+                : 'The widget can still be tested, but project knowledge/config still needs review before handoff.'
+            }
           />
           <FeatureCard
             icon={Headset}
@@ -103,18 +115,18 @@ export default function ClientLanding() {
             <p className="text-xs font-bold uppercase tracking-[0.2em] text-orange-300">Current Project</p>
             <h2 className="text-3xl font-black mt-4">{project.name}</h2>
             <p className="text-sm text-slate-300 mt-4 leading-relaxed">
-              The widget and standalone form are currently scoped to this project’s backend data using the configured widget key.
+              The widget and standalone form are scoped to this project's backend data using the current runtime widget key.
             </p>
 
             <div className="mt-8 space-y-3">
               <Link
-                to="/submit-ticket"
+                to={`/submit-ticket?widgetKey=${encodeURIComponent(widgetKey)}`}
                 className="block w-full text-center px-5 py-3 bg-orange-600 hover:bg-orange-700 rounded-2xl font-bold transition-colors"
               >
                 Submit a ticket
               </Link>
               <Link
-                to="/dashboard"
+                to={`/dashboard?widgetKey=${encodeURIComponent(widgetKey)}`}
                 className="block w-full text-center px-5 py-3 bg-white/10 hover:bg-white/15 rounded-2xl font-bold transition-colors"
               >
                 Browse support resources

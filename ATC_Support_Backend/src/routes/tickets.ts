@@ -18,6 +18,7 @@ import { parseSearchEntityId } from '../utils/search';
 import { serializeChatSession, serializeEscalationHistory, serializeTicket, serializeTicketEmail, serializeTicketMessage } from '../utils/serializers';
 import { resolveTicketAttachmentPath } from '../utils/ticketAttachments';
 import { canAssignTicketsToOthers, safeUserSelect } from '../utils/userModel';
+import { assertWidgetOriginAllowed, getWidgetProjectAccess } from '../utils/widgetAccess';
 
 const router = Router();
 
@@ -241,6 +242,8 @@ router.post(
   validate(publicCreateTicketSchema),
   asyncHandler(async (req, res) => {
     const payload = req.body as z.infer<typeof publicCreateTicketSchema>;
+    const project = await getWidgetProjectAccess(payload.widgetKey);
+    assertWidgetOriginAllowed(req, project);
     const ticket = await createWidgetTicket(payload);
     res.status(201).json(serializeTicket(ticket));
   }),

@@ -1,4 +1,4 @@
-import { AmcStatus, Prisma, ProjectStatus, Role, SupportLevel } from '@prisma/client';
+import { AmcStatus, KnowledgeStatus, Prisma, ProjectStatus, Role, SupportLevel } from '@prisma/client';
 import { Router } from 'express';
 import { z } from 'zod';
 
@@ -6,11 +6,13 @@ import { prisma } from '../lib/prisma';
 import { requireRole } from '../middleware/role';
 import { validate } from '../middleware/validate';
 import { assertProjectAccess, projectScopeForUser } from '../utils/access';
-import { asyncHandler, badRequest, conflict, parseId, notFound } from '../utils/http';
+import { buildJuliaReadiness } from '../utils/juliaReadiness';
+import { asyncHandler, badRequest, conflict, forbidden, parseId, notFound } from '../utils/http';
 import { createPaginatedResponse, getPaginationOptions } from '../utils/pagination';
 import { parseSearchEntityId } from '../utils/search';
 import { serializeProject } from '../utils/serializers';
-import { safeUserSelect } from '../utils/userModel';
+import { canManageProjectKnowledge, safeUserSelect } from '../utils/userModel';
+import { normalizeWidgetAllowedDomains } from '../utils/widgetAccess';
 import { generateWidgetKey } from '../utils/widgetKey';
 
 const router = Router();
@@ -49,6 +51,17 @@ const updateProjectSchema = createProjectSchema.omit({ amc: true }).partial().re
   message: 'At least one field is required.',
 });
 
+const updateJuliaConfigSchema = z
+  .object({
+    juliaGreeting: z.string().trim().min(1).max(500).nullable().optional(),
+    juliaFallbackMessage: z.string().trim().min(5).max(2000).nullable().optional(),
+    juliaEscalationHint: z.string().trim().min(5).max(2000).nullable().optional(),
+    widgetAllowedDomains: z.array(z.string().trim().min(1).max(200)).max(20).optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, {
+    message: 'At least one Julia config field is required.',
+  });
+
 const projectInclude = {
   client: true,
   assignedTo: {
@@ -75,6 +88,41 @@ const assertProjectSpecialist = async (assignedToId: number | null | undefined) 
   if (!projectSpecialist) {
     throw badRequest('assignedToId must reference an SE3 project specialist.');
   }
+};
+
+const getProjectJuliaReadiness = async (
+  projectId: number,
+  project: {
+    status: ProjectStatus;
+    widgetEnabled: boolean;
+    widgetAllowedDomains: string[];
+    juliaFallbackMessage?: string | null;
+    juliaEscalationHint?: string | null;
+  },
+) => {
+  const [faqCount, publishedDocCount] = await Promise.all([
+    prisma.faq.count({
+      where: {
+        projectId,
+      },
+    }),
+    prisma.projectDoc.count({
+      where: {
+        projectId,
+        status: KnowledgeStatus.PUBLISHED,
+      },
+    }),
+  ]);
+
+  return buildJuliaReadiness({
+    status: project.status,
+    widgetEnabled: project.widgetEnabled,
+    allowedDomainCount: project.widgetAllowedDomains.length,
+    faqCount,
+    publishedDocCount,
+    juliaFallbackMessage: project.juliaFallbackMessage,
+    juliaEscalationHint: project.juliaEscalationHint,
+  });
 };
 
 router.get(
@@ -149,7 +197,12 @@ router.get(
       throw notFound('Project not found.');
     }
 
-    res.json(serializeProject(project));
+    const juliaReadiness = await getProjectJuliaReadiness(projectId, project);
+
+    res.json({
+      ...serializeProject(project),
+      juliaReadiness,
+    });
   }),
 );
 
@@ -253,6 +306,41 @@ router.patch(
     });
 
     res.json(serializeProject(project));
+  }),
+);
+
+router.patch(
+  '/:id/julia-config',
+  validate(updateJuliaConfigSchema),
+  asyncHandler(async (req, res) => {
+    const projectId = parseId(req.params.id, 'project id');
+
+    if (!req.user || !canManageProjectKnowledge(req.user)) {
+      throw forbidden('You do not have permission to manage Julia configuration.');
+    }
+
+    await assertProjectAccess(req.user, projectId);
+    const payload = req.body as z.infer<typeof updateJuliaConfigSchema>;
+    const normalizedAllowedDomains =
+      payload.widgetAllowedDomains !== undefined ? normalizeWidgetAllowedDomains(payload.widgetAllowedDomains) : undefined;
+    const project = await prisma.project.update({
+      where: {
+        id: projectId,
+      },
+      data: {
+        ...(payload.juliaGreeting !== undefined ? { juliaGreeting: payload.juliaGreeting } : {}),
+        ...(payload.juliaFallbackMessage !== undefined ? { juliaFallbackMessage: payload.juliaFallbackMessage } : {}),
+        ...(payload.juliaEscalationHint !== undefined ? { juliaEscalationHint: payload.juliaEscalationHint } : {}),
+        ...(normalizedAllowedDomains !== undefined ? { widgetAllowedDomains: normalizedAllowedDomains } : {}),
+      },
+      include: projectInclude,
+    });
+    const juliaReadiness = await getProjectJuliaReadiness(projectId, project);
+
+    res.json({
+      ...serializeProject(project),
+      juliaReadiness,
+    });
   }),
 );
 

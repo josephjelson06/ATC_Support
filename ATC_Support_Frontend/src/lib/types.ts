@@ -146,6 +146,7 @@ export interface ApiProject {
   description?: string | null;
   widgetKey?: string;
   widgetEnabled?: boolean;
+  widgetAllowedDomains?: string[];
   embedCode?: string;
   juliaGreeting?: string | null;
   juliaFallbackMessage?: string | null;
@@ -154,11 +155,30 @@ export interface ApiProject {
   createdAt: string;
   client?: ApiClient | null;
   assignedTo?: ApiUser | null;
+  juliaReadiness?: ApiJuliaReadiness;
   memberships?: Array<{
     userId: number;
     createdAt: string;
     user?: ApiUser | null;
   }>;
+}
+
+export interface ApiJuliaReadinessCheck {
+  key: string;
+  label: string;
+  isMet: boolean;
+  detail: string;
+}
+
+export interface ApiJuliaReadiness {
+  isReady: boolean;
+  allowedDomainCount: number;
+  minimumAllowedDomainCount: number;
+  faqCount: number;
+  minimumFaqCount: number;
+  publishedDocCount: number;
+  minimumPublishedDocCount: number;
+  checks: ApiJuliaReadinessCheck[];
 }
 
 export interface ApiAmc {
@@ -366,6 +386,7 @@ export interface WidgetFaqResponse {
     name: string;
     status: string;
     widgetEnabled?: boolean;
+    juliaReadiness?: ApiJuliaReadiness;
   };
   faqs: WidgetFaq[];
 }

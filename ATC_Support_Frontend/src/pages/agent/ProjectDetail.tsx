@@ -1,10 +1,11 @@
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import type { LucideIcon } from 'lucide-react';
-import { BookOpenText, Briefcase, Copy, FileQuestion, FileText, KeyRound, Pencil, Plus } from 'lucide-react';
+import { AlertTriangle, BookOpenText, Bot, Briefcase, CheckCircle2, Copy, FileQuestion, FileText, KeyRound, Pencil, Plus } from 'lucide-react';
 
 import PageHeader from '../../components/layout/PageHeader';
 import SectionTabs from '../../components/layout/SectionTabs';
 import { FaqCrudPanel } from '../../components/entities/FaqCrudPanel';
+import { JuliaConfigPanel } from '../../components/entities/JuliaConfigPanel';
 import { ProjectDocCrudPanel } from '../../components/entities/ProjectDocCrudPanel';
 import { ProjectCrudPanel } from '../../components/entities/ProjectCrudPanel';
 import { useModal } from '../../contexts/ModalContext';
@@ -14,6 +15,7 @@ import { useAsyncData } from '../../hooks/useAsyncData';
 import { apiFetch } from '../../lib/api';
 import { formatDate, formatRelativeTime, humanizeEnum } from '../../lib/format';
 import { appPaths } from '../../lib/navigation';
+import { buildWidgetDeliveryPack } from '../../lib/widgetRuntime';
 import type { ApiFaq, ApiProject, ApiProjectDoc, ProjectDetailTab } from '../../lib/types';
 
 const detailTabs: ProjectDetailTab[] = ['overview', 'faqs', 'docs'];
@@ -61,19 +63,24 @@ export default function ProjectDetail() {
   const canManageProjects = permissions?.canManageProjects ?? false;
   const canManageFaqs = permissions?.canManageProjectKnowledge ?? false;
   const canManageDocs = permissions?.canManageProjectKnowledge ?? false;
+  const canManageJulia = permissions?.canManageProjectKnowledge ?? false;
+  const juliaReadiness = project.juliaReadiness;
+  const publishedDocsCount = juliaReadiness?.publishedDocCount ?? docs.filter((doc) => doc.status === 'PUBLISHED').length;
+  const widgetDeliveryPack =
+    typeof window !== 'undefined' && project.widgetKey ? buildWidgetDeliveryPack(window.location.origin, project.widgetKey) : null;
   const projectTabs = [
     { label: 'Overview', to: appPaths.projects.detail(project.id, 'overview') },
     { label: 'FAQs', to: appPaths.projects.detail(project.id, 'faqs') },
     { label: 'Project Docs', to: appPaths.projects.detail(project.id, 'docs') },
   ];
 
-  const copyEmbedCode = async () => {
-    if (!project.embedCode) {
+  const copyToClipboard = async (value: string | undefined, successMessage: string) => {
+    if (!value) {
       return;
     }
 
-    await navigator.clipboard.writeText(project.embedCode);
-    showToast('success', 'Embed snippet copied.');
+    await navigator.clipboard.writeText(value);
+    showToast('success', successMessage);
   };
 
   const openEditModal = () => {
@@ -89,6 +96,26 @@ export default function ProjectDetail() {
           }}
           onDeleted={async () => {
             navigate(appPaths.projects.list);
+          }}
+        />
+      ),
+    });
+  };
+
+  const openJuliaConfigModal = () => {
+    openModal({
+      title: `Julia Config for ${project.name}`,
+      size: 'lg',
+      content: (
+        <JuliaConfigPanel
+          projectId={project.id}
+          projectName={project.name}
+          initialGreeting={project.juliaGreeting}
+          initialFallbackMessage={project.juliaFallbackMessage}
+          initialEscalationHint={project.juliaEscalationHint}
+          initialAllowedDomains={project.widgetAllowedDomains}
+          onCompleted={async () => {
+            projectQuery.reload();
           }}
         />
       ),
@@ -234,58 +261,265 @@ export default function ProjectDetail() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
         <ProjectDetailStat icon={KeyRound} label="Widget" value={project.widgetEnabled ? 'Enabled' : 'Disabled'} accent="green" />
-        <ProjectDetailStat icon={FileText} label="Docs" value={String(docs.length)} accent="blue" />
+        <ProjectDetailStat icon={FileText} label="Published Docs" value={String(publishedDocsCount)} accent="blue" />
         <ProjectDetailStat icon={FileQuestion} label="FAQs" value={String(faqs.length)} accent="orange" />
+        <ProjectDetailStat
+          icon={Bot}
+          label="Julia"
+          value={juliaReadiness?.isReady ? 'Ready' : 'Needs Setup'}
+          accent={juliaReadiness?.isReady ? 'green' : 'orange'}
+        />
       </div>
       <SectionTabs tabs={projectTabs} role={backendRole} />
       <div className="space-y-6">
         {currentTab === 'overview' ? (
-          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-100 p-5">
-              <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">Widget Status & Embed</h2>
-            </div>
-            <div className="space-y-4 p-5">
-              <div className="rounded-2xl border border-slate-100 p-4">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <p className="font-bold text-slate-900">Widget Status</p>
-                    <p className="mt-1 text-sm text-slate-500">{project.widgetEnabled ? 'The public widget is enabled for this project.' : 'The public widget is currently disabled.'}</p>
-                  </div>
-                  <span
-                    className={`rounded-full px-2.5 py-1 text-xs font-bold uppercase tracking-wider ${project.widgetEnabled ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
-                      }`}
-                  >
-                    {project.widgetEnabled ? 'Enabled' : 'Disabled'}
-                  </span>
+          <>
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+              <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <div className="border-b border-slate-100 p-5">
+                  <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">Widget Delivery Pack</h2>
                 </div>
-              </div>
+                <div className="space-y-4 p-5">
+                  <div className="rounded-2xl border border-slate-100 p-4">
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <p className="font-bold text-slate-900">Widget Status</p>
+                        <p className="mt-1 text-sm text-slate-500">
+                          {project.widgetEnabled
+                            ? 'The public widget is enabled for this project and can be embedded in the PL project UI.'
+                            : 'The public widget is currently disabled and cannot be handed off for embedding yet.'}
+                        </p>
+                      </div>
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-xs font-bold uppercase tracking-wider ${
+                          project.widgetEnabled ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
+                        }`}
+                      >
+                        {project.widgetEnabled ? 'Enabled' : 'Disabled'}
+                      </span>
+                    </div>
+                  </div>
 
-              <div className="rounded-2xl border border-slate-100 p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="font-bold text-slate-900">Widget Key</p>
-                    <p className="mt-1 font-mono text-xs text-slate-500">{project.widgetKey || 'No widget key available.'}</p>
+                  <div className="rounded-2xl border border-slate-100 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="font-bold text-slate-900">Widget Key</p>
+                        <p className="mt-1 font-mono text-xs text-slate-500">{project.widgetKey || 'No widget key available.'}</p>
+                      </div>
+                      {widgetDeliveryPack ? (
+                        <button
+                          onClick={() => void copyToClipboard(widgetDeliveryPack.embedCode, 'Embed snippet copied.')}
+                          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold uppercase tracking-wider text-slate-700 transition-colors hover:bg-slate-50"
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                          Copy
+                        </button>
+                      ) : null}
+                    </div>
+                    {widgetDeliveryPack ? (
+                      <p className="mt-3 break-all rounded-xl bg-slate-50 px-3 py-3 font-mono text-[11px] text-slate-600">{widgetDeliveryPack.embedCode}</p>
+                    ) : (
+                      <p className="mt-3 text-sm text-slate-500">No embed snippet is available yet for this project.</p>
+                    )}
                   </div>
-                  {project.embedCode ? (
-                    <button
-                      onClick={() => void copyEmbedCode()}
-                      className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold uppercase tracking-wider text-slate-700 transition-colors hover:bg-slate-50"
-                    >
-                      <Copy className="h-3.5 w-3.5" />
-                      Copy
-                    </button>
-                  ) : null}
+
+                  <div className="rounded-2xl border border-slate-100 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="font-bold text-slate-900">Allowed Widget Origins</p>
+                        <p className="mt-1 text-sm text-slate-500">Only these origins can load the packaged widget, FAQs, chat, and direct escalation flow.</p>
+                      </div>
+                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold uppercase tracking-wider text-slate-700">
+                        {project.widgetAllowedDomains?.length || 0} origin{project.widgetAllowedDomains?.length === 1 ? '' : 's'}
+                      </span>
+                    </div>
+                    {project.widgetAllowedDomains?.length ? (
+                      <div className="mt-3 space-y-2">
+                        {project.widgetAllowedDomains.map((domain) => (
+                          <div key={domain} className="break-all rounded-xl bg-slate-50 px-3 py-3 font-mono text-[11px] text-slate-600">
+                            {domain}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mt-3 rounded-xl bg-amber-50 px-3 py-3 text-sm text-amber-800">
+                        No allowed origins are configured yet. Add at least one internal/staging/production origin before handing the widget to the PL.
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-100 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="font-bold text-slate-900">Widget Preview URL</p>
+                        <p className="mt-1 text-sm text-slate-500">Open the packaged widget host directly before handing it to the PL.</p>
+                      </div>
+                      {widgetDeliveryPack ? (
+                        <button
+                          onClick={() => void copyToClipboard(widgetDeliveryPack.widgetHostUrl, 'Widget preview URL copied.')}
+                          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold uppercase tracking-wider text-slate-700 transition-colors hover:bg-slate-50"
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                          Copy
+                        </button>
+                      ) : null}
+                    </div>
+                    {widgetDeliveryPack ? <p className="mt-3 break-all rounded-xl bg-slate-50 px-3 py-3 text-[11px] text-slate-600">{widgetDeliveryPack.widgetHostUrl}</p> : null}
+                  </div>
+
+                  <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
+                    <p className="text-xs font-black uppercase tracking-widest text-blue-700">Install Note</p>
+                    <p className="mt-2 text-sm leading-relaxed text-blue-900">
+                      Hand the script snippet and widget key to the PL after Julia is marked ready. The PL embeds <span className="font-mono">widget.js</span>,
+                      verifies the widget host preview, and then tests the project FAQ/docs pack through the packaged launcher.
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-100 p-4">
+                    <p className="text-xs font-black uppercase tracking-widest text-slate-400">Internal Test Links</p>
+                    <div className="mt-3 flex flex-wrap gap-3">
+                      {widgetDeliveryPack ? (
+                        <>
+                          <a
+                            href={widgetDeliveryPack.publicSupportUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold uppercase tracking-wider text-slate-700 transition-colors hover:bg-slate-50"
+                          >
+                            Open Support Home
+                          </a>
+                          <a
+                            href={widgetDeliveryPack.supportDashboardUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold uppercase tracking-wider text-slate-700 transition-colors hover:bg-slate-50"
+                          >
+                            Open Support Dashboard
+                          </a>
+                          <a
+                            href={widgetDeliveryPack.fallbackTicketUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold uppercase tracking-wider text-slate-700 transition-colors hover:bg-slate-50"
+                          >
+                            Open Ticket Form
+                          </a>
+                        </>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-100 p-4">
+                    <p className="text-xs font-black uppercase tracking-widest text-slate-400">Allowed Environments Checklist</p>
+                    <div className="mt-3 space-y-3 text-sm text-slate-600">
+                      <p>- Local/Internal test should be validated first using an allowed origin such as <span className="font-mono">http://localhost:3000</span>.</p>
+                      <p>- Staging host should only receive the embed snippet after its full origin is added to the allowed list and Julia is marked ready.</p>
+                      <p>- Production host should only be approved after staging validation, PL sign-off, and explicit production origin registration.</p>
+                    </div>
+                  </div>
                 </div>
-                {project.embedCode ? (
-                  <p className="mt-3 break-all rounded-xl bg-slate-50 px-3 py-3 font-mono text-[11px] text-slate-600">{project.embedCode}</p>
-                ) : (
-                  <p className="mt-3 text-sm text-slate-500">No embed snippet is available yet for this project.</p>
-                )}
-              </div>
+              </section>
+
+              <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <div className="border-b border-slate-100 p-5">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">Julia Readiness Summary</h2>
+                      <p className="mt-2 text-sm text-slate-500">Use this to decide whether Julia can be safely handed to the project lead.</p>
+                    </div>
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wider ${
+                        juliaReadiness?.isReady ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                      }`}
+                    >
+                      {juliaReadiness?.isReady ? 'Julia Ready' : 'Needs Setup'}
+                    </span>
+                  </div>
+                </div>
+                <div className="space-y-4 p-5">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="rounded-2xl border border-slate-100 p-4">
+                      <p className="text-xs font-black uppercase tracking-widest text-slate-400">FAQ Coverage</p>
+                      <p className="mt-2 text-2xl font-black text-slate-900">
+                        {juliaReadiness?.faqCount ?? faqs.length}/{juliaReadiness?.minimumFaqCount ?? 3}
+                      </p>
+                      <p className="mt-1 text-sm text-slate-500">Approved FAQ entries available for FAQ-first widget flow.</p>
+                    </div>
+                    <div className="rounded-2xl border border-slate-100 p-4">
+                      <p className="text-xs font-black uppercase tracking-widest text-slate-400">Published Docs</p>
+                      <p className="mt-2 text-2xl font-black text-slate-900">
+                        {publishedDocsCount}/{juliaReadiness?.minimumPublishedDocCount ?? 1}
+                      </p>
+                      <p className="mt-1 text-sm text-slate-500">Published project documents that Julia can safely ground answers on.</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    {(juliaReadiness?.checks || []).map((check) => (
+                      <div key={check.key} className="flex items-start gap-3 rounded-2xl border border-slate-100 p-4">
+                        <div
+                          className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${
+                            check.isMet ? 'bg-green-50 text-green-600' : 'bg-amber-50 text-amber-600'
+                          }`}
+                        >
+                          {check.isMet ? <CheckCircle2 className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
+                        </div>
+                        <div>
+                          <p className="font-bold text-slate-900">{check.label}</p>
+                          <p className="mt-1 text-sm text-slate-500">{check.detail}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </section>
             </div>
-          </section>
+
+            <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-5">
+                <div>
+                  <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">Julia Configuration</h2>
+                  <p className="mt-2 text-sm text-slate-500">Project-specific wording Julia should use when greeting, falling back, and escalating.</p>
+                </div>
+                {canManageJulia ? (
+                  <button
+                    onClick={openJuliaConfigModal}
+                    className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50"
+                  >
+                    <Pencil className="h-4 w-4" />
+                    Edit Julia Config
+                  </button>
+                ) : null}
+              </div>
+              <div className="grid grid-cols-1 gap-4 p-5 lg:grid-cols-3">
+                <ConfigPreviewCard
+                  label="Greeting"
+                  value={
+                    project.juliaGreeting ||
+                    'No custom greeting yet. Julia will still work, but a project-specific greeting is recommended.'
+                  }
+                />
+                <ConfigPreviewCard
+                  label="Fallback Message"
+                  value={
+                    project.juliaFallbackMessage ||
+                    'No project-specific fallback message yet. Add one so Julia can clearly say when it is unsure.'
+                  }
+                  highlightMissing={!project.juliaFallbackMessage}
+                />
+                <ConfigPreviewCard
+                  label="Escalation Hint"
+                  value={
+                    project.juliaEscalationHint ||
+                    'No project-specific escalation hint yet. Add one so users know when to ask for human support.'
+                  }
+                  highlightMissing={!project.juliaEscalationHint}
+                />
+              </div>
+            </section>
+          </>
         ) : null}
 
         {currentTab === 'docs' ? (
@@ -406,6 +640,23 @@ export default function ProjectDetail() {
           </section>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+function ConfigPreviewCard({
+  label,
+  value,
+  highlightMissing = false,
+}: {
+  label: string;
+  value: string;
+  highlightMissing?: boolean;
+}) {
+  return (
+    <div className={`rounded-2xl border p-4 ${highlightMissing ? 'border-amber-200 bg-amber-50' : 'border-slate-100 bg-slate-50'}`}>
+      <p className={`text-xs font-black uppercase tracking-widest ${highlightMissing ? 'text-amber-700' : 'text-slate-400'}`}>{label}</p>
+      <p className={`mt-3 text-sm leading-relaxed ${highlightMissing ? 'text-amber-900' : 'text-slate-600'}`}>{value}</p>
     </div>
   );
 }

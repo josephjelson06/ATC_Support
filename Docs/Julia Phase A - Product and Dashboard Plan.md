@@ -32,6 +32,20 @@ The system still needs work before Julia is a packaged product:
 - clear PL responsibilities
 - repeatable widget delivery flow
 
+## Current Implementation Progress
+Implemented now:
+- backend Julia readiness evaluation for project and widget responses
+- PL-facing `Julia Readiness Summary` on the project detail page
+- dedicated Julia config editing for project greeting, fallback message, escalation hint, and allowed widget origins
+- public `widget.js` launcher script for packaged delivery
+- widget host route for direct packaged preview/testing
+- project-scoped public support/testing URLs driven by runtime widget key
+- runtime allowed-origin enforcement across widget FAQ/chat/escalation and direct public ticket creation
+
+Still pending:
+- formal project knowledge intake workflow in product use
+- internal sample-project validation and real PL handoff
+
 ## Phase A Product Shape
 Julia should be deliverable as a packaged support widget for each project.
 
@@ -129,6 +143,7 @@ For a single project, the PL should be able to see:
 ## Readiness Rules
 A project should be considered `Julia Ready` only when:
 - widget is enabled
+- at least one allowed widget origin is registered
 - minimum FAQ exists
 - minimum project docs exist
 - escalation/fallback wording is defined

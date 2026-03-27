@@ -1,20 +1,26 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, CheckCircle2, FileQuestion, Send } from 'lucide-react';
 
 import { useToast } from '../../contexts/ToastContext';
 import { useAsyncData } from '../../hooks/useAsyncData';
+import { useResolvedWidgetKey } from '../../hooks/useResolvedWidgetKey';
 import { apiFetch, getErrorMessage } from '../../lib/api';
-import { DEFAULT_WIDGET_KEY } from '../../lib/config';
+import { buildWidgetRequestHeaders } from '../../lib/widgetRuntime';
 import type { ApiTicket, TicketPriority, WidgetFaqResponse } from '../../lib/types';
 
 const priorities: TicketPriority[] = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 
 export default function FallbackTicketForm() {
   const { showToast } = useToast();
-  const widgetQuery = useAsyncData(
-    () => apiFetch<WidgetFaqResponse>(`/widget/${DEFAULT_WIDGET_KEY}/faqs`, { auth: false }),
+  const widgetKey = useResolvedWidgetKey();
+  const widgetRequestHeaders = useMemo(
+    () => buildWidgetRequestHeaders(typeof window !== 'undefined' ? window.location.origin : ''),
     [],
+  );
+  const widgetQuery = useAsyncData(
+    () => apiFetch<WidgetFaqResponse>(`/widget/${widgetKey}/faqs`, { auth: false, headers: widgetRequestHeaders }),
+    [widgetKey, widgetRequestHeaders],
   );
   const [form, setForm] = useState({
     name: '',
@@ -34,8 +40,9 @@ export default function FallbackTicketForm() {
       const response = await apiFetch<ApiTicket>('/tickets', {
         method: 'POST',
         auth: false,
+        headers: widgetRequestHeaders,
         body: {
-          widgetKey: DEFAULT_WIDGET_KEY,
+          widgetKey,
           name: form.name.trim(),
           email: form.email.trim(),
           title: form.title.trim(),
@@ -67,7 +74,7 @@ export default function FallbackTicketForm() {
       <div className="w-full max-w-5xl grid grid-cols-1 xl:grid-cols-[1.05fr_0.95fr] gap-8">
         <div>
           <Link
-            to="/"
+            to={`/?widgetKey=${encodeURIComponent(widgetKey)}`}
             className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-slate-800 mb-6"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -101,7 +108,7 @@ export default function FallbackTicketForm() {
                       Submit another ticket
                     </button>
                     <Link
-                      to="/"
+                      to={`/?widgetKey=${encodeURIComponent(widgetKey)}`}
                       className="px-5 py-3 bg-white hover:bg-slate-50 text-slate-700 rounded-2xl font-bold border border-slate-200 transition-colors"
                     >
                       Return to support home
@@ -230,7 +237,7 @@ export default function FallbackTicketForm() {
             <h2 className="text-xl font-bold">Live backend wiring</h2>
             <ul className="mt-4 space-y-3 text-sm text-slate-300">
               <li>- Uses the public backend ticket endpoint.</li>
-              <li>- Submits against widget key <span className="font-mono text-white">{DEFAULT_WIDGET_KEY}</span>.</li>
+              <li>- Submits against widget key <span className="font-mono text-white">{widgetKey}</span>.</li>
               <li>- Creates the same ticket type the internal queue now reads.</li>
             </ul>
           </div>

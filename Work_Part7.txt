@@ -10,3 +10,15 @@ I have prepared 4 docs
 2 for PLs:
 1. Julia Phase A - Project Knowledge Intake Checklist for PLs.md
 2. Julia Phase A - AI Editor Prompt for Project Knowledge Pack Generation.md
+
+
+
+
+
+------
+Update  at 12:11 Hrs
+First run done -> Didn't check
+Second run InProgress -> Done (12:15) ->  Didn't Check
+Third run InProgress ->  Done (12:56) -> Didn't Check
+
+Pivoting from the Project to my Personal Project for now -> Currently on standby

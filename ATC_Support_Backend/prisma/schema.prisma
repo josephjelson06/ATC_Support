@@ -221,6 +221,7 @@ model Project {
   description          String?
   widgetKey            String        @unique
   widgetEnabled        Boolean       @default(true)
+  widgetAllowedDomains String[]      @default([])
   juliaGreeting        String?
   juliaFallbackMessage String?
   juliaEscalationHint  String?

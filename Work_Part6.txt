@@ -1,0 +1,52 @@
+Next Phase of Work: 
+
+Date : 26-03-2026
+TimeStamp: 15:46
+
+--------
+Minor:
+Bulk assign  and bulk reassign -> leave it for now -> tackle later
+--------
+
+
+
+
+Work:
+
+1. 3 Clients
+2. 6 Projects
+3. 6+1 Users
+
+
+6 Client Projects to be created -> actual ones -> not dummy ones
+
+Client Project should have CRUD -> Atleast 2 on projects
+
+2 Fullstack projects
+--------------------------------------------
+
+The AI should have the following capabilities:
+
+- Memory (project context, tickets, conversation, amc, etc...)
+- Feedback Improvement (Client Thumbs Up/Down + Rating at the end of the session)
+
+- Fall-back when unable to solve the issue -> Prompt to create a ticket and give to SE
+
+---------
+
+Currently Each Conversation is linked to a Ticket -> but issue is resolved and doesn't escalte to a ticket then how do we save the conversation?
+
+----------
+
+This is a major thing:
+
+- DB Query Capability (Read-Only) -> to fetch information about the client's project ->
+  - Eg: How many current stocks are ready to be dispatched?
+  - Eg: How many toothpastes have been dispatched to Mumbai etc..
+Thing is it differs from project to project
+
+----------
+
+Now, tell me what all docs will be required for the AI Config and LLM integration?
+
+----------------------------------------------

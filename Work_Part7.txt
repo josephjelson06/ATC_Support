@@ -1,0 +1,12 @@
+Date: 27-03-2026
+Time: 11:45 Hrs
+I have prepared 4 docs
+
+
+2 for me:
+1. Julia Phase A - Ground Zero.md
+2. Julia Phase A - Project Knowledge Pack Template.md
+
+2 for PLs:
+1. Julia Phase A - Project Knowledge Intake Checklist for PLs.md
+2. Julia Phase A - AI Editor Prompt for Project Knowledge Pack Generation.md

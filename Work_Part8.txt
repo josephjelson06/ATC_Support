@@ -1,0 +1,13 @@
+Date: 31-03-2026
+Time: 16:06
+
+Current Status of the Project:
+- Project has been hosted on the Server
+
+To Do:
+- Embed the Script Tag with widget key to a project (for now our HMS Project) -> Hotel Admin only | Doesn't make sense for ATC Admin.
+- Then Test and all from there.
+  - Whether after login, before login.
+  - Responses, brain and all.
+  - DB Read etc..
+  - Test from all of that.

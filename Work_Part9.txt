@@ -1,0 +1,9 @@
+Date : 01-04-2026
+Time: 11:00 Hrs
+
+Tasks:
+- Give Script to Paras for embedding in HMS (His is React)
+- Give Prompt
+- Test with his project
+- Create a record in your DB (Client, Project)
+- Give him the prompts to be given

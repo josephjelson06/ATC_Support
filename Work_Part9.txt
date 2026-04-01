@@ -1,0 +1,9 @@
+Date: 01-04-2026
+Time: 13:05 Hrs
+
+Current Status of Project:
+- Currently connect with Paras Project
+- Able to send and see tickets
+- LLM Response Problems (due to limits) - TP Rate Limit, API Call Limits etc..
+- Have to Shorten the KB for now.
+- Optimize it -> (who will be able to use - authenticated users etc..)

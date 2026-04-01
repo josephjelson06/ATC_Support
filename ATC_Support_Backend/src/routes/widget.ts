@@ -125,15 +125,7 @@ router.post(
       throw badRequest('This chat session is no longer active.');
     }
 
-    await prisma.chatMessage.create({
-      data: {
-        chatSessionId: chatSession.id,
-        role: ChatRole.USER,
-        content: payload.message,
-      },
-    });
-
-    const conversation = await prisma.chatMessage.findMany({
+    const existingConversation = await prisma.chatMessage.findMany({
       where: {
         chatSessionId: chatSession.id,
       },
@@ -142,16 +134,30 @@ router.post(
       },
     });
 
-    const { reply, sourceRefs } = await generateJuliaReply(project.id, conversation.map((message) => ({ role: message.role, content: message.content })));
+    const conversation = [
+      ...existingConversation.map((message) => ({ role: message.role, content: message.content })),
+      { role: ChatRole.USER, content: payload.message },
+    ];
 
-    const juliaMessage = await prisma.chatMessage.create({
-      data: {
-        chatSessionId: chatSession.id,
-        role: ChatRole.JULIA,
-        content: reply,
-        sourceRefs,
-      },
-    });
+    const { reply, sourceRefs } = await generateJuliaReply(project.id, conversation);
+
+    const [, juliaMessage] = await prisma.$transaction([
+      prisma.chatMessage.create({
+        data: {
+          chatSessionId: chatSession.id,
+          role: ChatRole.USER,
+          content: payload.message,
+        },
+      }),
+      prisma.chatMessage.create({
+        data: {
+          chatSessionId: chatSession.id,
+          role: ChatRole.JULIA,
+          content: reply,
+          sourceRefs,
+        },
+      }),
+    ]);
 
     res.json({
       sessionId: chatSession.id,

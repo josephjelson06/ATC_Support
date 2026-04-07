@@ -1,0 +1,15 @@
+Date : 07-04-2026
+Time: 14:41 Hrs
+
+Tasks:
+- We have to first integrate the Hardware Solutions
+- We are going to integrate the widget in our own ATC Website
+- We can create a separate page for the widget and then we will embed the widget in that page
+-
+
+- I have to prepare FAQs and questionaries for the clients to understand their problems and help in thus resovling it.
+- No live takeover of the chatbot - just faq and julia chatbot
+
+Questions:
+- Is software handling really required for now?
+- Is project context really required for now?   

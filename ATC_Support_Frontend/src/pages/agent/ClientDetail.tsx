@@ -1,5 +1,5 @@
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
-import { Briefcase, Building2, Clock3, Globe, Mail, MapPin, Pencil, Phone, Plus, ShieldCheck, Users } from 'lucide-react';
+import { Briefcase, Building2, Clock3, Cpu, ExternalLink, Globe, Mail, MapPin, Pencil, Phone, Plus, ShieldCheck, Users } from 'lucide-react';
 
 import PageHeader from '../../components/layout/PageHeader';
 import SectionTabs from '../../components/layout/SectionTabs';
@@ -8,6 +8,7 @@ import { ClientContactCrudPanel } from '../../components/entities/ClientContactC
 import { ClientCrudPanel } from '../../components/entities/ClientCrudPanel';
 import { ConsigneeContactCrudPanel } from '../../components/entities/ConsigneeContactCrudPanel';
 import { ConsigneeCrudPanel } from '../../components/entities/ConsigneeCrudPanel';
+import { HardwareAssetCrudPanel } from '../../components/entities/HardwareAssetCrudPanel';
 import { useModal } from '../../contexts/ModalContext';
 import { useRole } from '../../contexts/RoleContext';
 import { useAsyncData } from '../../hooks/useAsyncData';
@@ -16,7 +17,7 @@ import { formatDate, humanizeEnum } from '../../lib/format';
 import { appPaths } from '../../lib/navigation';
 import type { ApiClientDetail, ClientDetailTab } from '../../lib/types';
 
-const detailTabs: ClientDetailTab[] = ['overview', 'projects', 'contacts', 'consignees', 'amcs'];
+const detailTabs: ClientDetailTab[] = ['overview', 'projects', 'contacts', 'consignees', 'amcs', 'hardware'];
 
 export default function ClientDetail() {
   const navigate = useNavigate();
@@ -59,6 +60,7 @@ export default function ClientDetail() {
     { label: 'Contacts', to: appPaths.clients.detail(client.id, 'contacts') },
     { label: 'Consignees', to: appPaths.clients.detail(client.id, 'consignees') },
     { label: 'AMCs', to: appPaths.clients.detail(client.id, 'amcs') },
+    { label: 'Hardware', to: appPaths.clients.detail(client.id, 'hardware') },
   ];
 
   const openEditModal = () => {
@@ -107,6 +109,46 @@ export default function ClientDetail() {
           clientId={client.id}
           projects={client.projects}
           amc={amc}
+          onCompleted={async () => {
+            clientQuery.reload();
+          }}
+          onDeleted={async () => {
+            clientQuery.reload();
+          }}
+        />
+      ),
+    });
+  };
+
+  const openCreateHardwareModal = () => {
+    openModal({
+      title: `Add Hardware for ${client.name}`,
+      size: 'lg',
+      content: (
+        <HardwareAssetCrudPanel
+          mode="create"
+          clientId={client.id}
+          projects={client.projects}
+          amcs={client.amcs}
+          onCompleted={async () => {
+            clientQuery.reload();
+          }}
+        />
+      ),
+    });
+  };
+
+  const openEditHardwareModal = (hardwareAsset: ApiClientDetail['hardwareAssets'][number]) => {
+    openModal({
+      title: `Edit ${hardwareAsset.displayId}`,
+      size: 'lg',
+      content: (
+        <HardwareAssetCrudPanel
+          mode="edit"
+          clientId={client.id}
+          projects={client.projects}
+          amcs={client.amcs}
+          hardwareAsset={hardwareAsset}
           onCompleted={async () => {
             clientQuery.reload();
           }}
@@ -293,10 +335,11 @@ export default function ClientDetail() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
         <DetailStat icon={Briefcase} label="Projects" value={String(client.projects.length)} accent="orange" />
         <DetailStat icon={Users} label="Contacts" value={String(client.contacts.length)} accent="blue" />
         <DetailStat icon={ShieldCheck} label="Active AMCs" value={String(activeAmcs.length)} accent="green" />
+        <DetailStat icon={Cpu} label="Hardware" value={String(client.hardwareAssets.length)} accent="slate" />
       </div>
 
       <SectionTabs tabs={clientTabs} role={backendRole} />
@@ -345,7 +388,7 @@ export default function ClientDetail() {
         </div>
         ) : null}
 
-        {currentTab === 'overview' || currentTab === 'contacts' || currentTab === 'consignees' || currentTab === 'amcs' ? (
+        {currentTab === 'overview' || currentTab === 'contacts' || currentTab === 'consignees' || currentTab === 'amcs' || currentTab === 'hardware' ? (
         <div className="space-y-6">
           {currentTab === 'overview' ? (
           <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -589,6 +632,93 @@ export default function ClientDetail() {
             </div>
           </section>
           ) : null}
+
+          {currentTab === 'hardware' ? (
+          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex items-center justify-between border-b border-slate-100 p-5">
+              <div>
+                <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">Hardware Assets</h2>
+                <p className="mt-1 text-sm text-slate-500">Client-owned devices can optionally link to projects and AMC coverage.</p>
+              </div>
+              {canManageClients ? (
+                <button
+                  onClick={openCreateHardwareModal}
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold uppercase tracking-wider text-slate-700 transition-colors hover:bg-slate-50"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Add Hardware
+                </button>
+              ) : null}
+            </div>
+            <div className="divide-y divide-slate-100">
+              {client.hardwareAssets.length === 0 ? (
+                <div className="p-6 text-sm text-slate-500">No hardware assets linked to this client yet.</div>
+              ) : (
+                client.hardwareAssets.map((hardwareAsset) => (
+                  <div key={hardwareAsset.id} className="p-5">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="flex min-w-0 gap-4">
+                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-500">
+                          <Cpu className="h-6 w-6" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-bold text-slate-900">
+                              {[hardwareAsset.brand, hardwareAsset.model].filter(Boolean).join(' ') || humanizeEnum(hardwareAsset.category)}
+                            </p>
+                            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-black uppercase tracking-wider text-slate-700">
+                              {humanizeEnum(hardwareAsset.category)}
+                            </span>
+                            <span
+                              className={`rounded-full px-2.5 py-1 text-xs font-black uppercase tracking-wider ${
+                                hardwareAsset.status === 'ACTIVE' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
+                              }`}
+                            >
+                              {humanizeEnum(hardwareAsset.status)}
+                            </span>
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-3 text-sm text-slate-500">
+                            <span className="font-mono font-bold text-orange-600">{hardwareAsset.displayId}</span>
+                            {hardwareAsset.serialNumber ? <span>Serial: {hardwareAsset.serialNumber}</span> : null}
+                            {hardwareAsset.location ? <span>Location: {hardwareAsset.location}</span> : null}
+                          </div>
+                          <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500">
+                            {hardwareAsset.project ? (
+                              <Link to={appPaths.projects.detail(hardwareAsset.project.id)} className="rounded-full bg-orange-50 px-2.5 py-1 font-bold text-orange-700 hover:text-orange-800">
+                                Project: {hardwareAsset.project.name}
+                              </Link>
+                            ) : (
+                              <span className="rounded-full bg-slate-100 px-2.5 py-1 font-bold text-slate-600">Client-level hardware</span>
+                            )}
+                            {hardwareAsset.amc ? (
+                              <span className="rounded-full bg-green-50 px-2.5 py-1 font-bold text-green-700">AMC: {hardwareAsset.amc.displayId}</span>
+                            ) : null}
+                            {hardwareAsset.vendorSupportUrl ? (
+                              <a href={hardwareAsset.vendorSupportUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 font-bold text-blue-700 hover:text-blue-800">
+                                Vendor support
+                                <ExternalLink className="h-3 w-3" />
+                              </a>
+                            ) : null}
+                          </div>
+                          {hardwareAsset.notes ? <p className="mt-3 whitespace-pre-wrap text-sm text-slate-500">{hardwareAsset.notes}</p> : null}
+                        </div>
+                      </div>
+                      {canManageClients ? (
+                        <button
+                          onClick={() => openEditHardwareModal(hardwareAsset)}
+                          className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold uppercase tracking-wider text-slate-700 transition-colors hover:bg-slate-50"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                          Edit
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </section>
+          ) : null}
         </div>
         ) : null}
       </div>
@@ -605,13 +735,15 @@ function DetailStat({
   icon: typeof Briefcase;
   label: string;
   value: string;
-  accent: 'orange' | 'blue' | 'green';
+  accent: 'orange' | 'blue' | 'green' | 'slate';
 }) {
   const theme =
     accent === 'blue'
       ? 'bg-blue-50 text-blue-600'
       : accent === 'green'
         ? 'bg-green-50 text-green-600'
+        : accent === 'slate'
+          ? 'bg-slate-100 text-slate-500'
         : 'bg-orange-50 text-orange-600';
 
   return (

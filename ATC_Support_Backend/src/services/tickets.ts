@@ -24,6 +24,7 @@ export const createWidgetTicket = async (input: CreateWidgetTicketInput) => {
     select: {
       id: true,
       name: true,
+      clientId: true,
       widgetEnabled: true,
       assignedToId: true,
     },
@@ -89,13 +90,15 @@ export const createWidgetTicket = async (input: CreateWidgetTicketInput) => {
     const ticket = await transaction.ticket.create({
       data: {
         projectId: project.id,
+        clientId: project.clientId,
         chatSessionId: chatSession?.id,
         requesterName: input.name,
         requesterEmail: input.email.toLowerCase(),
         emailThreadToken: buildTicketThreadToken(),
         title: input.title,
         description: input.description?.trim() || fallbackDescription || `Support request for ${project.name}.`,
-        source: 'WIDGET',
+        source: 'PROJECT_WIDGET',
+        supportType: 'SOFTWARE',
         priority: input.priority ?? TicketPriority.MEDIUM,
         status: TicketStatus.NEW,
       },
@@ -106,6 +109,7 @@ export const createWidgetTicket = async (input: CreateWidgetTicketInput) => {
             assignedTo: { select: safeUserSelect },
           },
         },
+        client: true,
         assignedTo: { select: safeUserSelect },
         chatSession: true,
       },

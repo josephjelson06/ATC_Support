@@ -54,6 +54,7 @@ router.get(
           : {}),
       },
       include: {
+        client: true,
         project: {
           include: {
             client: true,
@@ -79,6 +80,8 @@ router.get(
             createdAt: true,
           },
         },
+        hardwareAsset: true,
+        supportSession: true,
       },
       orderBy: {
         createdAt: 'desc',

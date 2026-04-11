@@ -20,6 +20,7 @@ const WidgetHostPage = lazy(() => import('./pages/client/WidgetHostPage'));
 
 const Dashboard = lazy(() => import('./pages/agent/Dashboard'));
 const InboundQueue = lazy(() => import('./pages/agent/InboundQueue'));
+const SupportSessions = lazy(() => import('./pages/agent/SupportSessions'));
 const TicketDetail = lazy(() => import('./pages/agent/TicketDetail'));
 const ClientMasterList = lazy(() => import('./pages/agent/ClientMasterList'));
 const ClientDetail = lazy(() => import('./pages/agent/ClientDetail'));
@@ -142,6 +143,7 @@ function AppRoutes() {
             >
               <Route index element={<Navigate to="queue" replace />} />
               <Route path="queue" element={<InboundQueue />} />
+              <Route path="sessions" element={<SupportSessions />} />
               <Route path="mine" element={<InboundQueue />} />
               <Route path="escalated" element={<InboundQueue />} />
               <Route path="waiting" element={<InboundQueue />} />

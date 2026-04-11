@@ -104,6 +104,7 @@ router.post(
                 client: true,
               },
             },
+            client: true,
             chatSession: true,
           },
         });

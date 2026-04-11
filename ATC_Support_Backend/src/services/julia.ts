@@ -14,6 +14,7 @@ type ConversationMessage = {
 type JuliaSourceRefs = {
   runbookIds: number[];
   projectDocIds: number[];
+  supportTopicIds?: number[];
 };
 
 const MAX_CONTEXT_ITEMS = 2;
@@ -235,6 +236,219 @@ export const generateJuliaReply = async (projectId: number, conversation: Conver
     sourceRefs: {
       runbookIds: rankedRunbooks.map((runbook) => runbook.id),
       projectDocIds: rankedDocs.map((doc) => doc.id),
+    } satisfies JuliaSourceRefs,
+  };
+};
+
+type SupportConversationMessage = {
+  role: 'USER' | 'JULIA' | 'SYSTEM';
+  content: string;
+};
+
+export const generateSupportSessionReply = async (supportSessionId: number, conversation: SupportConversationMessage[]) => {
+  const supportSession = await prisma.supportSession.findUnique({
+    where: {
+      id: supportSessionId,
+    },
+    include: {
+      client: true,
+      hardwareAsset: true,
+      selectedTopic: true,
+      project: {
+        include: {
+          docs: {
+            where: {
+              status: 'PUBLISHED',
+            },
+            orderBy: {
+              updatedAt: 'desc',
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!supportSession) {
+    throw notFound('Support session not found.');
+  }
+
+  const normalizedConversation = normalizeConversation(
+    conversation
+      .filter((message) => message.role !== 'SYSTEM')
+      .map((message) => ({
+        role: message.role === 'JULIA' ? ChatRole.JULIA : ChatRole.USER,
+        content: message.content,
+      })),
+  );
+  const latestUserMessage = [...normalizedConversation].reverse().find((message) => message.role === ChatRole.USER)?.content || '';
+
+  const supportTopicScopes = [
+    { scope: 'GLOBAL' as const },
+    ...(supportSession.clientId ? [{ clientId: supportSession.clientId }] : []),
+    ...(supportSession.projectId ? [{ projectId: supportSession.projectId }] : []),
+    ...(supportSession.hardwareAssetId ? [{ hardwareAssetId: supportSession.hardwareAssetId }] : []),
+    ...(supportSession.hardwareAsset?.category ? [{ hardwareCategory: supportSession.hardwareAsset.category }] : []),
+  ];
+
+  const [supportTopics, runbooks] = await Promise.all([
+    prisma.supportTopic.findMany({
+      where: {
+        status: 'PUBLISHED',
+        supportType: {
+          in: ['GENERAL', supportSession.supportType],
+        },
+        OR: supportTopicScopes,
+      },
+      orderBy: [{ sortOrder: 'asc' }, { updatedAt: 'desc' }],
+      take: 12,
+    }),
+    prisma.runbook.findMany({
+      where: {
+        status: 'PUBLISHED',
+      },
+      orderBy: {
+        updatedAt: 'desc',
+      },
+      take: 6,
+    }),
+  ]);
+
+  const rankedTopics = supportTopics
+    .map((topic) => ({ ...topic, score: scoreKnowledgeItem(latestUserMessage, topic) }))
+    .sort((left, right) => right.score - left.score || left.sortOrder - right.sortOrder || right.updatedAt.getTime() - left.updatedAt.getTime())
+    .slice(0, MAX_CONTEXT_ITEMS + 1);
+  const rankedDocs = (supportSession.project?.docs || [])
+    .map((doc) => ({ ...doc, score: scoreKnowledgeItem(latestUserMessage, doc) }))
+    .sort((left, right) => right.score - left.score || right.updatedAt.getTime() - left.updatedAt.getTime())
+    .slice(0, MAX_CONTEXT_ITEMS);
+  const rankedRunbooks = runbooks
+    .map((runbook) => ({ ...runbook, score: scoreKnowledgeItem(latestUserMessage, runbook) }))
+    .sort((left, right) => right.score - left.score || right.updatedAt.getTime() - left.updatedAt.getTime())
+    .slice(0, MAX_CONTEXT_ITEMS);
+
+  const fallbackReply =
+    supportSession.project?.juliaFallbackMessage ||
+    'I do not have enough approved support context to answer confidently. I can escalate this to the ATC support team with the details collected so far.';
+
+  if (!env.GROQ_API_KEY) {
+    return {
+      reply: fallbackReply,
+      sourceRefs: {
+        runbookIds: rankedRunbooks.map((runbook) => runbook.id),
+        projectDocIds: rankedDocs.map((doc) => doc.id),
+        supportTopicIds: rankedTopics.map((topic) => topic.id),
+      } satisfies JuliaSourceRefs,
+    };
+  }
+
+  const contextHeader = [
+    `Support type: ${supportSession.supportType}`,
+    supportSession.client ? `Client: ${supportSession.client.name}` : null,
+    supportSession.project ? `Project: ${supportSession.project.name}` : null,
+    supportSession.hardwareAsset
+      ? `Hardware: ${[
+          supportSession.hardwareAsset.category,
+          supportSession.hardwareAsset.brand,
+          supportSession.hardwareAsset.model,
+          supportSession.hardwareAsset.serialNumber ? `Serial ${supportSession.hardwareAsset.serialNumber}` : null,
+        ]
+          .filter(Boolean)
+          .join(' | ')}`
+      : null,
+    supportSession.selectedTopic ? `Selected topic: ${supportSession.selectedTopic.title}` : null,
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const systemPrompt = [
+    'You are Julia, ATC Support\'s frontline assistant.',
+    'Use structured support topics, SOPs, playbooks, and project context before giving advice.',
+    'Ask one practical diagnostic question at a time when troubleshooting.',
+    'Do not guess. If the case is risky, hardware-damage related, or unsupported by context, recommend escalation.',
+    'Keep the response concise and suitable for a support widget.',
+    contextHeader,
+    buildContextSection(
+      'Support Topics',
+      rankedTopics.map((topic) => ({
+        title: topic.title,
+        content: topic.content,
+      })),
+    ),
+    buildContextSection(
+      'Project Documents',
+      rankedDocs.map((doc) => ({
+        title: doc.title,
+        content: doc.content,
+      })),
+    ),
+    buildContextSection(
+      'Runbooks',
+      rankedRunbooks.map((runbook) => ({
+        title: runbook.title,
+        content: runbook.content,
+      })),
+    ),
+  ].join('\n\n');
+
+  const client = new Groq({
+    apiKey: env.GROQ_API_KEY,
+  });
+
+  const messages: ChatCompletionMessageParam[] = [
+    {
+      role: 'system',
+      content: systemPrompt,
+    },
+    ...normalizedConversation.map<ChatCompletionMessageParam>((message) =>
+      message.role === ChatRole.USER
+        ? {
+            role: 'user',
+            content: message.content,
+          }
+        : {
+            role: 'assistant',
+            content: message.content,
+          },
+    ),
+  ];
+
+  let completion;
+
+  try {
+    completion = await client.chat.completions.create({
+      model: env.GROQ_MODEL,
+      temperature: 0.2,
+      max_completion_tokens: 350,
+      messages,
+    });
+  } catch (error) {
+    if (isPromptBudgetError(error)) {
+      return {
+        reply: fallbackReply,
+        sourceRefs: {
+          runbookIds: rankedRunbooks.map((runbook) => runbook.id),
+          projectDocIds: rankedDocs.map((doc) => doc.id),
+          supportTopicIds: rankedTopics.map((topic) => topic.id),
+        } satisfies JuliaSourceRefs,
+      };
+    }
+
+    throw error;
+  }
+
+  const content = completion.choices[0]?.message?.content?.trim();
+
+  if (!content) {
+    throw new AppError(502, 'Julia AI did not return a response.');
+  }
+
+  return {
+    reply: content,
+    sourceRefs: {
+      runbookIds: rankedRunbooks.map((runbook) => runbook.id),
+      projectDocIds: rankedDocs.map((doc) => doc.id),
+      supportTopicIds: rankedTopics.map((topic) => topic.id),
     } satisfies JuliaSourceRefs,
   };
 };

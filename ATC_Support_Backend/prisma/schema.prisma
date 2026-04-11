@@ -57,6 +57,9 @@ enum TicketPriority {
 
 enum TicketSource {
   WIDGET
+  PROJECT_WIDGET
+  GENERAL_WIDGET
+  INTERNAL
 }
 
 enum TicketStatus {
@@ -84,6 +87,60 @@ enum ChatSessionStatus {
 enum ChatRole {
   USER
   JULIA
+}
+
+enum SupportType {
+  GENERAL
+  SOFTWARE
+  HARDWARE
+}
+
+enum SupportSessionSource {
+  GENERAL_WIDGET
+  PROJECT_WIDGET
+  INTERNAL
+}
+
+enum SupportSessionStatus {
+  ACTIVE
+  ENDED
+  ESCALATED
+}
+
+enum SupportSessionMessageRole {
+  USER
+  JULIA
+  SYSTEM
+}
+
+enum HardwareCategory {
+  PRINTER
+  SCANNER
+  NETWORK_DEVICE
+  COMPUTER
+  PERIPHERAL
+  OTHER
+}
+
+enum HardwareAssetStatus {
+  ACTIVE
+  INACTIVE
+  RETIRED
+}
+
+enum SupportTopicScope {
+  GLOBAL
+  CLIENT
+  PROJECT
+  HARDWARE_CATEGORY
+  HARDWARE_ASSET
+}
+
+enum SupportTopicKind {
+  FAQ
+  SOP
+  PLAYBOOK
+  VENDOR_LINK
 }
 
 enum KnowledgeStatus {
@@ -156,6 +213,10 @@ model Client {
   consignees Consignee[]
   amcs       Amc[]
   projects   Project[]
+  tickets    Ticket[]
+  hardwareAssets HardwareAsset[]
+  supportSessions SupportSession[]
+  supportTopics SupportTopic[]
 
   @@index([status])
 }
@@ -207,6 +268,7 @@ model Amc {
   status        AmcStatus @default(ACTIVE)
   client        Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
   project       Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  hardwareAssets HardwareAsset[]
 
   @@index([clientId])
   @@index([projectId])
@@ -234,6 +296,9 @@ model Project {
   faqs                 Faq[]
   docs                 ProjectDoc[]
   chatSessions         ChatSession[]
+  supportSessions      SupportSession[]
+  supportTopics        SupportTopic[]
+  hardwareAssets       HardwareAsset[]
   memberships          ProjectMember[]
 
   @@index([clientId])
@@ -254,22 +319,31 @@ model ProjectMember {
 
 model Ticket {
   id                Int                 @id @default(autoincrement())
-  projectId         Int
+  projectId         Int?
+  clientId          Int?
   chatSessionId     Int?                @unique
+  supportSessionId  Int?                @unique
+  hardwareAssetId   Int?
   requesterName     String?
   requesterEmail    String?
   emailThreadToken  String?             @unique
   title             String
   description       String?
   source            TicketSource        @default(WIDGET)
+  supportType       SupportType?
   priority          TicketPriority      @default(MEDIUM)
   status            TicketStatus        @default(NEW)
   assignedToId      Int?
   resolutionSummary String?
+  supportSummary    String?
+  confidenceScore   Float?
   createdAt         DateTime            @default(now())
   resolvedAt        DateTime?
-  project           Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project           Project?            @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  client            Client?             @relation(fields: [clientId], references: [id], onDelete: SetNull)
   chatSession       ChatSession?        @relation(fields: [chatSessionId], references: [id], onDelete: SetNull)
+  supportSession    SupportSession?     @relation(fields: [supportSessionId], references: [id], onDelete: SetNull)
+  hardwareAsset     HardwareAsset?      @relation(fields: [hardwareAssetId], references: [id], onDelete: SetNull)
   assignedTo        User?               @relation("TicketAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
   messages          TicketMessage[]
   attachments       TicketAttachment[]
@@ -277,9 +351,12 @@ model Ticket {
   escalationHistory EscalationHistory[]
 
   @@index([projectId])
+  @@index([clientId])
+  @@index([hardwareAssetId])
   @@index([assignedToId])
   @@index([status])
   @@index([priority])
+  @@index([supportType])
 }
 
 model TicketMessage {
@@ -391,6 +468,116 @@ model ChatMessage {
 
   @@index([chatSessionId])
   @@index([role])
+}
+
+model HardwareAsset {
+  id               Int                 @id @default(autoincrement())
+  clientId         Int
+  projectId        Int?
+  amcId            Int?
+  category         HardwareCategory    @default(OTHER)
+  brand            String?
+  model            String?
+  serialNumber     String?
+  location         String?
+  status           HardwareAssetStatus @default(ACTIVE)
+  notes            String?
+  vendorSupportUrl String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  client           Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  project          Project?            @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  amc              Amc?                @relation(fields: [amcId], references: [id], onDelete: SetNull)
+  tickets          Ticket[]
+  supportSessions  SupportSession[]
+  supportTopics    SupportTopic[]
+
+  @@index([clientId])
+  @@index([projectId])
+  @@index([amcId])
+  @@index([category])
+  @@index([status])
+}
+
+model SupportTopic {
+  id               Int                @id @default(autoincrement())
+  scope            SupportTopicScope  @default(GLOBAL)
+  kind             SupportTopicKind   @default(FAQ)
+  supportType      SupportType        @default(GENERAL)
+  status           KnowledgeStatus    @default(PUBLISHED)
+  title            String
+  summary          String?
+  content          String
+  clientId         Int?
+  projectId        Int?
+  hardwareCategory HardwareCategory?
+  hardwareAssetId  Int?
+  vendorUrl        String?
+  sortOrder        Int                @default(0)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  client           Client?            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  project          Project?           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  hardwareAsset    HardwareAsset?     @relation(fields: [hardwareAssetId], references: [id], onDelete: Cascade)
+  supportSessions  SupportSession[]   @relation("SupportSessionSelectedTopic")
+
+  @@index([scope])
+  @@index([kind])
+  @@index([supportType])
+  @@index([status])
+  @@index([clientId])
+  @@index([projectId])
+  @@index([hardwareCategory])
+  @@index([hardwareAssetId])
+}
+
+model SupportSession {
+  id               Int                     @id @default(autoincrement())
+  source           SupportSessionSource    @default(PROJECT_WIDGET)
+  status           SupportSessionStatus    @default(ACTIVE)
+  supportType      SupportType             @default(GENERAL)
+  clientId         Int?
+  projectId        Int?
+  hardwareAssetId  Int?
+  selectedTopicId  Int?
+  requesterName    String?
+  requesterEmail   String?
+  requesterPhone   String?
+  issueSummary     String?
+  supportSummary   String?
+  confidenceScore  Float?
+  createdAt        DateTime                @default(now())
+  endedAt          DateTime?
+  escalatedAt      DateTime?
+  client           Client?                 @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  project          Project?                @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  hardwareAsset    HardwareAsset?          @relation(fields: [hardwareAssetId], references: [id], onDelete: SetNull)
+  selectedTopic    SupportTopic?           @relation("SupportSessionSelectedTopic", fields: [selectedTopicId], references: [id], onDelete: SetNull)
+  messages         SupportSessionMessage[]
+  ticket           Ticket?
+
+  @@index([source])
+  @@index([status])
+  @@index([supportType])
+  @@index([clientId])
+  @@index([projectId])
+  @@index([hardwareAssetId])
+  @@index([selectedTopicId])
+  @@index([createdAt])
+}
+
+model SupportSessionMessage {
+  id               Int                     @id @default(autoincrement())
+  supportSessionId Int
+  role             SupportSessionMessageRole
+  content          String
+  sourceRefs       Json?
+  createdAt        DateTime                @default(now())
+  supportSession   SupportSession          @relation(fields: [supportSessionId], references: [id], onDelete: Cascade)
+
+  @@index([supportSessionId])
+  @@index([role])
+  @@index([createdAt])
 }
 
 model Faq {

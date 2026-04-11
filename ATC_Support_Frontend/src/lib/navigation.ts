@@ -14,7 +14,7 @@ export type NavGroupId = 'operations' | 'insights' | 'administration';
 
 export type TicketListView = 'queue' | 'mine' | 'escalated' | 'waiting' | 'resolved';
 export type TicketDetailTab = 'summary' | 'conversation' | 'attachments' | 'email' | 'history';
-export type ClientDetailTab = 'overview' | 'projects' | 'contacts' | 'consignees' | 'amcs';
+export type ClientDetailTab = 'overview' | 'projects' | 'contacts' | 'consignees' | 'amcs' | 'hardware';
 export type ProjectDetailTab = 'overview' | 'faqs' | 'docs';
 export type ReportsTab = 'overview' | 'tickets';
 export type AdminPrimaryTab = 'users';
@@ -54,6 +54,7 @@ export const appPaths = {
     escalated: '/agent/tickets/escalated',
     waiting: '/agent/tickets/waiting',
     resolved: '/agent/tickets/resolved',
+    sessions: '/agent/tickets/sessions',
     detail: (id: number | string, tab: TicketDetailTab = 'summary') => `/agent/tickets/${id}/${tab}`,
   },
   clients: {
@@ -145,6 +146,7 @@ export const sidebarGroups: SidebarNavGroup[] = [
 
 export const ticketModuleTabs: SectionTab[] = [
   { label: 'Queue', to: appPaths.tickets.queue },
+  { label: 'Support Sessions', to: appPaths.tickets.sessions },
   { label: 'My Tickets', to: appPaths.tickets.mine },
   { label: 'Escalated', to: appPaths.tickets.escalated },
   { label: 'Waiting', to: appPaths.tickets.waiting },

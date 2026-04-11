@@ -15,7 +15,14 @@ import { assertTicketAccess, ticketScopeForUser } from '../utils/access';
 import { asyncHandler, badRequest, forbidden, notFound, parseId } from '../utils/http';
 import { createPaginatedResponse, getPaginationOptions } from '../utils/pagination';
 import { parseSearchEntityId } from '../utils/search';
-import { serializeChatSession, serializeEscalationHistory, serializeTicket, serializeTicketEmail, serializeTicketMessage } from '../utils/serializers';
+import {
+  serializeChatSession,
+  serializeEscalationHistory,
+  serializeSupportSession,
+  serializeTicket,
+  serializeTicketEmail,
+  serializeTicketMessage,
+} from '../utils/serializers';
 import { resolveTicketAttachmentPath } from '../utils/ticketAttachments';
 import { canAssignTicketsToOthers, safeUserSelect } from '../utils/userModel';
 import { assertWidgetOriginAllowed, getWidgetProjectAccess } from '../utils/widgetAccess';
@@ -64,6 +71,7 @@ const resolveTicketSchema = z.object({
 });
 
 const listInclude = {
+  client: true,
   project: {
     include: {
       client: true,
@@ -75,6 +83,8 @@ const listInclude = {
   assignedTo: {
     select: safeUserSelect,
   },
+  hardwareAsset: true,
+  supportSession: true,
 } as const;
 
 const detailInclude = {
@@ -109,6 +119,23 @@ const detailInclude = {
           },
         },
       },
+      messages: {
+        orderBy: {
+          createdAt: 'asc',
+        },
+      },
+    },
+  },
+  supportSession: {
+    include: {
+      client: true,
+      project: {
+        include: {
+          client: true,
+        },
+      },
+      hardwareAsset: true,
+      selectedTopic: true,
       messages: {
         orderBy: {
           createdAt: 'asc',
@@ -152,6 +179,9 @@ const getTicketForWorkflow = async (ticketId: number) => {
           },
         },
       },
+      client: true,
+      hardwareAsset: true,
+      supportSession: true,
       assignedTo: {
         select: safeUserSelect,
       },
@@ -212,9 +242,7 @@ const assertTicketAssigneeEligibility = async (
       scopeMode: true,
       status: true,
       projectMemberships: {
-        where: {
-          projectId: ticket.projectId,
-        },
+        where: ticket.projectId ? { projectId: ticket.projectId } : { projectId: -1 },
         select: {
           projectId: true,
         },
@@ -287,9 +315,7 @@ router.get(
 
     if (clientId) {
       whereConditions.push({
-        project: {
-          clientId,
-        },
+        OR: [{ clientId }, { project: { clientId } }],
       });
     }
 
@@ -318,8 +344,12 @@ router.get(
         OR: [
           { title: { contains: search, mode: Prisma.QueryMode.insensitive } },
           { description: { contains: search, mode: Prisma.QueryMode.insensitive } },
+          { client: { name: { contains: search, mode: Prisma.QueryMode.insensitive } } },
           { project: { name: { contains: search, mode: Prisma.QueryMode.insensitive } } },
           { project: { client: { name: { contains: search, mode: Prisma.QueryMode.insensitive } } } },
+          { hardwareAsset: { brand: { contains: search, mode: Prisma.QueryMode.insensitive } } },
+          { hardwareAsset: { model: { contains: search, mode: Prisma.QueryMode.insensitive } } },
+          { hardwareAsset: { serialNumber: { contains: search, mode: Prisma.QueryMode.insensitive } } },
           ...(searchId ? [{ id: searchId }] : []),
           ...(matchedStatus ? [{ status: matchedStatus }] : []),
           ...(matchedPriority ? [{ priority: matchedPriority }] : []),
@@ -379,6 +409,7 @@ router.get(
       ...serializeTicket(ticket),
       messages: ticket.messages.map((message) => serializeTicketMessage(message)),
       chatSession: ticket.chatSession ? serializeChatSession(ticket.chatSession) : null,
+      supportSession: ticket.supportSession ? serializeSupportSession(ticket.supportSession) : null,
       escalationHistory: ticket.escalationHistory.map((event) => serializeEscalationHistory(event)),
       emailEvents: ticket.emailEvents.map((emailEvent) => serializeTicketEmail(emailEvent)),
     });
@@ -584,11 +615,13 @@ router.post(
 
     assertTicketWorkflowPermission(req.user, ticket);
 
-    if (!ticket.project.assignedToId) {
+    const projectSpecialistId = ticket.project?.assignedToId;
+
+    if (!projectSpecialistId) {
       throw badRequest('This project is not assigned to a project specialist.');
     }
 
-    await assertTicketAssigneeEligibility(ticket, ticket.project.assignedToId);
+    await assertTicketAssigneeEligibility(ticket, projectSpecialistId);
 
     const updatedTicket = await prisma.$transaction(async (transaction) => {
       const nextTicket = await transaction.ticket.update({
@@ -596,7 +629,7 @@ router.post(
           id: ticketId,
         },
         data: {
-          assignedToId: ticket.project.assignedToId,
+          assignedToId: projectSpecialistId,
           status: TicketStatus.ESCALATED,
           resolvedAt: null,
         },
@@ -619,7 +652,7 @@ router.post(
           fromStatus: ticket.status,
           toStatus: TicketStatus.ESCALATED,
           fromAssigneeId: ticket.assignedToId,
-          toAssigneeId: ticket.project.assignedToId,
+          toAssigneeId: projectSpecialistId,
           note: payload.note,
         },
       });
@@ -627,7 +660,7 @@ router.post(
       await notifyTicketEscalated(transaction, {
         ticketId,
         ticketTitle: ticket.title,
-        projectSpecialistId: ticket.project.assignedToId,
+        projectSpecialistId,
         actorUserId: req.user!.id,
         actorName: req.user!.name,
       });
@@ -735,7 +768,7 @@ router.post(
       await notifyTicketReopened(transaction, {
         ticketId,
         ticketTitle: ticket.title,
-        recipientUserIds: [ticket.assignedToId, ticket.project.assignedToId],
+        recipientUserIds: [ticket.assignedToId, ticket.project?.assignedToId],
         actorUserId: req.user!.id,
         actorName: req.user!.name,
       });
@@ -795,7 +828,7 @@ router.post(
       await notifyTicketResolved(transaction, {
         ticketId,
         ticketTitle: ticket.title,
-        recipientUserIds: [ticket.assignedToId, ticket.project.assignedToId],
+        recipientUserIds: [ticket.assignedToId, ticket.project?.assignedToId],
         actorUserId: req.user!.id,
         actorName: req.user!.name,
       });

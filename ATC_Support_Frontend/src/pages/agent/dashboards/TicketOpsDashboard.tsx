@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AlertTriangle, CheckCircle2, Clock3, RotateCcw, Ticket, UserPlus, Workflow } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Cpu, MessageSquare, RotateCcw, Ticket, UserPlus, Workflow } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
@@ -11,7 +11,7 @@ import { useAsyncData } from '../../../hooks/useAsyncData';
 import { apiFetch, getErrorMessage } from '../../../lib/api';
 import { formatRelativeTime, formatRoleLabel, getTicketPriorityClasses, getTicketStatusClasses, humanizeEnum } from '../../../lib/format';
 import { appPaths } from '../../../lib/navigation';
-import type { ApiTicket, ApiUser, TicketPriority, TicketStatus } from '../../../lib/types';
+import type { ApiSupportSession, ApiTicket, ApiUser, PaginatedResponse, TicketPriority, TicketStatus } from '../../../lib/types';
 
 const DAY_WINDOW = 7;
 
@@ -22,6 +22,7 @@ export default function TicketOpsDashboard() {
   const { openModal, closeModal } = useModal();
   const { showToast } = useToast();
   const ticketsQuery = useAsyncData(() => apiFetch<ApiTicket[]>('/tickets'), []);
+  const sessionsQuery = useAsyncData(() => apiFetch<PaginatedResponse<ApiSupportSession>>('/support-sessions?pageSize=100'), []);
   const canAssignToSelf = permissions?.canAssignTicketsToSelf ?? false;
   const canAssignToOthers = permissions?.canAssignTicketsToOthers ?? false;
   const dashboardMode: DashboardMode = backendRole === 'PM' || supportLevel === 'SE1' ? 'dispatch' : 'assigned';
@@ -31,12 +32,20 @@ export default function TicketOpsDashboard() {
     [canAssignToOthers],
   );
 
-  if (ticketsQuery.isLoading) {
+  if (ticketsQuery.isLoading || sessionsQuery.isLoading) {
     return <DashboardSkeleton />;
   }
 
-  if (ticketsQuery.error || !ticketsQuery.data) {
-    return <DashboardError message={ticketsQuery.error || 'Unable to load dashboard.'} onRetry={ticketsQuery.reload} />;
+  if (ticketsQuery.error || sessionsQuery.error || !ticketsQuery.data || !sessionsQuery.data) {
+    return (
+      <DashboardError
+        message={ticketsQuery.error || sessionsQuery.error || 'Unable to load dashboard.'}
+        onRetry={() => {
+          void ticketsQuery.reload();
+          void sessionsQuery.reload();
+        }}
+      />
+    );
   }
 
   const now = new Date();
@@ -47,11 +56,18 @@ export default function TicketOpsDashboard() {
   sevenDaysAgo.setHours(0, 0, 0, 0);
 
   const tickets = ticketsQuery.data;
+  const supportSessions = sessionsQuery.data.items;
   const scopedTickets = dashboardMode === 'dispatch' ? tickets : tickets.filter((ticket) => ticket.assignedTo?.id === user?.id);
+  const scopedSessions =
+    dashboardMode === 'dispatch'
+      ? supportSessions
+      : supportSessions.filter((session) => session.ticket?.assignedToId === user?.id || session.ticket?.assignedTo?.id === user?.id);
   const openTickets = scopedTickets.filter((ticket) => ticket.status !== 'RESOLVED');
   const unassignedTickets = tickets.filter((ticket) => ticket.status !== 'RESOLVED' && !ticket.assignedToId);
-  const inProgressTickets = scopedTickets.filter((ticket) => ['ASSIGNED', 'IN_PROGRESS', 'REOPENED'].includes(ticket.status)).length;
-  const waitingTickets = scopedTickets.filter((ticket) => ['WAITING_ON_CUSTOMER', 'ESCALATED'].includes(ticket.status)).length;
+  const escalatedTickets = scopedTickets.filter((ticket) => ticket.status === 'ESCALATED' || ticket.supportSession?.status === 'ESCALATED').length;
+  const activeSupportSessions = scopedSessions.filter((session) => session.status === 'ACTIVE').length;
+  const hardwareSessions = scopedSessions.filter((session) => session.supportType === 'HARDWARE').length;
+  const softwareSessions = scopedSessions.filter((session) => session.supportType === 'SOFTWARE').length;
   const resolvedThisWeek = scopedTickets.filter((ticket) => ticket.status === 'RESOLVED' && ticket.resolvedAt && new Date(ticket.resolvedAt) >= sevenDaysAgo).length;
   const newAssignedToMe = scopedTickets.filter((ticket) => ticket.status === 'ASSIGNED' || ticket.status === 'REOPENED').length;
 
@@ -86,12 +102,16 @@ export default function TicketOpsDashboard() {
       const createdAt = new Date(ticket.createdAt);
       return createdAt >= date && createdAt < nextDate;
     });
+    const daySessions = scopedSessions.filter((session) => {
+      const createdAt = new Date(session.createdAt);
+      return createdAt >= date && createdAt < nextDate;
+    });
 
     return {
       label: date.toLocaleDateString(undefined, { weekday: 'short' }),
-      newTickets: dayTickets.filter((ticket) => ticket.status === 'NEW').length,
-      activeTickets: dayTickets.filter((ticket) => ['ASSIGNED', 'IN_PROGRESS', 'REOPENED'].includes(ticket.status)).length,
-      waitingTickets: dayTickets.filter((ticket) => ['WAITING_ON_CUSTOMER', 'ESCALATED'].includes(ticket.status)).length,
+      softwareSessions: daySessions.filter((session) => session.supportType === 'SOFTWARE').length,
+      hardwareSessions: daySessions.filter((session) => session.supportType === 'HARDWARE').length,
+      openTickets: dayTickets.filter((ticket) => ticket.status !== 'RESOLVED').length,
       resolvedTickets: dayTickets.filter((ticket) => ticket.status === 'RESOLVED').length,
     };
   });
@@ -106,10 +126,10 @@ export default function TicketOpsDashboard() {
           listPath: appPaths.tickets.queue,
           listLabel: 'Open queue',
           kpis: [
-            { label: 'Open Tickets', value: String(openTickets.length), note: 'Accessible unresolved workload', icon: Ticket, accent: 'orange' as const },
+            { label: 'Active Sessions', value: String(activeSupportSessions), note: `${hardwareSessions} hardware / ${softwareSessions} software`, icon: MessageSquare, accent: 'blue' as const },
+            { label: 'Open Tickets', value: String(openTickets.length), note: 'Human-action workload', icon: Ticket, accent: 'orange' as const },
             { label: 'Unassigned', value: String(unassignedTickets.length), note: 'Needs dispatch now', icon: UserPlus, accent: 'amber' as const },
-            { label: 'In Progress', value: String(inProgressTickets), note: 'Already in active workflow', icon: Workflow, accent: 'blue' as const },
-            { label: 'Waiting', value: String(waitingTickets), note: 'Customer or escalation hold', icon: Clock3, accent: 'slate' as const },
+            { label: 'Escalated', value: String(escalatedTickets), note: 'Needs human review', icon: AlertTriangle, accent: 'slate' as const },
             { label: 'Resolved', value: String(resolvedThisWeek), note: 'Resolved in last 7 days', icon: CheckCircle2, accent: 'green' as const },
           ],
         }
@@ -124,7 +144,7 @@ export default function TicketOpsDashboard() {
             { label: 'Assigned', value: String(openTickets.length), note: 'Currently owned by you', icon: Ticket, accent: 'orange' as const },
             { label: 'New to You', value: String(newAssignedToMe), note: 'Assigned or reopened', icon: AlertTriangle, accent: 'amber' as const },
             { label: 'In Progress', value: String(scopedTickets.filter((ticket) => ticket.status === 'IN_PROGRESS').length), note: 'Active engineering work', icon: Workflow, accent: 'blue' as const },
-            { label: 'Waiting', value: String(waitingTickets), note: 'Paused for customer input', icon: Clock3, accent: 'slate' as const },
+            { label: 'Support Context', value: String(scopedSessions.length), note: `${hardwareSessions} hardware sessions`, icon: Cpu, accent: 'slate' as const },
             { label: 'Resolved', value: String(resolvedThisWeek), note: 'Resolved in last 7 days', icon: CheckCircle2, accent: 'green' as const },
           ],
         };
@@ -276,8 +296,8 @@ export default function TicketOpsDashboard() {
                           ) : null}
                         </div>
                       </td>
-                      <td className="px-5 py-4 text-sm text-slate-600">{ticket.project?.client?.name || '-'}</td>
-                      <td className="px-5 py-4 text-sm text-slate-600">{ticket.project?.name || '-'}</td>
+                      <td className="px-5 py-4 text-sm text-slate-600">{ticket.client?.name || ticket.project?.client?.name || '-'}</td>
+                      <td className="px-5 py-4 text-sm text-slate-600">{ticket.project?.name || ticket.hardwareAsset?.model || '-'}</td>
                       <td className="px-5 py-4">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${getTicketStatusClasses(ticket.status)}`}>
@@ -299,12 +319,12 @@ export default function TicketOpsDashboard() {
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <p className="text-xs font-black uppercase tracking-[0.26em] text-slate-400">Weekly Status Mix</p>
-          <h2 className="mt-2 text-xl font-black text-slate-900">Stacked ticket flow (7 days)</h2>
+          <p className="text-xs font-black uppercase tracking-[0.26em] text-slate-400">Weekly Support Mix</p>
+          <h2 className="mt-2 text-xl font-black text-slate-900">Sessions and ticket flow (7 days)</h2>
           <p className="mt-1 text-sm text-slate-500">
             {dashboardMode === 'dispatch'
-              ? 'Open queue movement across the last seven days.'
-              : 'Your assigned-ticket movement across the last seven days.'}
+              ? 'Widget support sessions and human ticket movement across the last seven days.'
+              : 'Your assigned-ticket movement plus linked support-session context.'}
           </p>
 
           <div className="mt-6 h-[340px]">
@@ -314,9 +334,9 @@ export default function TicketOpsDashboard() {
                 <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 11, fontWeight: 700 }} dy={12} />
                 <YAxis axisLine={false} tickLine={false} allowDecimals={false} tick={{ fill: '#94a3b8', fontSize: 11, fontWeight: 700 }} dx={-12} />
                 <Tooltip content={<StackedTooltip />} />
-                <Bar dataKey="newTickets" stackId="tickets" fill="#f97316" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="activeTickets" stackId="tickets" fill="#2563eb" />
-                <Bar dataKey="waitingTickets" stackId="tickets" fill="#a855f7" />
+                <Bar dataKey="softwareSessions" stackId="tickets" fill="#2563eb" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="hardwareSessions" stackId="tickets" fill="#f97316" />
+                <Bar dataKey="openTickets" stackId="tickets" fill="#a855f7" />
                 <Bar dataKey="resolvedTickets" stackId="tickets" fill="#16a34a" />
               </BarChart>
             </ResponsiveContainer>
@@ -484,9 +504,9 @@ function StackedTooltip({
   }
 
   const labels: Record<string, string> = {
-    newTickets: 'New',
-    activeTickets: 'Active',
-    waitingTickets: 'Waiting / Escalated',
+    softwareSessions: 'Software sessions',
+    hardwareSessions: 'Hardware sessions',
+    openTickets: 'Open tickets',
     resolvedTickets: 'Resolved',
   };
 

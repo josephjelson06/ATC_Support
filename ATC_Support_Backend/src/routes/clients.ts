@@ -9,7 +9,7 @@ import { assertClientAccess, clientScopeForUser } from '../utils/access';
 import { asyncHandler, conflict, parseId, notFound } from '../utils/http';
 import { createPaginatedResponse, getPaginationOptions } from '../utils/pagination';
 import { parseSearchEntityId } from '../utils/search';
-import { serializeAmc, serializeClient, serializeProject } from '../utils/serializers';
+import { serializeAmc, serializeClient, serializeHardwareAsset, serializeProject } from '../utils/serializers';
 import { safeUserSelect } from '../utils/userModel';
 
 const router = Router();
@@ -70,6 +70,7 @@ router.get(
           consignees: true,
           projects: true,
           amcs: true,
+          hardwareAssets: true,
         },
       },
     } as const;
@@ -142,6 +143,22 @@ router.get(
             id: 'asc',
           },
         },
+        hardwareAssets: {
+          include: {
+            project: {
+              include: {
+                client: true,
+                assignedTo: { select: safeUserSelect },
+              },
+            },
+            amc: {
+              include: {
+                project: true,
+              },
+            },
+          },
+          orderBy: [{ category: 'asc' }, { id: 'asc' }],
+        },
       },
     });
 
@@ -167,6 +184,7 @@ router.get(
       consignees: client.consignees,
       amcs: client.amcs.map((amc) => serializeAmc(amc)),
       projects: client.projects.map((project) => serializeProject(project)),
+      hardwareAssets: client.hardwareAssets.map((hardwareAsset) => serializeHardwareAsset(hardwareAsset)),
     });
   }),
 );
@@ -244,7 +262,7 @@ router.delete(
   requireRole(Role.PM),
   asyncHandler(async (req, res) => {
     const clientId = parseId(req.params.id, 'client id');
-    const [contactCount, consigneeCount, amcCount, projectCount] = await Promise.all([
+    const [contactCount, consigneeCount, amcCount, projectCount, hardwareAssetCount] = await Promise.all([
       prisma.clientContact.count({
         where: {
           clientId,
@@ -265,6 +283,11 @@ router.delete(
           clientId,
         },
       }),
+      prisma.hardwareAsset.count({
+        where: {
+          clientId,
+        },
+      }),
     ]);
 
     const blockers = {
@@ -272,6 +295,7 @@ router.delete(
       consignees: consigneeCount,
       amcs: amcCount,
       projects: projectCount,
+      hardwareAssets: hardwareAssetCount,
     };
 
     if (Object.values(blockers).some((count) => count > 0)) {

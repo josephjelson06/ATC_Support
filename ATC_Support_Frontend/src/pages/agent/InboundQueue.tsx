@@ -189,7 +189,7 @@ export default function InboundQueue() {
         case 'ticket':
           return compareSortValues(left.title, right.title, sortDirection);
         case 'client':
-          return compareSortValues(left.project?.client?.name || '', right.project?.client?.name || '', sortDirection);
+          return compareSortValues(left.client?.name || left.project?.client?.name || '', right.client?.name || right.project?.client?.name || '', sortDirection);
         case 'project':
           return compareSortValues(left.project?.name || '', right.project?.name || '', sortDirection);
         case 'priority':
@@ -594,8 +594,10 @@ export default function InboundQueue() {
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-sm text-slate-600">{ticket.project?.client?.name || '-'}</td>
-                    <td className="px-6 py-4 text-sm text-slate-600">{ticket.project?.name || '-'}</td>
+                    <td className="px-6 py-4 text-sm text-slate-600">{ticket.client?.name || ticket.project?.client?.name || '-'}</td>
+                    <td className="px-6 py-4 text-sm text-slate-600">
+                      {ticket.project?.name || ticket.hardwareAsset?.model || (ticket.supportType === 'HARDWARE' ? 'Client hardware' : 'General support')}
+                    </td>
                     <td className="px-6 py-4">
                       <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${getTicketPriorityClasses(ticket.priority)}`}>
                         {humanizeEnum(ticket.priority)}
@@ -657,7 +659,8 @@ function TicketAssignmentModalContent({
       <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
         <p className="text-sm font-bold text-slate-900">{ticket.title}</p>
         <p className="mt-1 text-xs text-slate-500">
-          {ticket.displayId} · {ticket.project?.client?.name || 'No client'} · {ticket.project?.name || 'No project'}
+          {ticket.displayId} · {ticket.client?.name || ticket.project?.client?.name || 'No client'} ·{' '}
+          {ticket.project?.name || ticket.hardwareAsset?.model || 'General support'}
         </p>
       </div>
 

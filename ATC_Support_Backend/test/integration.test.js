@@ -13,6 +13,7 @@ const supertest = require('supertest');
 process.env.NODE_ENV = process.env.NODE_ENV || 'test';
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'integration_test_jwt_secret_please_change';
 process.env.INBOUND_EMAIL_SECRET = process.env.INBOUND_EMAIL_SECRET || 'atc_dev_inbound_secret';
+process.env.GROQ_API_KEY = '';
 
 const run = (command) => {
   execSync(command, {
@@ -35,6 +36,7 @@ const adminDatabaseUrl = new URL(baseDatabaseUrl);
 adminDatabaseUrl.searchParams.delete('schema');
 baseDatabaseUrl.searchParams.set('schema', schemaName);
 const schemaDatabaseUrl = baseDatabaseUrl.toString();
+const allowedWidgetOrigin = 'http://localhost:3000';
 
 let app;
 let request;
@@ -118,6 +120,7 @@ test('auth refresh and logout', async () => {
 test('widget escalation creates a ticket', async () => {
   const response = await request
     .post('/api/widget/widget_warehouse_portal/escalate')
+    .set('Origin', allowedWidgetOrigin)
     .send({
       name: 'Integration Tester',
       email: 'integration@test.com',
@@ -129,8 +132,80 @@ test('widget escalation creates a ticket', async () => {
 
   assert.ok(response.body.id);
   assert.equal(response.body.status, 'NEW');
-  assert.equal(response.body.source, 'WIDGET');
+  assert.equal(response.body.source, 'PROJECT_WIDGET');
   assert.equal(response.body.project?.widgetKey, 'widget_warehouse_portal');
+});
+
+test('v2 support sessions log hardware context and escalate to a linked ticket', async () => {
+  const pmLogin = await request.post('/api/auth/login').send({ email: 'pm@atc.com', password: 'password' }).expect(200);
+  const pmToken = pmLogin.body.token;
+
+  const context = await request
+    .get('/api/support/context')
+    .query({ clientLookup: 'Acme Logistics', supportType: 'HARDWARE' })
+    .expect(200);
+
+  assert.equal(context.body.mode, 'GENERAL_WIDGET');
+  assert.equal(context.body.client.name, 'Acme Logistics');
+  assert.ok(context.body.hardwareAssets.length > 0);
+  assert.ok(context.body.topics.some((topic) => topic.supportType === 'HARDWARE'));
+
+  const hardwareAsset = context.body.hardwareAssets[0];
+  const supportTopic = context.body.topics.find((topic) => topic.supportType === 'HARDWARE');
+
+  const supportSession = await request
+    .post('/api/support/sessions')
+    .send({
+      clientId: context.body.client.id,
+      hardwareAssetId: hardwareAsset.id,
+      selectedTopicId: supportTopic?.id,
+      supportType: 'HARDWARE',
+      requesterName: 'Hardware Integration Tester',
+      requesterEmail: 'hardware-integration@test.com',
+      requesterPhone: '9000012345',
+      issueSummary: 'Printer has power but cannot print labels.',
+    })
+    .expect(201);
+
+  assert.equal(supportSession.body.status, 'ACTIVE');
+  assert.equal(supportSession.body.supportType, 'HARDWARE');
+  assert.equal(supportSession.body.hardwareAsset.id, hardwareAsset.id);
+  assert.equal(supportSession.body.messages.length, 1);
+
+  const juliaReply = await request
+    .post(`/api/support/sessions/${supportSession.body.id}/message`)
+    .send({ message: 'Power is on and paper is loaded, but test print fails.' })
+    .expect(200);
+
+  assert.ok(juliaReply.body.reply);
+  assert.equal(juliaReply.body.sessionId, supportSession.body.id);
+
+  const escalatedTicket = await request
+    .post(`/api/support/sessions/${supportSession.body.id}/escalate`)
+    .send({
+      title: 'Hardware printer escalation',
+      priority: 'HIGH',
+      supportSummary: 'Universal printer diagnostics did not resolve the issue.',
+      confidenceScore: 0.41,
+    })
+    .expect(201);
+
+  assert.equal(escalatedTicket.body.source, 'GENERAL_WIDGET');
+  assert.equal(escalatedTicket.body.supportType, 'HARDWARE');
+  assert.equal(escalatedTicket.body.hardwareAsset.id, hardwareAsset.id);
+  assert.equal(escalatedTicket.body.status, 'NEW');
+
+  await request
+    .post(`/api/support/sessions/${supportSession.body.id}/escalate`)
+    .send({ title: 'Duplicate escalation' })
+    .expect(400);
+
+  const escalatedSessions = await request
+    .get('/api/support-sessions?status=ESCALATED&supportType=HARDWARE&pageSize=20')
+    .set('Authorization', `Bearer ${pmToken}`)
+    .expect(200);
+
+  assert.ok(escalatedSessions.body.items.some((session) => session.id === supportSession.body.id && session.ticket?.id === escalatedTicket.body.id));
 });
 
 test('ticket notifications can be listed and marked as read', async () => {
@@ -146,6 +221,7 @@ test('ticket notifications can be listed and marked as read', async () => {
 
   const createdTicket = await request
     .post('/api/widget/widget_warehouse_portal/escalate')
+    .set('Origin', allowedWidgetOrigin)
     .send({
       name: 'Notification Tester',
       email: 'integration-notify@test.com',
@@ -238,6 +314,7 @@ test('ticket email loop logs outbound messages and accepts inbound replies', asy
 
   const createdTicket = await request
     .post('/api/widget/widget_warehouse_portal/escalate')
+    .set('Origin', allowedWidgetOrigin)
     .send({
       name: 'Email Tester',
       email: 'integration-email@test.com',
@@ -337,6 +414,7 @@ test('ticket lifecycle: assign, start, escalate, resolve', async () => {
 
   const createdTicket = await request
     .post('/api/widget/widget_warehouse_portal/escalate')
+    .set('Origin', allowedWidgetOrigin)
     .send({
       name: 'Integration Tester',
       email: 'integration2@test.com',
@@ -386,6 +464,7 @@ test('ticket messages accept attachments and tickets can wait on customer then r
 
   const createdTicket = await request
     .post('/api/widget/widget_warehouse_portal/escalate')
+    .set('Origin', allowedWidgetOrigin)
     .send({
       name: 'Attachment Tester',
       email: 'integration3@test.com',

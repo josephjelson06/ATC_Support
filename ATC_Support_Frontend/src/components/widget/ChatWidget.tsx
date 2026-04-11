@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { MessageSquare, X, Send, Search, ThumbsUp, ThumbsDown, CheckCircle2, FileText, Star, Copy } from 'lucide-react';
+import { MessageSquare, X, Send, Search, CheckCircle2, FileText, Copy, LogOut } from 'lucide-react';
 import { clsx } from 'clsx';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
@@ -10,7 +10,16 @@ import { apiFetch, getErrorMessage } from '../../lib/api';
 import { DEFAULT_WIDGET_KEY, storageKeys } from '../../lib/config';
 import { formatDateTime } from '../../lib/format';
 import { buildWidgetRequestHeaders } from '../../lib/widgetRuntime';
-import type { ApiChatMessage, ApiChatSession, ApiTicket, WidgetFaq, WidgetFaqResponse, WidgetMessageResponse, WidgetStartResponse } from '../../lib/types';
+import type {
+  ApiSupportSession,
+  ApiSupportSessionMessage,
+  ApiSupportTopic,
+  ApiTicket,
+  SupportContextResponse,
+  SupportSessionMessageResponse,
+  SupportType,
+  WidgetFaq,
+} from '../../lib/types';
 
 type WidgetState = 'collapsed' | 'identity' | 'faq' | 'chat' | 'escalate' | 'success';
 type Priority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
@@ -69,6 +78,7 @@ const persistWidgetSession = (widgetKey: string, value: StoredWidgetSession | nu
 
 export default function ChatWidget({ widgetKey, mode = 'floating', startOpen = false, hostOrigin }: ChatWidgetProps) {
   const activeWidgetKey = widgetKey || DEFAULT_WIDGET_KEY;
+  const isGeneralWidget = activeWidgetKey === 'general';
   const isEmbedded = mode === 'embedded';
   const { showToast } = useToast();
   const { openModal } = useModal();
@@ -81,15 +91,16 @@ export default function ChatWidget({ widgetKey, mode = 'floating', startOpen = f
   const [hasNotification, setHasNotification] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const [rating, setRating] = useState(0);
-  const [hoverRating, setHoverRating] = useState(0);
-  const [feedback, setFeedback] = useState<'up' | 'down' | null>(null);
   const [projectName, setProjectName] = useState('Loading...');
   const [faqs, setFaqs] = useState<WidgetFaq[]>([]);
-  const [identity, setIdentity] = useState({ name: '', email: '' });
+  const [topics, setTopics] = useState<ApiSupportTopic[]>([]);
+  const [identity, setIdentity] = useState({ name: '', email: '', phone: '', clientLookup: '' });
+  const [supportType, setSupportType] = useState<SupportType>('SOFTWARE');
+  const [selectedTopicId, setSelectedTopicId] = useState<number | null>(null);
+  const [supportContext, setSupportContext] = useState<SupportContextResponse | null>(null);
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [chatInput, setChatInput] = useState('');
-  const [messages, setMessages] = useState<ApiChatMessage[]>([]);
+  const [messages, setMessages] = useState<ApiSupportSessionMessage[]>([]);
   const [issueTitle, setIssueTitle] = useState('');
   const [issueDescription, setIssueDescription] = useState('');
   const [priority, setPriority] = useState<Priority>('MEDIUM');
@@ -104,13 +115,20 @@ export default function ChatWidget({ widgetKey, mode = 'floating', startOpen = f
     () => faqs.filter((faq) => `${faq.question} ${faq.answer}`.toLowerCase().includes(searchQuery.toLowerCase())),
     [faqs, searchQuery],
   );
+  const filteredTopics = useMemo(
+    () => topics.filter((topic) => `${topic.title} ${topic.summary || ''} ${topic.content}`.toLowerCase().includes(searchQuery.toLowerCase())),
+    [searchQuery, topics],
+  );
 
   useEffect(() => {
     let isActive = true;
 
     const loadWidgetContext = async () => {
       try {
-        const response = await apiFetch<WidgetFaqResponse>(`/widget/${activeWidgetKey}/faqs`, {
+        const contextPath = isGeneralWidget
+          ? '/support/context'
+          : `/support/context?widgetKey=${encodeURIComponent(activeWidgetKey)}&supportType=${supportType}`;
+        const response = await apiFetch<SupportContextResponse>(contextPath, {
           auth: false,
           headers: widgetRequestHeaders,
         });
@@ -119,8 +137,10 @@ export default function ChatWidget({ widgetKey, mode = 'floating', startOpen = f
           return;
         }
 
-        setProjectName(response.project.name);
+        setSupportContext(response);
+        setProjectName(response.project?.name || response.client?.name || 'ATC General Support');
         setFaqs(response.faqs);
+        setTopics(response.topics);
         setWidgetError(null);
 
         const storedSession = readStoredWidgetSession(activeWidgetKey);
@@ -132,7 +152,7 @@ export default function ChatWidget({ widgetKey, mode = 'floating', startOpen = f
         setIsRestoringSession(true);
 
         try {
-          const session = await apiFetch<ApiChatSession>(`/widget/${activeWidgetKey}/chat/${storedSession.sessionId}`, {
+          const session = await apiFetch<ApiSupportSession>(`/support/sessions/${storedSession.sessionId}`, {
             auth: false,
             headers: widgetRequestHeaders,
           });
@@ -147,8 +167,10 @@ export default function ChatWidget({ widgetKey, mode = 'floating', startOpen = f
           }
 
           setIdentity({
-            name: session.clientName || storedSession.identity.name,
-            email: session.clientEmail || storedSession.identity.email,
+            name: session.requesterName || storedSession.identity.name,
+            email: session.requesterEmail || storedSession.identity.email,
+            phone: session.requesterPhone || '',
+            clientLookup: session.client?.displayId || session.client?.email || '',
           });
           setSessionId(session.id);
           setMessages(session.messages || []);
@@ -183,7 +205,7 @@ export default function ChatWidget({ widgetKey, mode = 'floating', startOpen = f
     return () => {
       isActive = false;
     };
-  }, [activeWidgetKey, showToast, widgetRequestHeaders]);
+  }, [activeWidgetKey, isGeneralWidget, showToast, supportType, widgetRequestHeaders]);
 
   const requestEmbeddedClose = () => {
     if (typeof window !== 'undefined' && window.parent && window.parent !== window) {
@@ -196,10 +218,8 @@ export default function ChatWidget({ widgetKey, mode = 'floating', startOpen = f
     setState(isEmbedded || startOpen ? 'identity' : 'collapsed');
     setSearchQuery('');
     setIsTyping(false);
-    setFeedback(null);
-    setRating(0);
-    setHoverRating(0);
-    setIdentity({ name: '', email: '' });
+    setIdentity({ name: '', email: '', phone: '', clientLookup: '' });
+    setSelectedTopicId(null);
     setSessionId(null);
     setChatInput('');
     setMessages([]);
@@ -248,16 +268,45 @@ export default function ChatWidget({ widgetKey, mode = 'floating', startOpen = f
     setIsStartingSession(true);
 
     try {
-      const response = await apiFetch<WidgetStartResponse>(`/widget/${activeWidgetKey}/chat/start`, {
+      const context = isGeneralWidget
+        ? await apiFetch<SupportContextResponse>(
+            `/support/context?clientLookup=${encodeURIComponent(identity.clientLookup || identity.email)}&supportType=${supportType}`,
+            {
+              auth: false,
+              headers: widgetRequestHeaders,
+            },
+          )
+        : supportContext;
+      const selectedHardwareAsset = supportType === 'HARDWARE' ? context?.hardwareAssets[0] : null;
+      const selectedProject = context?.project || context?.projects[0] || null;
+      const response = await apiFetch<ApiSupportSession>('/support/sessions', {
         method: 'POST',
         auth: false,
         headers: widgetRequestHeaders,
-        body: identity,
+        body: {
+          widgetKey: isGeneralWidget ? undefined : activeWidgetKey,
+          clientId: context?.client?.id,
+          projectId: selectedProject?.id,
+          hardwareAssetId: selectedHardwareAsset?.id,
+          selectedTopicId: selectedTopicId || undefined,
+          supportType,
+          requesterName: identity.name,
+          requesterEmail: identity.email,
+          requesterPhone: identity.phone || undefined,
+          issueSummary: selectedTopicId ? topics.find((topic) => topic.id === selectedTopicId)?.title : undefined,
+        },
       });
 
-      setSessionId(response.sessionId);
+      if (context) {
+        setSupportContext(context);
+        setProjectName(context.project?.name || context.client?.name || 'ATC General Support');
+        setFaqs(context.faqs);
+        setTopics(context.topics);
+      }
+
+      setSessionId(response.id);
       persistWidgetSession(activeWidgetKey, {
-        sessionId: response.sessionId,
+        sessionId: response.id,
         identity,
         state: 'faq',
       });
@@ -275,7 +324,7 @@ export default function ChatWidget({ widgetKey, mode = 'floating', startOpen = f
       return;
     }
 
-    const nextUserMessage: ApiChatMessage = {
+    const nextUserMessage: ApiSupportSessionMessage = {
       id: Date.now(),
       role: 'USER',
       content: chatInput.trim(),
@@ -288,12 +337,11 @@ export default function ChatWidget({ widgetKey, mode = 'floating', startOpen = f
     setIsSendingMessage(true);
 
     try {
-      const response = await apiFetch<WidgetMessageResponse>(`/widget/${activeWidgetKey}/chat/message`, {
+      const response = await apiFetch<SupportSessionMessageResponse>(`/support/sessions/${sessionId}/message`, {
         method: 'POST',
         auth: false,
         headers: widgetRequestHeaders,
         body: {
-          sessionId,
           message: nextUserMessage.content,
         },
       });
@@ -323,17 +371,16 @@ export default function ChatWidget({ widgetKey, mode = 'floating', startOpen = f
     setIsSubmittingTicket(true);
 
     try {
-      const response = await apiFetch<ApiTicket>(`/widget/${activeWidgetKey}/escalate`, {
+      const response = await apiFetch<ApiTicket>(`/support/sessions/${sessionId}/escalate`, {
         method: 'POST',
         auth: false,
         headers: widgetRequestHeaders,
         body: {
-          sessionId: sessionId ?? undefined,
-          name: identity.name,
-          email: identity.email,
           title: issueTitle.trim(),
           description: issueDescription.trim() || undefined,
           priority,
+          supportSummary: messages.map((message) => `${message.role}: ${message.content}`).join('\n').slice(0, 2000) || undefined,
+          confidenceScore: 0.65,
         },
       });
 
@@ -346,6 +393,29 @@ export default function ChatWidget({ widgetKey, mode = 'floating', startOpen = f
       showToast('error', getErrorMessage(error));
     } finally {
       setIsSubmittingTicket(false);
+    }
+  };
+
+  const handleEndSession = async () => {
+    if (!sessionId) {
+      resetWidget();
+      return;
+    }
+
+    try {
+      await apiFetch(`/support/sessions/${sessionId}/end`, {
+        method: 'POST',
+        auth: false,
+        headers: widgetRequestHeaders,
+        body: {
+          supportSummary: messages.map((message) => `${message.role}: ${message.content}`).join('\n').slice(0, 2000) || undefined,
+        },
+      });
+      showToast('success', 'Support session ended.');
+    } catch (error) {
+      showToast('error', getErrorMessage(error));
+    } finally {
+      resetWidget();
     }
   };
 
@@ -414,6 +484,41 @@ export default function ChatWidget({ widgetKey, mode = 'floating', startOpen = f
                   placeholder="alex@company.com"
                 />
               </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Phone (optional)</label>
+                <input
+                  type="tel"
+                  value={identity.phone}
+                  onChange={(event) => setIdentity((current) => ({ ...current, phone: event.target.value }))}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none transition-all focus:ring-2 focus:ring-orange-500"
+                  placeholder="Client contact number"
+                />
+              </div>
+              {isGeneralWidget ? (
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Client ID, email, or phone</label>
+                  <input
+                    type="text"
+                    required
+                    value={identity.clientLookup}
+                    onChange={(event) => setIdentity((current) => ({ ...current, clientLookup: event.target.value }))}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none transition-all focus:ring-2 focus:ring-orange-500"
+                    placeholder="CLT-033 or support@client.com"
+                  />
+                </div>
+              ) : null}
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Support Type</label>
+                <select
+                  value={supportType}
+                  onChange={(event) => setSupportType(event.target.value as SupportType)}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none transition-all focus:ring-2 focus:ring-orange-500"
+                >
+                  <option value="SOFTWARE">Software</option>
+                  <option value="HARDWARE">Hardware</option>
+                  <option value="GENERAL">General</option>
+                </select>
+              </div>
               <button
                 type="submit"
                 disabled={isStartingSession || Boolean(widgetError)}
@@ -448,7 +553,28 @@ export default function ChatWidget({ widgetKey, mode = 'floating', startOpen = f
               </div>
             </div>
             <div className="flex-1 space-y-2 overflow-y-auto p-4">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">Project FAQs</p>
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">Support Topics</p>
+              {filteredTopics.map((topic) => (
+                <button
+                  key={topic.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedTopicId(topic.id);
+                    setIssueTitle(topic.title);
+                    setIssueDescription(topic.content);
+                  }}
+                  className="flex w-full gap-3 rounded-xl border border-slate-100 p-3 text-left transition-all hover:border-orange-500"
+                >
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-orange-50 text-orange-600">
+                    <FileText className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-800">{topic.title}</h3>
+                    <p className="mt-1 text-xs leading-relaxed text-slate-500">{topic.summary || topic.content}</p>
+                  </div>
+                </button>
+              ))}
+              {filteredFaqs.length > 0 ? <p className="mb-3 mt-5 text-xs font-semibold uppercase tracking-wider text-slate-400">Project FAQs</p> : null}
               {filteredFaqs.map((faq) => (
                 <div key={faq.id} className="flex gap-3 rounded-xl border border-slate-100 p-3 transition-all hover:border-orange-500">
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-orange-50 text-orange-600">
@@ -460,9 +586,9 @@ export default function ChatWidget({ widgetKey, mode = 'floating', startOpen = f
                   </div>
                 </div>
               ))}
-              {filteredFaqs.length === 0 && (
+              {filteredFaqs.length === 0 && filteredTopics.length === 0 && (
                 <div className="py-8 text-center">
-                  <p className="text-sm text-slate-500">No FAQs matched your search.</p>
+                  <p className="text-sm text-slate-500">No support topics matched your search.</p>
                 </div>
               )}
             </div>
@@ -480,9 +606,13 @@ export default function ChatWidget({ widgetKey, mode = 'floating', startOpen = f
 
         {state === 'chat' && (
           <div className="flex flex-1 flex-col overflow-hidden bg-slate-50/50">
-            <div className="flex justify-center border-b border-slate-100 bg-white p-2">
+            <div className="flex justify-center gap-2 border-b border-slate-100 bg-white p-2">
               <button onClick={() => setState('escalate')} className="rounded-lg border border-orange-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-orange-600 transition-colors hover:bg-slate-100">
                 Escalate to Support
+              </button>
+              <button onClick={() => void handleEndSession()} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50">
+                <LogOut className="h-3.5 w-3.5" />
+                End Session
               </button>
             </div>
             <div className="flex-1 space-y-4 overflow-y-auto p-4">
@@ -503,31 +633,11 @@ export default function ChatWidget({ widgetKey, mode = 'floating', startOpen = f
                     )}
                   >
                     <p>{message.content}</p>
-                    {message.role === 'JULIA' && (
-                      <div className="mt-2 flex items-center justify-between border-t border-slate-100 pt-2">
+                    {message.role === 'JULIA' ? (
+                      <div className="mt-2 border-t border-slate-100 pt-2">
                         <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] text-slate-600">Julia AI</span>
-                        <div className="flex gap-1">
-                          <button
-                            onClick={() => {
-                              setFeedback('up');
-                              showToast('success', 'Thanks for your feedback!');
-                            }}
-                            className={clsx('p-1 transition-colors', feedback === 'up' ? 'text-green-500' : 'text-slate-400 hover:text-green-500')}
-                          >
-                            <ThumbsUp className="h-3 w-3" />
-                          </button>
-                          <button
-                            onClick={() => {
-                              setFeedback('down');
-                              showToast('info', 'Feedback recorded.');
-                            }}
-                            className={clsx('p-1 transition-colors', feedback === 'down' ? 'text-red-500' : 'text-slate-400 hover:text-red-500')}
-                          >
-                            <ThumbsDown className="h-3 w-3" />
-                          </button>
-                        </div>
                       </div>
-                    )}
+                    ) : null}
                   </div>
                   <span className="mt-1 text-[10px] text-slate-400">{formatDateTime(message.createdAt)}</span>
                 </div>
@@ -644,17 +754,6 @@ export default function ChatWidget({ widgetKey, mode = 'floating', startOpen = f
                   <Copy className="h-3 w-3" />
                 </button>
               )}
-            </div>
-
-            <div className="mb-6 w-full rounded-xl border border-slate-100 bg-slate-50 p-4">
-              <p className="mb-3 text-xs font-semibold text-slate-700">Rate this session</p>
-              <div className="flex justify-center gap-1">
-                {[1, 2, 3, 4, 5].map((value) => (
-                  <button key={value} onMouseEnter={() => setHoverRating(value)} onMouseLeave={() => setHoverRating(0)} onClick={() => setRating(value)} className="p-1 transition-transform active:scale-90">
-                    <Star className={clsx('h-6 w-6 transition-colors', (hoverRating || rating) >= value ? 'fill-amber-400 text-amber-400' : 'text-slate-300')} />
-                  </button>
-                ))}
-              </div>
             </div>
 
             <button

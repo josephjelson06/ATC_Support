@@ -7,14 +7,22 @@ export type ClientStatus = 'ACTIVE' | 'INACTIVE';
 export type ProjectStatus = 'ACTIVE' | 'INACTIVE';
 export type AmcStatus = 'ACTIVE' | 'EXPIRED' | 'CANCELLED';
 export type TicketDetailTab = 'summary' | 'conversation' | 'attachments' | 'email' | 'history';
-export type ClientDetailTab = 'overview' | 'projects' | 'contacts' | 'consignees' | 'amcs';
+export type ClientDetailTab = 'overview' | 'projects' | 'contacts' | 'consignees' | 'amcs' | 'hardware';
 export type ProjectDetailTab = 'overview' | 'faqs' | 'docs';
 export type TicketPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 export type TicketStatus = 'NEW' | 'ASSIGNED' | 'IN_PROGRESS' | 'WAITING_ON_CUSTOMER' | 'ESCALATED' | 'REOPENED' | 'RESOLVED';
-export type TicketSource = 'WIDGET';
+export type TicketSource = 'WIDGET' | 'PROJECT_WIDGET' | 'GENERAL_WIDGET' | 'INTERNAL';
 export type ChatSessionStatus = 'ACTIVE' | 'ENDED' | 'ESCALATED';
 export type TicketMessageType = 'REPLY' | 'INTERNAL_NOTE' | 'SYSTEM';
 export type ChatRole = 'USER' | 'JULIA';
+export type SupportType = 'GENERAL' | 'SOFTWARE' | 'HARDWARE';
+export type SupportSessionSource = 'GENERAL_WIDGET' | 'PROJECT_WIDGET' | 'INTERNAL';
+export type SupportSessionStatus = 'ACTIVE' | 'ENDED' | 'ESCALATED';
+export type SupportSessionMessageRole = 'USER' | 'JULIA' | 'SYSTEM';
+export type HardwareCategory = 'PRINTER' | 'SCANNER' | 'NETWORK_DEVICE' | 'COMPUTER' | 'PERIPHERAL' | 'OTHER';
+export type HardwareAssetStatus = 'ACTIVE' | 'INACTIVE' | 'RETIRED';
+export type SupportTopicScope = 'GLOBAL' | 'CLIENT' | 'PROJECT' | 'HARDWARE_CATEGORY' | 'HARDWARE_ASSET';
+export type SupportTopicKind = 'FAQ' | 'SOP' | 'PLAYBOOK' | 'VENDOR_LINK';
 export type KnowledgeStatus = 'DRAFT' | 'PUBLISHED';
 export type NotificationType =
   | 'TICKET_CREATED'
@@ -107,6 +115,7 @@ export interface ApiClient {
     consignees: number;
     projects: number;
     amcs: number;
+    hardwareAssets?: number;
   };
 }
 
@@ -194,11 +203,99 @@ export interface ApiAmc {
   project?: ApiProject | null;
 }
 
+export interface ApiHardwareAsset {
+  id: number;
+  displayId: string;
+  clientId: number;
+  projectId?: number | null;
+  amcId?: number | null;
+  category: HardwareCategory;
+  brand?: string | null;
+  model?: string | null;
+  serialNumber?: string | null;
+  location?: string | null;
+  status: HardwareAssetStatus;
+  notes?: string | null;
+  vendorSupportUrl?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  client?: ApiClient | null;
+  project?: ApiProject | null;
+  amc?: ApiAmc | null;
+}
+
+export interface ApiSupportTopic {
+  id: number;
+  displayId: string;
+  scope: SupportTopicScope;
+  kind: SupportTopicKind;
+  supportType: SupportType;
+  status: KnowledgeStatus;
+  title: string;
+  summary?: string | null;
+  content: string;
+  clientId?: number | null;
+  projectId?: number | null;
+  hardwareCategory?: HardwareCategory | null;
+  hardwareAssetId?: number | null;
+  vendorUrl?: string | null;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+  client?: ApiClient | null;
+  project?: ApiProject | null;
+  hardwareAsset?: ApiHardwareAsset | null;
+}
+
+export interface ApiSupportSessionMessage {
+  id: number;
+  supportSessionId?: number;
+  role: SupportSessionMessageRole;
+  content: string;
+  sourceRefs?: {
+    runbookIds?: number[];
+    projectDocIds?: number[];
+    supportTopicIds?: number[];
+  } | null;
+  createdAt: string;
+}
+
+export interface ApiSupportSession {
+  id: number;
+  displayId: string;
+  source: SupportSessionSource;
+  status: SupportSessionStatus;
+  supportType: SupportType;
+  clientId?: number | null;
+  projectId?: number | null;
+  hardwareAssetId?: number | null;
+  selectedTopicId?: number | null;
+  requesterName?: string | null;
+  requesterEmail?: string | null;
+  requesterPhone?: string | null;
+  issueSummary?: string | null;
+  supportSummary?: string | null;
+  confidenceScore?: number | null;
+  createdAt: string;
+  endedAt?: string | null;
+  escalatedAt?: string | null;
+  client?: ApiClient | null;
+  project?: ApiProject | null;
+  hardwareAsset?: ApiHardwareAsset | null;
+  selectedTopic?: ApiSupportTopic | null;
+  messages?: ApiSupportSessionMessage[];
+  ticket?: ApiTicket | null;
+  _count?: {
+    messages?: number;
+  };
+}
+
 export interface ApiClientDetail extends ApiClient {
   contacts: ApiClientContact[];
   consignees: ApiConsignee[];
   amcs: ApiAmc[];
   projects: ApiProject[];
+  hardwareAssets: ApiHardwareAsset[];
 }
 
 export interface ApiTicketMessage {
@@ -309,14 +406,20 @@ export interface ApiTicket {
   priority: TicketPriority;
   status: TicketStatus;
   source?: TicketSource;
+  supportType?: SupportType | null;
   assignedToId?: number | null;
   resolutionSummary?: string | null;
+  supportSummary?: string | null;
+  confidenceScore?: number | null;
   createdAt: string;
   resolvedAt?: string | null;
+  client?: ApiClient | null;
   project?: ApiProject | null;
+  hardwareAsset?: ApiHardwareAsset | null;
   assignedTo?: ApiUser | null;
   messages?: ApiTicketMessage[];
   chatSession?: ApiChatSession | null;
+  supportSession?: ApiSupportSession | null;
   emailEvents?: ApiTicketEmail[];
   escalationHistory?: ApiEscalationHistory[];
 }
@@ -362,6 +465,11 @@ export interface DashboardStats {
   totalOpenTickets?: number;
   totalResolvedTickets?: number;
   totalRunbooks?: number;
+  totalHardwareAssets?: number;
+  activeSupportSessions?: number;
+  escalatedSupportSessions?: number;
+  hardwareSupportSessions?: number;
+  softwareSupportSessions?: number;
   openTickets?: number;
   resolvedTickets?: number;
   totalDocs?: number;
@@ -391,6 +499,19 @@ export interface WidgetFaqResponse {
   faqs: WidgetFaq[];
 }
 
+export interface SupportContextResponse {
+  mode: SupportSessionSource;
+  project?: ApiProject | null;
+  client?: ApiClient | null;
+  projects: ApiProject[];
+  hardwareAssets: ApiHardwareAsset[];
+  amcs: ApiAmc[];
+  topics: ApiSupportTopic[];
+  faqs: WidgetFaq[];
+  supportTypes: SupportType[];
+  hardwareCategories: HardwareCategory[];
+}
+
 export interface WidgetStartResponse {
   sessionId: number;
 }
@@ -399,4 +520,12 @@ export interface WidgetMessageResponse {
   sessionId: number;
   reply: string;
   message: ApiChatMessage;
+}
+
+export interface SupportSessionStartResponse extends ApiSupportSession {}
+
+export interface SupportSessionMessageResponse {
+  sessionId: number;
+  reply: string;
+  message: ApiSupportSessionMessage;
 }

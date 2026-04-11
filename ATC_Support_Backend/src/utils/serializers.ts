@@ -112,6 +112,54 @@ export const serializeAmc = <T extends AnyRecord | null | undefined>(amc: T) => 
   return nextAmc;
 };
 
+export const serializeHardwareAsset = <T extends AnyRecord | null | undefined>(hardwareAsset: T) => {
+  if (!hardwareAsset) {
+    return null;
+  }
+
+  const nextHardwareAsset: Record<string, unknown> = {
+    ...withDisplayId(hardwareAsset, 'HW'),
+  };
+
+  if ('client' in hardwareAsset) {
+    nextHardwareAsset.client = serializeClient(hardwareAsset.client as AnyRecord | null | undefined);
+  }
+
+  if ('project' in hardwareAsset) {
+    nextHardwareAsset.project = serializeProject(hardwareAsset.project as AnyRecord | null | undefined);
+  }
+
+  if ('amc' in hardwareAsset) {
+    nextHardwareAsset.amc = serializeAmc(hardwareAsset.amc as AnyRecord | null | undefined);
+  }
+
+  return nextHardwareAsset;
+};
+
+export const serializeSupportTopic = <T extends AnyRecord | null | undefined>(supportTopic: T) => {
+  if (!supportTopic) {
+    return null;
+  }
+
+  const nextSupportTopic: Record<string, unknown> = {
+    ...withDisplayId(supportTopic, 'TOP'),
+  };
+
+  if ('client' in supportTopic) {
+    nextSupportTopic.client = serializeClient(supportTopic.client as AnyRecord | null | undefined);
+  }
+
+  if ('project' in supportTopic) {
+    nextSupportTopic.project = serializeProject(supportTopic.project as AnyRecord | null | undefined);
+  }
+
+  if ('hardwareAsset' in supportTopic) {
+    nextSupportTopic.hardwareAsset = serializeHardwareAsset(supportTopic.hardwareAsset as AnyRecord | null | undefined);
+  }
+
+  return nextSupportTopic;
+};
+
 export const serializeRunbook = <T extends AnyRecord | null | undefined>(runbook: T) => {
   if (!runbook) {
     return null;
@@ -139,6 +187,24 @@ export const serializeTicket = <T extends AnyRecord | null | undefined>(ticket: 
 
   if ('project' in ticket) {
     nextTicket.project = serializeProject(ticket.project as AnyRecord | null | undefined);
+  }
+
+  if ('client' in ticket) {
+    nextTicket.client = serializeClient(ticket.client as AnyRecord | null | undefined);
+  }
+
+  if ('hardwareAsset' in ticket) {
+    nextTicket.hardwareAsset = serializeHardwareAsset(ticket.hardwareAsset as AnyRecord | null | undefined);
+  }
+
+  if ('supportSession' in ticket) {
+    const supportSession = ticket.supportSession as AnyRecord | null | undefined;
+    nextTicket.supportSession = supportSession
+      ? {
+          ...withDisplayId(supportSession, 'SSN'),
+          ticket: undefined,
+        }
+      : null;
   }
 
   if ('assignedTo' in ticket) {
@@ -232,4 +298,50 @@ export const serializeChatSession = <T extends AnyRecord | null | undefined>(cha
   }
 
   return nextChatSession;
+};
+
+export const serializeSupportSessionMessage = <T extends AnyRecord | null | undefined>(message: T) => {
+  if (!message) {
+    return null;
+  }
+
+  return { ...message };
+};
+
+export const serializeSupportSession = <T extends AnyRecord | null | undefined>(supportSession: T) => {
+  if (!supportSession) {
+    return null;
+  }
+
+  const nextSupportSession: Record<string, unknown> = {
+    ...withDisplayId(supportSession, 'SSN'),
+  };
+
+  if ('client' in supportSession) {
+    nextSupportSession.client = serializeClient(supportSession.client as AnyRecord | null | undefined);
+  }
+
+  if ('project' in supportSession) {
+    nextSupportSession.project = serializeProject(supportSession.project as AnyRecord | null | undefined);
+  }
+
+  if ('hardwareAsset' in supportSession) {
+    nextSupportSession.hardwareAsset = serializeHardwareAsset(supportSession.hardwareAsset as AnyRecord | null | undefined);
+  }
+
+  if ('selectedTopic' in supportSession) {
+    nextSupportSession.selectedTopic = serializeSupportTopic(supportSession.selectedTopic as AnyRecord | null | undefined);
+  }
+
+  if ('messages' in supportSession && Array.isArray(supportSession.messages)) {
+    nextSupportSession.messages = supportSession.messages.map((message) =>
+      serializeSupportSessionMessage(message as AnyRecord | null | undefined),
+    );
+  }
+
+  if ('ticket' in supportSession) {
+    nextSupportSession.ticket = serializeTicket(supportSession.ticket as AnyRecord | null | undefined);
+  }
+
+  return nextSupportSession;
 };

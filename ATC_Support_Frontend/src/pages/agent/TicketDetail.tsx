@@ -78,15 +78,19 @@ export default function TicketDetail() {
   const canAssignToOthers = permissions?.canAssignTicketsToOthers ?? false;
   const canMoveToWaitingByPermission = permissions?.canMoveTicketsToWaiting ?? false;
   const canResolveByPermission = permissions?.canResolveTickets ?? false;
-  const canReopenByPermission = permissions?.canReopenTickets ?? false;
+  const canReopenByPermission = false;
   const canEscalateByPermission = permissions?.canEscalateTickets ?? false;
   const canWriteTicket = canAssignToSelf || canAssignToOthers || canMoveToWaitingByPermission || canResolveByPermission || canReopenByPermission || canEscalateByPermission;
   const isReadOnly = !canWriteTicket;
 
   const ticketMessages = useMemo(() => (ticketQuery.data?.messages || []).slice(), [ticketQuery.data?.messages]);
   const transcriptMessages = useMemo(
-    () => (ticketQuery.data?.chatSession?.messages || []).slice().sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()),
-    [ticketQuery.data?.chatSession?.messages],
+    () =>
+      (ticketQuery.data?.supportSession?.messages || ticketQuery.data?.chatSession?.messages || [])
+        .slice()
+        .filter((message) => message.role !== 'SYSTEM')
+        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()),
+    [ticketQuery.data?.chatSession?.messages, ticketQuery.data?.supportSession?.messages],
   );
   const ticketAttachments = useMemo(
     () =>
@@ -316,8 +320,8 @@ export default function TicketDetail() {
   }
 
   const ticket = ticketQuery.data;
-  const requesterName = ticket.requesterName || ticket.chatSession?.clientName || 'Unknown requester';
-  const requesterEmail = ticket.requesterEmail || ticket.chatSession?.clientEmail || null;
+  const requesterName = ticket.requesterName || ticket.supportSession?.requesterName || ticket.chatSession?.clientName || 'Unknown requester';
+  const requesterEmail = ticket.requesterEmail || ticket.supportSession?.requesterEmail || ticket.chatSession?.clientEmail || null;
   const ticketTabs = detailTabs.map((detailTab) => ({ label: tabLabels[detailTab], to: appPaths.tickets.detail(ticketId, detailTab) }));
 
   let mainContent: ReactNode = null;
@@ -342,6 +346,7 @@ export default function TicketDetail() {
                 items={[
                   { label: 'Ticket', value: ticket.displayId },
                   { label: 'Source', value: ticket.source ? humanizeEnum(ticket.source) : 'Widget' },
+                  { label: 'Support Type', value: ticket.supportType ? humanizeEnum(ticket.supportType) : 'Not set' },
                   {
                     label: 'Status',
                     value: (
@@ -371,9 +376,16 @@ export default function TicketDetail() {
                 items={[
                   { label: 'Requester', value: requesterName },
                   { label: 'Requester Email', value: requesterEmail || 'Not available' },
-                  { label: 'Client', value: ticket.project?.client?.name || 'Not linked' },
+                  { label: 'Client', value: ticket.client?.name || ticket.project?.client?.name || ticket.supportSession?.client?.name || 'Not linked' },
                   { label: 'Project', value: ticket.project?.name || 'Not linked' },
-                  { label: 'Widget Chat Messages', value: String(transcriptMessages.length) },
+                  {
+                    label: 'Hardware',
+                    value: ticket.hardwareAsset
+                      ? [ticket.hardwareAsset.category, ticket.hardwareAsset.brand, ticket.hardwareAsset.model].filter(Boolean).join(' | ')
+                      : 'Not linked',
+                  },
+                  { label: 'Support Session', value: ticket.supportSession?.displayId || (ticket.chatSessionId ? `Legacy chat ${ticket.chatSessionId}` : 'Not linked') },
+                  { label: 'Session Messages', value: String(transcriptMessages.length) },
                   { label: 'Email Thread Token', value: ticket.emailThreadToken ? <span className="break-all font-mono text-xs">{ticket.emailThreadToken}</span> : 'Not created yet' },
                 ]}
               />

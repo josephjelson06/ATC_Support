@@ -1,4 +1,4 @@
-import { Role, TicketStatus } from '@prisma/client';
+import { Role, SupportSessionStatus, SupportType, TicketStatus } from '@prisma/client';
 import { Router } from 'express';
 
 import { prisma } from '../lib/prisma';
@@ -13,7 +13,18 @@ router.get(
     const user = req.user!;
 
     if (user.role === Role.PM) {
-      const [totalClients, totalProjects, totalOpenTickets, totalResolvedTickets, totalRunbooks] = await Promise.all([
+      const [
+        totalClients,
+        totalProjects,
+        totalOpenTickets,
+        totalResolvedTickets,
+        totalRunbooks,
+        totalHardwareAssets,
+        activeSupportSessions,
+        escalatedSupportSessions,
+        hardwareSupportSessions,
+        softwareSupportSessions,
+      ] = await Promise.all([
         prisma.client.count(),
         prisma.project.count(),
         prisma.ticket.count({
@@ -29,6 +40,27 @@ router.get(
           },
         }),
         prisma.runbook.count(),
+        prisma.hardwareAsset.count(),
+        prisma.supportSession.count({
+          where: {
+            status: SupportSessionStatus.ACTIVE,
+          },
+        }),
+        prisma.supportSession.count({
+          where: {
+            status: SupportSessionStatus.ESCALATED,
+          },
+        }),
+        prisma.supportSession.count({
+          where: {
+            supportType: SupportType.HARDWARE,
+          },
+        }),
+        prisma.supportSession.count({
+          where: {
+            supportType: SupportType.SOFTWARE,
+          },
+        }),
       ]);
 
       return res.json({
@@ -38,11 +70,16 @@ router.get(
         totalOpenTickets,
         totalResolvedTickets,
         totalRunbooks,
+        totalHardwareAssets,
+        activeSupportSessions,
+        escalatedSupportSessions,
+        hardwareSupportSessions,
+        softwareSupportSessions,
       });
     }
 
     if (hasProjectScopedAccess(user)) {
-      const [openTickets, resolvedTickets, totalDocs, totalFaqs] = await Promise.all([
+      const [openTickets, resolvedTickets, totalDocs, totalFaqs, activeSupportSessions] = await Promise.all([
         prisma.ticket.count({
           where: {
             project: {
@@ -75,6 +112,14 @@ router.get(
             },
           },
         }),
+        prisma.supportSession.count({
+          where: {
+            project: {
+              OR: [{ assignedToId: user.id }, { memberships: { some: { userId: user.id } } }],
+            },
+            status: SupportSessionStatus.ACTIVE,
+          },
+        }),
       ]);
 
       return res.json({
@@ -83,10 +128,11 @@ router.get(
         resolvedTickets,
         totalDocs,
         totalFaqs,
+        activeSupportSessions,
       });
     }
 
-    const [unassignedTickets, myOpenTickets, myResolvedTickets] = await Promise.all([
+    const [unassignedTickets, myOpenTickets, myResolvedTickets, activeSupportSessions] = await Promise.all([
       prisma.ticket.count({
         where: {
           assignedToId: null,
@@ -109,6 +155,11 @@ router.get(
           status: TicketStatus.RESOLVED,
         },
       }),
+      prisma.supportSession.count({
+        where: {
+          status: SupportSessionStatus.ACTIVE,
+        },
+      }),
     ]);
 
     return res.json({
@@ -116,6 +167,7 @@ router.get(
       unassignedTickets,
       myOpenTickets,
       myResolvedTickets,
+      activeSupportSessions,
     });
   }),
 );

@@ -7,6 +7,7 @@ import { badRequest, forbidden, notFound } from './http';
 
 type WidgetProjectAccessRecord = {
   id: number;
+  clientId: number;
   name: string;
   status: ProjectStatus;
   widgetEnabled: boolean;
@@ -90,6 +91,7 @@ export const getWidgetProjectAccess = async (widgetKey: string): Promise<WidgetP
     },
     select: {
       id: true,
+      clientId: true,
       name: true,
       status: true,
       widgetEnabled: true,

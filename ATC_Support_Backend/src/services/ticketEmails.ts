@@ -20,13 +20,16 @@ type TicketForEmail = {
   status: TicketStatus;
   resolutionSummary: string | null;
   assignedToId: number | null;
-  project: {
+  client?: {
+    name: string;
+  } | null;
+  project?: {
     name: string;
     assignedToId: number | null;
     client: {
       name: string;
     } | null;
-  };
+  } | null;
   chatSession?: {
     clientName: string;
     clientEmail: string;
@@ -73,8 +76,11 @@ export const buildTicketEmailSubject = (ticket: Pick<TicketForEmail, 'id' | 'tit
   return `${lead} (${ticketDisplayId})${threadSuffix}`;
 };
 
-const buildTicketContextLine = (ticket: TicketForEmail) =>
-  `${getTicketDisplayId(ticket.id)} | ${ticket.project.client?.name || 'Client'} | ${ticket.project.name}`;
+const buildTicketContextLine = (ticket: TicketForEmail) => {
+  const clientName = ticket.project?.client?.name || ticket.client?.name || 'Client';
+  const projectName = ticket.project?.name || 'General Support';
+  return `${getTicketDisplayId(ticket.id)} | ${clientName} | ${projectName}`;
+};
 
 const createOutboundTicketEmail = async (db: DbClient, input: OutboundEmailInput) => {
   const recipient = getTicketRecipient(input.ticket);
@@ -291,6 +297,7 @@ export const handleInboundTicketEmail = async (
           client: true,
         },
       },
+      client: true,
       chatSession: true,
     },
   });
@@ -375,7 +382,7 @@ export const handleInboundTicketEmail = async (
       });
     }
 
-    const recipientUserIds = Array.from(new Set([ticket.assignedToId, ticket.project.assignedToId].filter((userId): userId is number => Boolean(userId))));
+    const recipientUserIds = Array.from(new Set([ticket.assignedToId, ticket.project?.assignedToId].filter((userId): userId is number => Boolean(userId))));
 
     if (shouldNotifyReopen && recipientUserIds.length > 0) {
       await transaction.notification.createMany({

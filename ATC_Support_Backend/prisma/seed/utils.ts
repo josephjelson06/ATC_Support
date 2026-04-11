@@ -68,11 +68,15 @@ export const cleanSeedState = async (prisma: PrismaClient) => {
   await prisma.ticketMessage.deleteMany();
   await prisma.escalationHistory.deleteMany();
   await prisma.ticket.deleteMany();
+  await prisma.supportSessionMessage.deleteMany();
+  await prisma.supportSession.deleteMany();
+  await prisma.supportTopic.deleteMany();
   await prisma.chatMessage.deleteMany();
   await prisma.chatSession.deleteMany();
   await prisma.faq.deleteMany();
   await prisma.projectDoc.deleteMany();
   await prisma.runbook.deleteMany();
+  await prisma.hardwareAsset.deleteMany();
   await prisma.amc.deleteMany();
   await prisma.consigneeContact.deleteMany();
   await prisma.consignee.deleteMany();

@@ -7,8 +7,6 @@ import { getErrorMessage } from '../../lib/api';
 
 const seededAccounts = [
   { label: 'Project Manager', email: 'pm@atc.com', password: 'password' },
-  { label: 'Support Engineer 1', email: 'se@atc.com', password: 'password' },
-  { label: 'Support Engineer 3', email: 'se3@atc.com', password: 'password' },
 ];
 
 export default function LoginPage() {
@@ -75,7 +73,7 @@ export default function LoginPage() {
               <LockKeyhole className="h-7 w-7" />
             </div>
             <h2 className="mt-6 text-3xl font-black text-slate-900">Sign in</h2>
-            <p className="mt-2 text-sm text-slate-500">Use a seeded ATC account to access the live backend-backed console.</p>
+            <p className="mt-2 text-sm text-slate-500">Use the PM demo account to access the live backend-backed console.</p>
 
             <form onSubmit={handleSubmit} className="mt-8 space-y-5">
               <label className="block">
@@ -119,7 +117,7 @@ export default function LoginPage() {
             </form>
 
             <div className="mt-8 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
-              Seeded passwords are set to <span className="font-mono font-bold text-slate-900">password</span> for local development.
+              The demo password is set to <span className="font-mono font-bold text-slate-900">password</span> for local development.
             </div>
           </div>
         </section>

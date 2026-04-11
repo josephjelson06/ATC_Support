@@ -331,6 +331,8 @@ type SeedUser = Awaited<ReturnType<PrismaClient['user']['create']>>;
 type SeedProject = Awaited<ReturnType<PrismaClient['project']['create']>>;
 type SeedTicket = Awaited<ReturnType<PrismaClient['ticket']['create']>>;
 type SeedAmc = Awaited<ReturnType<PrismaClient['amc']['create']>>;
+type SeedHardwareBrand = Awaited<ReturnType<PrismaClient['hardwareBrand']['create']>>;
+type SeedHardwareModel = Awaited<ReturnType<PrismaClient['hardwareModel']['create']>>;
 type SeedHardwareAsset = Awaited<ReturnType<PrismaClient['hardwareAsset']['create']>>;
 type SeedSupportTopic = Awaited<ReturnType<PrismaClient['supportTopic']['create']>>;
 
@@ -574,11 +576,45 @@ export async function seedSmallMode(prisma: PrismaClient) {
     );
   }
 
+  const hardwareBrandMap = new Map<string, SeedHardwareBrand>();
+  const hardwareModelMap = new Map<string, SeedHardwareModel>();
+
+  for (const blueprint of HARDWARE_BLUEPRINTS) {
+    const brandKey = `${blueprint.category}:${blueprint.brand}`;
+    let hardwareBrand = hardwareBrandMap.get(brandKey);
+
+    if (!hardwareBrand) {
+      hardwareBrand = await prisma.hardwareBrand.create({
+        data: {
+          category: blueprint.category,
+          name: blueprint.brand,
+          vendorSupportUrl: blueprint.vendorSupportUrl,
+        },
+      });
+      hardwareBrandMap.set(brandKey, hardwareBrand);
+    }
+
+    const modelKey = `${blueprint.category}:${blueprint.brand}:${blueprint.model}`;
+    if (!hardwareModelMap.has(modelKey)) {
+      const hardwareModel = await prisma.hardwareModel.create({
+        data: {
+          hardwareBrandId: hardwareBrand.id,
+          category: blueprint.category,
+          name: blueprint.model,
+          notes: blueprint.notes,
+          vendorSupportUrl: blueprint.vendorSupportUrl,
+        },
+      });
+      hardwareModelMap.set(modelKey, hardwareModel);
+    }
+  }
+
   const createdHardwareAssets: SeedHardwareAsset[] = [];
   for (let index = 0; index < 14; index += 1) {
     const project = activeProjects[index % activeProjects.length];
     const blueprint = HARDWARE_BLUEPRINTS[index % HARDWARE_BLUEPRINTS.length];
     const linkedAmc = createdAmcs.find((amc) => amc.projectId === project.id && amc.status === AmcStatus.ACTIVE) ?? null;
+    const hardwareModel = hardwareModelMap.get(`${blueprint.category}:${blueprint.brand}:${blueprint.model}`)!;
 
     createdHardwareAssets.push(
       await prisma.hardwareAsset.create({
@@ -586,6 +622,7 @@ export async function seedSmallMode(prisma: PrismaClient) {
           clientId: project.clientId,
           projectId: project.id,
           amcId: linkedAmc?.id ?? null,
+          hardwareModelId: hardwareModel.id,
           category: blueprint.category,
           brand: blueprint.brand,
           model: blueprint.model,
@@ -603,11 +640,13 @@ export async function seedSmallMode(prisma: PrismaClient) {
   for (let index = 0; index < 4; index += 1) {
     const client = createdClients[(index + 2) % createdClients.length];
     const blueprint = HARDWARE_BLUEPRINTS[(index + 1) % HARDWARE_BLUEPRINTS.length];
+    const hardwareModel = hardwareModelMap.get(`${blueprint.category}:${blueprint.brand}:${blueprint.model}`)!;
 
     createdHardwareAssets.push(
       await prisma.hardwareAsset.create({
         data: {
           clientId: client.id,
+          hardwareModelId: hardwareModel.id,
           category: blueprint.category,
           brand: blueprint.brand,
           model: blueprint.model,

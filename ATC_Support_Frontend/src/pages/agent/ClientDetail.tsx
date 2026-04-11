@@ -15,7 +15,7 @@ import { useAsyncData } from '../../hooks/useAsyncData';
 import { apiFetch } from '../../lib/api';
 import { formatDate, humanizeEnum } from '../../lib/format';
 import { appPaths } from '../../lib/navigation';
-import type { ApiClientDetail, ClientDetailTab } from '../../lib/types';
+import type { ApiClientDetail, ApiHardwareBrand, ApiHardwareModel, ClientDetailTab } from '../../lib/types';
 
 const detailTabs: ClientDetailTab[] = ['overview', 'projects', 'contacts', 'consignees', 'amcs', 'hardware'];
 
@@ -37,8 +37,12 @@ export default function ClientDetail() {
         throw new Error('Client ID is missing.');
       }
 
-      const client = await apiFetch<ApiClientDetail>(`/clients/${id}`);
-      return { client };
+      const [client, hardwareBrands, hardwareModels] = await Promise.all([
+        apiFetch<ApiClientDetail>(`/clients/${id}`),
+        apiFetch<ApiHardwareBrand[]>('/hardware-catalog/brands'),
+        apiFetch<ApiHardwareModel[]>('/hardware-catalog/models'),
+      ]);
+      return { client, hardwareBrands, hardwareModels };
     },
     [id],
   );
@@ -51,7 +55,7 @@ export default function ClientDetail() {
     return <ClientDetailError message={clientQuery.error || 'Unable to load client details.'} onRetry={clientQuery.reload} />;
   }
 
-  const { client } = clientQuery.data;
+  const { client, hardwareBrands, hardwareModels } = clientQuery.data;
   const activeAmcs = client.amcs.filter((amc) => amc.status === 'ACTIVE');
   const canManageClients = permissions?.canManageClients ?? false;
   const clientTabs = [
@@ -130,6 +134,8 @@ export default function ClientDetail() {
           clientId={client.id}
           projects={client.projects}
           amcs={client.amcs}
+          hardwareBrands={hardwareBrands}
+          hardwareModels={hardwareModels}
           onCompleted={async () => {
             clientQuery.reload();
           }}
@@ -148,6 +154,8 @@ export default function ClientDetail() {
           clientId={client.id}
           projects={client.projects}
           amcs={client.amcs}
+          hardwareBrands={hardwareBrands}
+          hardwareModels={hardwareModels}
           hardwareAsset={hardwareAsset}
           onCompleted={async () => {
             clientQuery.reload();
@@ -640,15 +648,23 @@ export default function ClientDetail() {
                 <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">Hardware Assets</h2>
                 <p className="mt-1 text-sm text-slate-500">Client-owned devices can optionally link to projects and AMC coverage.</p>
               </div>
-              {canManageClients ? (
-                <button
-                  onClick={openCreateHardwareModal}
+              <div className="flex items-center gap-2">
+                <Link
+                  to={appPaths.hardware.list}
                   className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold uppercase tracking-wider text-slate-700 transition-colors hover:bg-slate-50"
                 >
-                  <Plus className="h-3.5 w-3.5" />
-                  Add Hardware
-                </button>
-              ) : null}
+                  Open Hardware Workspace
+                </Link>
+                {canManageClients ? (
+                  <button
+                    onClick={openCreateHardwareModal}
+                    className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold uppercase tracking-wider text-slate-700 transition-colors hover:bg-slate-50"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Add Hardware
+                  </button>
+                ) : null}
+              </div>
             </div>
             <div className="divide-y divide-slate-100">
               {client.hardwareAssets.length === 0 ? (
@@ -666,6 +682,11 @@ export default function ClientDetail() {
                             <p className="font-bold text-slate-900">
                               {[hardwareAsset.brand, hardwareAsset.model].filter(Boolean).join(' ') || humanizeEnum(hardwareAsset.category)}
                             </p>
+                            {hardwareAsset.hardwareModel ? (
+                              <p className="mt-1 text-xs text-slate-500">
+                                Catalog: {hardwareAsset.hardwareModel.hardwareBrand?.name || 'Unknown brand'} / {hardwareAsset.hardwareModel.name}
+                              </p>
+                            ) : null}
                             <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-black uppercase tracking-wider text-slate-700">
                               {humanizeEnum(hardwareAsset.category)}
                             </span>

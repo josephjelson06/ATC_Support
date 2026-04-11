@@ -5,10 +5,29 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { requireRole } from '../middleware/role';
 import { validate } from '../middleware/validate';
+import { clientScopeForUser, projectScopeForUser } from '../utils/access';
 import { asyncHandler, badRequest, parseId } from '../utils/http';
 import { serializeAmc } from '../utils/serializers';
 
 const router = Router();
+
+const amcInclude = {
+  project: {
+    include: {
+      client: true,
+      assignedTo: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          status: true,
+          createdAt: true,
+        },
+      },
+    },
+  },
+} as const;
 
 const dateSchema = z
   .string()
@@ -83,6 +102,34 @@ const assertProjectBelongsToClient = async (clientId: number, projectId: number 
 };
 
 router.get(
+  '/amcs',
+  asyncHandler(async (req, res) => {
+    const scopeWhere =
+      req.user && req.user.scopeMode === 'PROJECT_SCOPED'
+        ? {
+            OR: [
+              { project: projectScopeForUser(req.user) },
+              {
+                projectId: null,
+                client: clientScopeForUser(req.user),
+              },
+            ],
+          }
+        : {};
+
+    const amcs = await prisma.amc.findMany({
+      where: scopeWhere,
+      include: amcInclude,
+      orderBy: {
+        id: 'asc',
+      },
+    });
+
+    res.json(amcs.map((amc) => serializeAmc(amc)));
+  }),
+);
+
+router.get(
   '/clients/:id/amcs',
   asyncHandler(async (req, res) => {
     const clientId = parseId(req.params.id, 'client id');
@@ -90,23 +137,7 @@ router.get(
       where: {
         clientId,
       },
-      include: {
-        project: {
-          include: {
-            client: true,
-            assignedTo: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-                role: true,
-                status: true,
-                createdAt: true,
-              },
-            },
-          },
-        },
-      },
+      include: amcInclude,
       orderBy: {
         id: 'asc',
       },
@@ -137,23 +168,7 @@ router.post(
         endDate: payload.endDate,
         status: payload.status ?? AmcStatus.ACTIVE,
       },
-      include: {
-        project: {
-          include: {
-            client: true,
-            assignedTo: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-                role: true,
-                status: true,
-                createdAt: true,
-              },
-            },
-          },
-        },
-      },
+      include: amcInclude,
     });
 
     res.status(201).json(serializeAmc(amc));
@@ -208,23 +223,7 @@ router.patch(
         ...payload,
         projectId: payload.projectId === undefined ? undefined : payload.projectId,
       },
-      include: {
-        project: {
-          include: {
-            client: true,
-            assignedTo: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-                role: true,
-                status: true,
-                createdAt: true,
-              },
-            },
-          },
-        },
-      },
+      include: amcInclude,
     });
 
     res.json(serializeAmc(amc));

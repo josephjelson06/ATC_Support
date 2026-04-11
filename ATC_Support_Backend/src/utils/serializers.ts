@@ -112,6 +112,30 @@ export const serializeAmc = <T extends AnyRecord | null | undefined>(amc: T) => 
   return nextAmc;
 };
 
+export const serializeHardwareBrand = <T extends AnyRecord | null | undefined>(hardwareBrand: T) => {
+  if (!hardwareBrand) {
+    return null;
+  }
+
+  return withDisplayId(hardwareBrand, 'HWB');
+};
+
+export const serializeHardwareModel = <T extends AnyRecord | null | undefined>(hardwareModel: T) => {
+  if (!hardwareModel) {
+    return null;
+  }
+
+  const nextHardwareModel: Record<string, unknown> = {
+    ...withDisplayId(hardwareModel, 'HWM'),
+  };
+
+  if ('hardwareBrand' in hardwareModel) {
+    nextHardwareModel.hardwareBrand = serializeHardwareBrand(hardwareModel.hardwareBrand as AnyRecord | null | undefined);
+  }
+
+  return nextHardwareModel;
+};
+
 export const serializeHardwareAsset = <T extends AnyRecord | null | undefined>(hardwareAsset: T) => {
   if (!hardwareAsset) {
     return null;
@@ -131,6 +155,10 @@ export const serializeHardwareAsset = <T extends AnyRecord | null | undefined>(h
 
   if ('amc' in hardwareAsset) {
     nextHardwareAsset.amc = serializeAmc(hardwareAsset.amc as AnyRecord | null | undefined);
+  }
+
+  if ('hardwareModel' in hardwareAsset) {
+    nextHardwareAsset.hardwareModel = serializeHardwareModel(hardwareAsset.hardwareModel as AnyRecord | null | undefined);
   }
 
   return nextHardwareAsset;

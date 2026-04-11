@@ -349,45 +349,26 @@ router.delete(
   requireRole(Role.PM),
   asyncHandler(async (req, res) => {
     const projectId = parseId(req.params.id, 'project id');
-    const [ticketCount, docCount, faqCount, chatSessionCount, amcCount] = await Promise.all([
-      prisma.ticket.count({
-        where: {
-          projectId,
-        },
-      }),
-      prisma.projectDoc.count({
-        where: {
-          projectId,
-        },
-      }),
-      prisma.faq.count({
-        where: {
-          projectId,
-        },
-      }),
-      prisma.chatSession.count({
-        where: {
-          projectId,
-        },
-      }),
-      prisma.amc.count({
-        where: {
-          projectId,
-        },
-      }),
-    ]);
+    const ticketCount = await prisma.ticket.count({
+      where: {
+        projectId,
+      },
+    });
 
-    const blockers = {
-      tickets: ticketCount,
-      docs: docCount,
-      faqs: faqCount,
-      chatSessions: chatSessionCount,
-      amcs: amcCount,
-    };
-
-    if (Object.values(blockers).some((count) => count > 0)) {
-      throw conflict('Delete blocked: remove linked tickets, docs, FAQs, chat sessions, and AMCs first.', blockers);
+    if (ticketCount > 0) {
+      throw conflict('Delete blocked: remove linked tickets first.', {
+        tickets: ticketCount,
+      });
     }
+
+    await prisma.supportSession.deleteMany({
+      where: {
+        projectId,
+        ticket: {
+          is: null,
+        },
+      },
+    });
 
     await prisma.project.delete({
       where: {

@@ -2,8 +2,8 @@ import type { LucideIcon } from 'lucide-react';
 import {
   BarChart2,
   Briefcase,
+  Cpu,
   LayoutDashboard,
-  Shield,
   Ticket,
   Users,
 } from 'lucide-react';
@@ -65,6 +65,9 @@ export const appPaths = {
     list: '/agent/projects',
     detail: (id: number | string, tab: ProjectDetailTab = 'overview') => `/agent/projects/${id}/${tab}`,
   },
+  hardware: {
+    list: '/agent/hardware',
+  },
   reports: {
     overview: '/agent/reports/overview',
     tickets: '/agent/reports/tickets',
@@ -112,6 +115,14 @@ export const sidebarGroups: SidebarNavGroup[] = [
         icon: Briefcase,
         roles: ['PM', 'SE'],
       },
+      {
+        id: 'hardware',
+        label: 'Hardware',
+        to: appPaths.hardware.list,
+        icon: Cpu,
+        roles: ['PM', 'SE'],
+        matchPrefixes: ['/agent/hardware'],
+      },
     ],
   },
   {
@@ -125,20 +136,6 @@ export const sidebarGroups: SidebarNavGroup[] = [
         icon: BarChart2,
         roles: ['PM', 'SE'],
         matchPrefixes: ['/agent/reports'],
-      },
-    ],
-  },
-  {
-    id: 'administration',
-    label: 'Administration',
-    items: [
-      {
-        id: 'users-access',
-        label: 'Users & Access',
-        to: appPaths.admin.usersAccess,
-        icon: Shield,
-        roles: ['PM'],
-        matchPrefixes: ['/agent/admin/users-access', '/agent/admin/users', '/agent/admin/roles', '/agent/admin/permissions'],
       },
     ],
   },

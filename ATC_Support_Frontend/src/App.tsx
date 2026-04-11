@@ -16,6 +16,7 @@ const LoginPage = lazy(() => import('./pages/auth/LoginPage'));
 const ClientLanding = lazy(() => import('./pages/client/ClientLanding'));
 const ClientDashboard = lazy(() => import('./pages/client/ClientDashboard'));
 const FallbackTicketForm = lazy(() => import('./pages/client/FallbackTicketForm'));
+const GeneralSupportDemo = lazy(() => import('./pages/client/GeneralSupportDemo'));
 const WidgetHostPage = lazy(() => import('./pages/client/WidgetHostPage'));
 
 const Dashboard = lazy(() => import('./pages/agent/Dashboard'));
@@ -24,16 +25,12 @@ const SupportSessions = lazy(() => import('./pages/agent/SupportSessions'));
 const TicketDetail = lazy(() => import('./pages/agent/TicketDetail'));
 const ClientMasterList = lazy(() => import('./pages/agent/ClientMasterList'));
 const ClientDetail = lazy(() => import('./pages/agent/ClientDetail'));
+const HardwareMasterList = lazy(() => import('./pages/agent/HardwareMasterList'));
 const ProjectMasterList = lazy(() => import('./pages/agent/ProjectMasterList'));
 const ProjectDetail = lazy(() => import('./pages/agent/ProjectDetail'));
 const Reports = lazy(() => import('./pages/agent/Reports'));
 const TicketReport = lazy(() => import('./pages/agent/TicketReport'));
-
-const UserManagement = lazy(() => import('./pages/settings/UserManagement'));
 const AccountPage = lazy(() => import('./pages/settings/AccountPage'));
-const RoleDirectory = lazy(() => import('./pages/settings/RoleDirectory'));
-const PermissionMatrix = lazy(() => import('./pages/settings/PermissionMatrix'));
-const UsersAccessOverview = lazy(() => import('./pages/settings/UsersAccessOverview'));
 
 function RequireAuth() {
   const location = useLocation();
@@ -123,6 +120,8 @@ function AppRoutes() {
         />
 
         <Route path="/widget-host" element={<WidgetHostPage />} />
+        <Route path="/general-support" element={<GeneralSupportDemo />} />
+        <Route path="/support" element={<GeneralSupportDemo />} />
 
         <Route element={<ClientLayout />}>
           <Route path="/" element={<ClientLanding />} />
@@ -156,6 +155,8 @@ function AppRoutes() {
             <Route path="clients/:id" element={<Navigate to="overview" replace />} />
             <Route path="clients/:id/:tab" element={<ClientDetail />} />
 
+            <Route path="hardware" element={<HardwareMasterList />} />
+
             <Route path="projects" element={<ProjectMasterList />} />
             <Route path="projects/:id" element={<Navigate to="overview" replace />} />
             <Route path="projects/:id/:tab" element={<ProjectDetail />} />
@@ -171,14 +172,6 @@ function AppRoutes() {
             </Route>
 
             <Route path="account" element={<AccountPage />} />
-
-            <Route path="admin" element={<Outlet />}>
-              <Route index element={<Navigate to="users-access" replace />} />
-              <Route path="users-access" element={<UsersAccessOverview />} />
-              <Route path="users" element={<UserManagement />} />
-              <Route path="roles" element={<RoleDirectory />} />
-              <Route path="permissions" element={<PermissionMatrix />} />
-            </Route>
           </Route>
         </Route>
 

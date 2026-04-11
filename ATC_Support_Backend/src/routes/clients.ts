@@ -156,6 +156,11 @@ router.get(
                 project: true,
               },
             },
+            hardwareModel: {
+              include: {
+                hardwareBrand: true,
+              },
+            },
           },
           orderBy: [{ category: 'asc' }, { id: 'asc' }],
         },
@@ -262,45 +267,26 @@ router.delete(
   requireRole(Role.PM),
   asyncHandler(async (req, res) => {
     const clientId = parseId(req.params.id, 'client id');
-    const [contactCount, consigneeCount, amcCount, projectCount, hardwareAssetCount] = await Promise.all([
-      prisma.clientContact.count({
-        where: {
-          clientId,
-        },
-      }),
-      prisma.consignee.count({
-        where: {
-          clientId,
-        },
-      }),
-      prisma.amc.count({
-        where: {
-          clientId,
-        },
-      }),
-      prisma.project.count({
-        where: {
-          clientId,
-        },
-      }),
-      prisma.hardwareAsset.count({
-        where: {
-          clientId,
-        },
-      }),
-    ]);
+    const ticketCount = await prisma.ticket.count({
+      where: {
+        OR: [{ clientId }, { project: { clientId } }],
+      },
+    });
 
-    const blockers = {
-      contacts: contactCount,
-      consignees: consigneeCount,
-      amcs: amcCount,
-      projects: projectCount,
-      hardwareAssets: hardwareAssetCount,
-    };
-
-    if (Object.values(blockers).some((count) => count > 0)) {
-      throw conflict('Delete blocked: remove linked contacts, consignees, AMCs, and projects first.', blockers);
+    if (ticketCount > 0) {
+      throw conflict('Delete blocked: remove linked tickets first.', {
+        tickets: ticketCount,
+      });
     }
+
+    await prisma.supportSession.deleteMany({
+      where: {
+        clientId,
+        ticket: {
+          is: null,
+        },
+      },
+    });
 
     await prisma.client.delete({
       where: {

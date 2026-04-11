@@ -128,6 +128,11 @@ const supportSessionInclude = {
       client: true,
       project: true,
       amc: true,
+      hardwareModel: {
+        include: {
+          hardwareBrand: true,
+        },
+      },
     },
   },
   selectedTopic: true,
@@ -201,6 +206,11 @@ router.get(
                 include: {
                   project: true,
                   amc: true,
+                  hardwareModel: {
+                    include: {
+                      hardwareBrand: true,
+                    },
+                  },
                 },
                 orderBy: [{ category: 'asc' }, { id: 'asc' }],
               },

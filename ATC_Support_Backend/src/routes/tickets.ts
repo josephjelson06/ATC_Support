@@ -83,7 +83,15 @@ const listInclude = {
   assignedTo: {
     select: safeUserSelect,
   },
-  hardwareAsset: true,
+  hardwareAsset: {
+    include: {
+      hardwareModel: {
+        include: {
+          hardwareBrand: true,
+        },
+      },
+    },
+  },
   supportSession: true,
 } as const;
 
@@ -134,7 +142,15 @@ const detailInclude = {
           client: true,
         },
       },
-      hardwareAsset: true,
+      hardwareAsset: {
+        include: {
+          hardwareModel: {
+            include: {
+              hardwareBrand: true,
+            },
+          },
+        },
+      },
       selectedTopic: true,
       messages: {
         orderBy: {
@@ -180,7 +196,15 @@ const getTicketForWorkflow = async (ticketId: number) => {
         },
       },
       client: true,
-      hardwareAsset: true,
+      hardwareAsset: {
+        include: {
+          hardwareModel: {
+            include: {
+              hardwareBrand: true,
+            },
+          },
+        },
+      },
       supportSession: true,
       assignedTo: {
         select: safeUserSelect,

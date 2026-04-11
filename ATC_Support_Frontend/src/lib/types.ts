@@ -203,12 +203,42 @@ export interface ApiAmc {
   project?: ApiProject | null;
 }
 
+export interface ApiHardwareBrand {
+  id: number;
+  displayId: string;
+  category: HardwareCategory;
+  name: string;
+  vendorSupportUrl?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  _count?: {
+    hardwareModels: number;
+  };
+}
+
+export interface ApiHardwareModel {
+  id: number;
+  displayId: string;
+  hardwareBrandId: number;
+  category: HardwareCategory;
+  name: string;
+  notes?: string | null;
+  vendorSupportUrl?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  hardwareBrand?: ApiHardwareBrand | null;
+  _count?: {
+    hardwareAssets: number;
+  };
+}
+
 export interface ApiHardwareAsset {
   id: number;
   displayId: string;
   clientId: number;
   projectId?: number | null;
   amcId?: number | null;
+  hardwareModelId?: number | null;
   category: HardwareCategory;
   brand?: string | null;
   model?: string | null;
@@ -222,6 +252,7 @@ export interface ApiHardwareAsset {
   client?: ApiClient | null;
   project?: ApiProject | null;
   amc?: ApiAmc | null;
+  hardwareModel?: ApiHardwareModel | null;
 }
 
 export interface ApiSupportTopic {

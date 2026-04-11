@@ -21,6 +21,11 @@ const listInclude = {
       client: true,
       project: true,
       amc: true,
+      hardwareModel: {
+        include: {
+          hardwareBrand: true,
+        },
+      },
     },
   },
   selectedTopic: true,

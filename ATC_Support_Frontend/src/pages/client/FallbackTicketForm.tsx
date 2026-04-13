@@ -1,5 +1,5 @@
 import { FormEvent, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, CheckCircle2, FileQuestion, Send } from 'lucide-react';
 
 import { useToast } from '../../contexts/ToastContext';
@@ -14,6 +14,11 @@ const priorities: TicketPriority[] = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 export default function FallbackTicketForm() {
   const { showToast } = useToast();
   const widgetKey = useResolvedWidgetKey();
+
+  if (widgetKey === 'general') {
+    return <Navigate to="/support" replace />;
+  }
+
   const widgetRequestHeaders = useMemo(
     () => buildWidgetRequestHeaders(typeof window !== 'undefined' ? window.location.origin : ''),
     [],

@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { Bot, FileQuestion, MessageSquareShare, ShieldCheck } from 'lucide-react';
 
 import { useAsyncData } from '../../hooks/useAsyncData';
@@ -10,6 +10,11 @@ import type { WidgetFaqResponse } from '../../lib/types';
 
 export default function ClientDashboard() {
   const widgetKey = useResolvedWidgetKey();
+
+  if (widgetKey === 'general') {
+    return <Navigate to="/support" replace />;
+  }
+
   const widgetRequestHeaders = useMemo(
     () => buildWidgetRequestHeaders(typeof window !== 'undefined' ? window.location.origin : ''),
     [],

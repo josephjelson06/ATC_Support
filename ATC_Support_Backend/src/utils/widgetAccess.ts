@@ -129,6 +129,17 @@ export const assertWidgetOriginAllowed = (
     throw forbidden('Widget origin could not be verified for this request.');
   }
 
+  const isLocalDevelopmentOrigin =
+    process.env.NODE_ENV !== 'production' &&
+    (requestOrigin === 'http://localhost:3000' ||
+      requestOrigin === 'http://127.0.0.1:3000' ||
+      requestOrigin === 'http://localhost:5173' ||
+      requestOrigin === 'http://127.0.0.1:5173');
+
+  if (project.widgetAllowedDomains.length === 0 && isLocalDevelopmentOrigin) {
+    return requestOrigin;
+  }
+
   if (project.widgetAllowedDomains.length === 0) {
     throw forbidden('This widget has not been configured for any allowed domains yet.');
   }

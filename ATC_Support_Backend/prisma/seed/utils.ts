@@ -77,6 +77,8 @@ export const cleanSeedState = async (prisma: PrismaClient) => {
   await prisma.projectDoc.deleteMany();
   await prisma.runbook.deleteMany();
   await prisma.hardwareAsset.deleteMany();
+  await prisma.hardwareModel.deleteMany();
+  await prisma.hardwareBrand.deleteMany();
   await prisma.amc.deleteMany();
   await prisma.consigneeContact.deleteMany();
   await prisma.consignee.deleteMany();

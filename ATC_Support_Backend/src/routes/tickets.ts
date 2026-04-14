@@ -255,6 +255,10 @@ const assertTicketAssigneeEligibility = async (
   ticket: Awaited<ReturnType<typeof getTicketForWorkflow>>,
   assigneeId: number,
 ) => {
+  const ticketProjectId = ticket.projectId;
+  if (ticketProjectId == null) {
+    throw badRequest('Ticket must be linked to a project for assignee eligibility check.');
+  }
   const assignee = await prisma.user.findUnique({
     where: {
       id: assigneeId,
@@ -266,7 +270,13 @@ const assertTicketAssigneeEligibility = async (
       scopeMode: true,
       status: true,
       projectMemberships: {
+<<<<<<< Updated upstream
         where: ticket.projectId ? { projectId: ticket.projectId } : { projectId: -1 },
+=======
+        where: {
+          projectId: ticketProjectId,
+        },
+>>>>>>> Stashed changes
         select: {
           projectId: true,
         },
@@ -639,9 +649,13 @@ router.post(
 
     assertTicketWorkflowPermission(req.user, ticket);
 
+<<<<<<< Updated upstream
     const projectSpecialistId = ticket.project?.assignedToId;
 
     if (!projectSpecialistId) {
+=======
+    if (!ticket.project?.assignedToId) {
+>>>>>>> Stashed changes
       throw badRequest('This project is not assigned to a project specialist.');
     }
 
@@ -653,7 +667,11 @@ router.post(
           id: ticketId,
         },
         data: {
+<<<<<<< Updated upstream
           assignedToId: projectSpecialistId,
+=======
+          assignedToId: ticket.project!.assignedToId,
+>>>>>>> Stashed changes
           status: TicketStatus.ESCALATED,
           resolvedAt: null,
         },
@@ -676,7 +694,11 @@ router.post(
           fromStatus: ticket.status,
           toStatus: TicketStatus.ESCALATED,
           fromAssigneeId: ticket.assignedToId,
+<<<<<<< Updated upstream
           toAssigneeId: projectSpecialistId,
+=======
+          toAssigneeId: ticket.project!.assignedToId,
+>>>>>>> Stashed changes
           note: payload.note,
         },
       });
@@ -684,7 +706,11 @@ router.post(
       await notifyTicketEscalated(transaction, {
         ticketId,
         ticketTitle: ticket.title,
+<<<<<<< Updated upstream
         projectSpecialistId,
+=======
+        projectSpecialistId: ticket.project!.assignedToId,
+>>>>>>> Stashed changes
         actorUserId: req.user!.id,
         actorName: req.user!.name,
       });

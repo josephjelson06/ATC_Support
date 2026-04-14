@@ -76,11 +76,16 @@ export const buildTicketEmailSubject = (ticket: Pick<TicketForEmail, 'id' | 'tit
   return `${lead} (${ticketDisplayId})${threadSuffix}`;
 };
 
+<<<<<<< Updated upstream
 const buildTicketContextLine = (ticket: TicketForEmail) => {
   const clientName = ticket.project?.client?.name || ticket.client?.name || 'Client';
   const projectName = ticket.project?.name || 'General Support';
   return `${getTicketDisplayId(ticket.id)} | ${clientName} | ${projectName}`;
 };
+=======
+const buildTicketContextLine = (ticket: TicketForEmail) =>
+  `${getTicketDisplayId(ticket.id)} | ${ticket.project?.client?.name || 'Client'} | ${ticket.project?.name || 'Project'}`;
+>>>>>>> Stashed changes
 
 const createOutboundTicketEmail = async (db: DbClient, input: OutboundEmailInput) => {
   const recipient = getTicketRecipient(input.ticket);

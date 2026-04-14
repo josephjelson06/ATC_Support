@@ -22,13 +22,18 @@
 
   var style = document.createElement('style');
   style.textContent = [
-    '.atc-widget-launcher{position:fixed;right:24px;bottom:24px;z-index:2147483646;display:flex;align-items:center;justify-content:center;width:56px;height:56px;border:0;border-radius:999px;background:#ea580c;color:#fff;box-shadow:0 20px 45px rgba(15,23,42,.24);cursor:pointer;transition:transform .18s ease,background .18s ease;}',
-    '.atc-widget-launcher:hover{background:#c2410c;}',
+    '.atc-widget-launcher{position:fixed;right:24px;bottom:24px;z-index:2147483646;display:flex;align-items:center;justify-content:center;gap:10px;height:58px;padding:0 18px 0 12px;border:0;border-radius:20px;background:#0f172a;color:#fff;box-shadow:0 22px 50px rgba(15,23,42,.28);cursor:pointer;transition:transform .18s ease,background .18s ease,box-shadow .18s ease;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;}',
+    '.atc-widget-launcher:hover{background:#111827;box-shadow:0 26px 60px rgba(15,23,42,.34);}',
     '.atc-widget-launcher:active{transform:scale(.96);}',
+    '.atc-widget-launcher-icon{display:flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:14px;background:#ea580c;color:#fff;}',
+    '.atc-widget-launcher-label{display:flex;flex-direction:column;align-items:flex-start;line-height:1.05;}',
+    '.atc-widget-launcher-label strong{font-size:13px;font-weight:800;letter-spacing:.01em;}',
+    '.atc-widget-launcher-label span{margin-top:3px;font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#fed7aa;}',
     '.atc-widget-shell{position:fixed;right:24px;bottom:96px;z-index:2147483645;width:min(390px,calc(100vw - 24px));height:min(640px,calc(100dvh - 120px));border-radius:28px;overflow:hidden;box-shadow:0 24px 60px rgba(15,23,42,.28);background:transparent;}',
     '.atc-widget-shell[hidden]{display:none !important;}',
     '.atc-widget-frame{width:100%;height:100%;border:0;background:transparent;}',
-    '@media (max-width: 640px){.atc-widget-launcher{right:16px;bottom:16px;}.atc-widget-shell{right:8px;left:8px;bottom:84px;width:auto;height:calc(100dvh - 100px);border-radius:24px;}}',
+    '@media (max-width: 640px){.atc-widget-launcher{right:16px;bottom:16px;height:56px;padding:0 14px 0 10px;border-radius:18px;}.atc-widget-shell{right:8px;left:8px;bottom:84px;width:auto;height:calc(100dvh - 100px);border-radius:24px;}}',
+    '@media (max-width: 420px){.atc-widget-launcher-label{display:none;}.atc-widget-launcher{width:56px;padding:0;border-radius:999px;}.atc-widget-launcher-icon{background:transparent;}}',
   ].join('');
   document.head.appendChild(style);
 
@@ -40,7 +45,7 @@
   launcher.className = 'atc-widget-launcher';
   launcher.setAttribute('aria-label', 'Open Julia support widget');
   launcher.innerHTML =
-    '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8 9h8M8 13h5m-7 7 2.5-3H18a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2v3Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    '<span class="atc-widget-launcher-icon"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8 9h8M8 13h5m-7 7 2.5-3H18a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2v3Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="atc-widget-launcher-label"><strong>Julia Support</strong><span>ATC Help</span></span>';
 
   var shell = document.createElement('div');
   shell.className = 'atc-widget-shell';

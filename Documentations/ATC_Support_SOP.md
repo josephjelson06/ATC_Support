@@ -1,944 +1,549 @@
-# ATC Support Platform — Standard Operating Procedures
-
-**Version:** 2.0  
-**Last Updated:** April 14, 2026  
-**Prepared by:** Engineering Team — Aarkay Techno Consultants Pvt. Ltd.  
-**Classification:** Internal Use Only
-
----
+# ATC Support Platform — Standard Operating Procedures (SOPs)
 
 ## Table of Contents
-
-1. [New Developer Onboarding](#1-new-developer-onboarding)
-2. [Local Development Setup](#2-local-development-setup)
-3. [Production Deployment](#3-production-deployment)
-4. [Server Infrastructure Reference](#4-server-infrastructure-reference)
-5. [Database Operations](#5-database-operations)
-6. [Application Management](#6-application-management)
-7. [Common Operational Workflows](#7-common-operational-workflows)
-8. [Troubleshooting Playbook](#8-troubleshooting-playbook)
-9. [Quick Reference Checklists](#9-quick-reference-checklists)
-
----
-
-## 1. New Developer Onboarding
-
-### 1.1 What You Need Before Starting
-
-| Requirement | Details |
-|------------|---------|
-| **Git** | Access to the `ATC_Support` repository |
-| **Node.js** | Version 20 or later (`node --version` to check) |
-| **PostgreSQL** | Local instance or access to the development database |
-| **Code Editor** | VS Code recommended with TypeScript + Tailwind extensions |
-| **Server Access** | RDP access to `192.168.10.12` (production server) for deployment |
-
-### 1.2 Understanding the Codebase
-
-The project consists of **two separate applications** in one repository:
-
-```
-ATC_Support/
-├── ATC_Support_Backend/     ← Node.js + Express + Prisma (REST API)
-└── ATC_Support_Frontend/    ← React + Vite + Tailwind (SPA)
-```
-
-- **Backend** runs on port `3001`, serves the REST API
-- **Frontend** runs on port `3000` (dev) or `4206` (production via IIS)
-- They communicate via HTTP — the frontend calls the backend API
-
-### 1.3 Key Files to Read First
-
-| File | What It Tells You |
-|------|------------------|
-| `ATC_Support_Backend/prisma/schema.prisma` | The entire database structure — all tables, fields, relationships, and enums |
-| `ATC_Support_Backend/src/index.ts` | All API routes registered and how middleware is layered |
-| `ATC_Support_Frontend/src/App.tsx` | All frontend page routes and how navigation works |
-| `ATC_Support_Frontend/src/lib/api.ts` | How the frontend communicates with the backend (auth, token refresh) |
-| `ATC_Support_Backend/src/services/julia.ts` | How Julia AI works (LLM prompting, context ranking) |
+1. [SOP-001: User Login and Session Management](#sop-001-user-login-and-session-management)
+2. [SOP-002: Creating and Configuring a New Client](#sop-002-creating-and-configuring-a-new-client)
+3. [SOP-003: Adding Consignees and Contacts to a Client](#sop-003-adding-consignees-and-contacts-to-a-client)
+4. [SOP-004: Creating a New Project and Generating a Widget Key](#sop-004-creating-a-new-project-and-generating-a-widget-key)
+5. [SOP-005: Configuring Julia AI](#sop-005-configuring-julia-ai)
+6. [SOP-006: Managing FAQs and Project Docs](#sop-006-managing-faqs-and-project-docs)
+7. [SOP-007: Hardware Asset Management](#sop-007-hardware-asset-management)
+8. [SOP-008: Annual Maintenance Contract (AMC) Management](#sop-008-annual-maintenance-contract-amc-management)
+9. [SOP-009: Widget Embed Flow](#sop-009-widget-embed-flow)
+10. [SOP-010: Julia AI Escalation to Ticket](#sop-010-julia-ai-escalation-to-ticket)
+11. [SOP-011: Support Ticket Triage and Queue Management](#sop-011-support-ticket-triage-and-queue-management)
+12. [SOP-012: Ticket Escalation](#sop-012-ticket-escalation)
+13. [SOP-013: Replying to and Resolving a Ticket](#sop-013-replying-to-and-resolving-a-ticket)
+14. [SOP-014: Email Thread Handling](#sop-014-email-thread-handling)
+15. [SOP-015: Notification Management](#sop-015-notification-management)
+16. [SOP-016: Reports and Dashboard Usage](#sop-016-reports-and-dashboard-usage)
+17. [SOP-017: User and Role Management](#sop-017-user-and-role-management)
 
 ---
 
-## 2. Local Development Setup
+## SOP-001: User Login and Session Management
 
-### 2.1 Step-by-Step: Backend
+### 1. Purpose
+To guide internal team members (PMs and SEs) on securely accessing the ATC Support operations console.
 
-Open a terminal and run each command in sequence:
+### 2. Scope
+Project Managers (PM) and Support Engineers (SE).
 
-```powershell
-# 1. Navigate to the backend directory
-cd C:\Users\Admin\Desktop\ATC_Support\ATC_Support_Backend
+### 3. Prerequisites
+- An active user account with credentials provided by an administrator.
+- Network access to the ATC Support domain.
 
-# 2. Install all Node.js dependencies
-npm install
+### 4. Step-by-step Procedure
+1. Navigate to the agent login URL in your web browser.
+2. Enter your registered email address and password into the login form.
+   ![Login Page](ATC_Support_SS/LoginPage.png)
+3. Click the **Log In** button.
+4. Upon successful authentication, you will be redirected to your default Dashboard containing queue statistics.
+   ![Dashboard Page](ATC_Support_SS/DashboardPage.png)
 
-# 3. Create your local environment file
-#    Copy the example and fill in your values:
-copy .env.example .env
-```
+### 5. Expected Outcome
+The user is successfully authenticated, receives role-based access, and the Dashboard loads with relevant data.
 
-Now **edit the `.env` file** with a text editor. You must set at minimum:
+### 6. Troubleshooting / Edge Cases
+- **Invalid Credentials:** Ensure the correct email and password. Reset the password if needed via an administrator.
+- **Session Expiration:** The system auto-refreshes tokens. If the refresh token expires, you will be logged out and must sign in again.
 
-```ini
-PORT=3001
-CORS_ORIGIN=http://localhost:3000
-DATABASE_URL="postgresql://postgres:your_password@localhost:5432/atc_support_backend?schema=public"
-JWT_SECRET="pick-a-random-string-at-least-16-chars-long"
-GROQ_API_KEY=""
-GROQ_MODEL="llama-3.1-8b-instant"
-```
-
-> **Note on GROQ_API_KEY**: Leave empty for now if you don't have a Groq account. Julia AI will simply return fallback messages instead of LLM responses. Get a free key at https://console.groq.com.
-
-Continue in the terminal:
-
-```powershell
-# 4. Generate the Prisma Client (creates TypeScript types from your schema)
-npx prisma generate
-
-# 5. Create all database tables by running migrations
-npx prisma migrate dev
-
-# 6. (Optional) Seed the database with demo data
-npm run prisma:seed
-
-# 7. Start the development server (auto-reloads on file changes)
-npm run dev
-```
-
-You should see:
-```
-ATC Support backend listening on port 3001
-```
-
-**Verify it works:**
-- Open a browser and go to `http://localhost:3001/health`
-- You should see: `{"status":"ok"}`
-
-### 2.2 Step-by-Step: Frontend
-
-Open a **second terminal** (keep the backend running):
-
-```powershell
-# 1. Navigate to the frontend directory
-cd C:\Users\Admin\Desktop\ATC_Support\ATC_Support_Frontend
-
-# 2. Install all Node.js dependencies
-npm install
-
-# 3. Create your local environment file
-#    For local development, create a .env file:
-```
-
-Create a file named `.env` in the frontend directory with:
-
-```ini
-VITE_API_BASE_URL="http://localhost:3001/api"
-VITE_WIDGET_KEY="general"
-```
-
-Continue:
-
-```powershell
-# 4. Start the development server
-npm run dev
-```
-
-You should see:
-```
-VITE v6.x.x  ready in XXXms
-
-➜  Local:   http://localhost:3000/
-```
-
-**Open `http://localhost:3000`** in your browser. You should see the ATC General Support page.
-
-### 2.3 Logging In as an Agent
-
-If you ran the database seeder (`npm run prisma:seed`), demo accounts are available. Otherwise, you need to create a user manually:
-
-```powershell
-# Open Prisma Studio (visual database editor)
-cd C:\Users\Admin\Desktop\ATC_Support\ATC_Support_Backend
-npx prisma studio
-```
-
-This opens a browser-based database editor at `http://localhost:5555`. You can inspect tables and add records.
-
-To create a user via code, you need to hash a password:
-
-```powershell
-# In the backend directory, open a Node REPL
-node -e "const bcrypt = require('bcrypt'); bcrypt.hash('YourPassword123', 10).then(h => console.log(h))"
-```
-
-Copy the hash and insert a User record in Prisma Studio with:
-- `name`: Your Name
-- `email`: your@email.com
-- `passwordHash`: The hash from above
-- `role`: PM (or SE)
-- `status`: ACTIVE
-
-Then go to `http://localhost:3000/login` and sign in with your email and password.
-
-### 2.4 Common Development Commands
-
-| Command | Where | What It Does |
-|---------|-------|-------------|
-| `npm run dev` | Backend | Start dev server with auto-reload (tsx watch) |
-| `npm run dev` | Frontend | Start Vite dev server with HMR on port 3000 |
-| `npm run build` | Backend | Compile TypeScript to `dist/` |
-| `npm run build` | Frontend | Build production bundle to `dist/` |
-| `npx prisma generate` | Backend | Regenerate Prisma Client after schema changes |
-| `npx prisma migrate dev` | Backend | Create + apply new migration for schema changes |
-| `npx prisma migrate deploy` | Backend | Apply pending migrations (production-safe) |
-| `npx prisma studio` | Backend | Open visual database browser |
-| `npm run prisma:seed` | Backend | Seed database with demo data |
-| `npm run typecheck` | Backend | Run TypeScript type checking without emitting |
-| `npm run lint` | Frontend | Run TypeScript type checking |
-| `npm run test` | Backend | Run integration tests |
-
-### 2.5 Making Database Schema Changes
-
-When you need to add/modify tables or fields:
-
-1. **Edit** `prisma/schema.prisma`
-2. **Run** `npx prisma migrate dev --name descriptive_name`
-   - This creates a SQL migration file in `prisma/migrations/`
-   - It applies the migration to your local database
-   - It regenerates the Prisma Client
-3. **Commit** the migration file along with the schema change
-4. On deployment, run `npx prisma migrate deploy` (see §3)
+### 7. Related SOPs
+- SOP-017: User and Role Management
 
 ---
 
-## 3. Production Deployment
+## SOP-002: Creating and Configuring a New Client
 
-### 3.1 Production Server Details
+### 1. Purpose
+To register a new customer organization in the system, forming the foundation for project tracking and hardware management.
 
-| Item | Value |
-|------|-------|
-| **Server IP** | `192.168.10.12` |
-| **OS** | Windows Server |
-| **Project Location** | `C:\Users\Admin\Desktop\ATC_Support\` |
-| **Backend Port** | `3001` |
-| **Frontend Port** | `4206` |
-| **Backend Service** | `ATC-Support-Backend` (NSSM Windows Service) |
-| **Frontend Hosting** | IIS Site `ATC_Support` |
-| **IIS Physical Path** | `C:\inetpub\ATC_Support_Frontend\` |
-| **Database** | PostgreSQL on `localhost:5432`, database `atc_support_backend` |
-| **Backend Logs** | `ATC_Support_Backend\logs\stdout.log` and `stderr.log` |
+### 2. Scope
+Project Managers (PM).
 
-### 3.2 Full Deployment Procedure
+### 3. Prerequisites
+- PM access level.
+- Core details of the client (Name, Industry, Address, Primary Email).
 
-> ⚠️ **IMPORTANT**: Follow every step in order. Skipping steps (especially database migrations) will cause runtime errors.
+### 4. Step-by-step Procedure
+1. From the sidebar navigation, click on **Clients** to view the master list.
+   ![Client List View](ATC_Support_SS/Client-List_View.png)
+2. Click the **+ New Client** button in the upper right corner.
+3. Fill in the organization details in the Client Overview/Summary tab. Provide Company Name, Industry, Address, Phone, and Email.
+   ![Client Summary Tab](ATC_Support_SS/Client-Summary_Tab.png)
+4. Click **Save** to create the client record.
 
-#### Step 1 — Pull the Latest Code
+### 5. Expected Outcome
+A new Client entity is instantiated with a status of ACTIVE, unlocking sub-tabs for Contacts, Projects, AMCs, and Hardware.
 
-```powershell
-cd C:\Users\Admin\Desktop\ATC_Support
-git pull origin main
-```
+### 6. Troubleshooting / Edge Cases
+> ⚠️ **Warning:** Ensure the client name is spelled correctly as it feeds into reports and widget metadata.
 
-If there are merge conflicts, resolve them before proceeding. Search for conflict markers:
-```powershell
-git diff --check
-```
-
-#### Step 2 — Install Backend Dependencies
-
-```powershell
-cd ATC_Support_Backend
-npm install
-```
-
-> Only needed if `package.json` has changed. Safe to run every time — it's a no-op if nothing changed.
-
-#### Step 3 — Generate Prisma Client
-
-```powershell
-npx prisma generate
-```
-
-This ensures the Prisma Client matches the current schema. Always run this before building.
-
-#### Step 4 — Apply Database Migrations
-
-```powershell
-npx prisma migrate deploy
-```
-
-**Check the output carefully.** You should see either:
-- `All migrations have been successfully applied.` — Good, proceed.
-- `Database schema is up to date!` — No new migrations, proceed.
-- Any error — **STOP. Do not continue. Fix the migration issue first.**
-
-> ⚠️ This is the most common source of deployment failures. If you skip this step and the code references new tables/columns, you'll get 500 Internal Server Errors.
-
-#### Step 5 — Build the Backend
-
-```powershell
-npm run build
-```
-
-Expected output: TypeScript compiles with **zero errors**. The compiled output goes to `dist/`.
-
-If there are errors:
-- **Merge conflict markers** (`<<<<<<<`): You have unresolved git conflicts. Fix them.
-- **Missing Prisma exports**: You didn't run `npx prisma generate`. Run it.
-- **Type errors**: Fix the code before deploying.
-
-#### Step 6 — Restart the Backend Service
-
-```powershell
-nssm restart ATC-Support-Backend
-```
-
-Expected output:
-```
-ATC-Support-Backend: STOP: The operation completed successfully.
-ATC-Support-Backend: START: The operation completed successfully.
-```
-
-**Verify the service is running:**
-
-```powershell
-# Check service state
-Get-CimInstance Win32_Service -Filter "Name='ATC-Support-Backend'" | Select-Object State
-
-# Check for startup errors in the log
-Get-Content ".\logs\stderr.log" -Tail 20
-
-# Test the health endpoint
-Invoke-WebRequest -Uri http://localhost:3001/health -UseBasicParsing
-```
-
-#### Step 7 — Install Frontend Dependencies
-
-```powershell
-cd ..\ATC_Support_Frontend
-npm install
-```
-
-#### Step 8 — Build the Frontend
-
-```powershell
-npm run build
-```
-
-The production bundle is created in `dist/`. Vite hashes all JS/CSS files for cache busting.
-
-#### Step 9 — Deploy Frontend to IIS
-
-This is the critical step most people get wrong. The frontend is **not** served from the project directory. IIS serves it from `C:\inetpub\ATC_Support_Frontend\`.
-
-```powershell
-# Step 9a — Backup the IIS web.config (contains URL rewrite rules for SPA routing)
-Copy-Item "C:\inetpub\ATC_Support_Frontend\web.config" "C:\inetpub\ATC_Support_Frontend\web.config.bak" -Force
-
-# Step 9b — Remove old files from IIS directory
-Remove-Item "C:\inetpub\ATC_Support_Frontend\assets" -Recurse -Force
-Remove-Item "C:\inetpub\ATC_Support_Frontend\index.html" -Force
-Remove-Item "C:\inetpub\ATC_Support_Frontend\widget.js" -Force -ErrorAction SilentlyContinue
-
-# Step 9c — Copy new build output to IIS directory
-Copy-Item -Path ".\dist\*" -Destination "C:\inetpub\ATC_Support_Frontend\" -Recurse -Force
-
-# Step 9d — Restore the web.config
-Move-Item "C:\inetpub\ATC_Support_Frontend\web.config.bak" "C:\inetpub\ATC_Support_Frontend\web.config" -Force
-```
-
-> **Why preserve web.config?** It contains IIS URL rewrite rules that route all non-file requests to `index.html`. Without it, refreshing any page other than `/` will return a 404.
-
-#### Step 10 — Verify the Deployment
-
-```powershell
-# Check backend health
-Invoke-WebRequest -Uri http://localhost:3001/health -UseBasicParsing
-
-# Check frontend files are current
-Get-ChildItem "C:\inetpub\ATC_Support_Frontend\index.html" | Select-Object LastWriteTime
-
-# Check backend error log for any issues
-Get-Content "C:\Users\Admin\Desktop\ATC_Support\ATC_Support_Backend\logs\stderr.log" -Tail 10
-```
-
-Open `http://192.168.10.12:4206` in a browser and **hard refresh** (Ctrl+Shift+R) to confirm.
+### 7. Related SOPs
+- SOP-003: Adding Consignees and Contacts to a Client
+- SOP-004: Creating a New Project and Generating a Widget Key
 
 ---
 
-## 4. Server Infrastructure Reference
+## SOP-003: Adding Consignees and Contacts to a Client
 
-### 4.1 Backend Windows Service (NSSM)
+### 1. Purpose
+To record individual contact persons and physical delivery/shipping locations (Consignees) for an existing Client.
 
-The backend runs as a Windows Service managed by NSSM (Non-Sucking Service Manager):
+### 2. Scope
+Project Managers (PM).
 
-| Property | Value |
-|----------|-------|
-| Service Name | `ATC-Support-Backend` |
-| Application | `D:\Program Files\nodejs\node.exe` |
-| AppDirectory | `C:\Users\Admin\Desktop\ATC_Support\ATC_Support_Backend` |
-| AppParameters | `C:\Users\Admin\Desktop\ATC_Support\ATC_Support_Backend\dist\index.js` |
-| Start Type | Automatic (starts with Windows) |
-| Max Restarts | 10 |
+### 3. Prerequisites
+- PM access level.
+- An existing, active Client record.
 
-**Common NSSM Commands:**
+### 4. Step-by-step Procedure
+1. Navigate to the **Clients** list and select the target client.
+2. Switch to the **Contacts** tab along the top navigation of the client's profile.
+   ![Client Contacts Tab](ATC_Support_SS/Client-Contacts_Tab.png)
+3. Click **Add Contact** to insert a primary point of contact for the client entity.
+4. To add location-based contacts, switch to the **Consignees** section (if separate) or add them under the respective location record.
+5. Save your changes.
 
-```powershell
-# Check status
-nssm status ATC-Support-Backend
+### 5. Expected Outcome
+Contact information is tied to the client profile, enabling agents to select valid requesters during internal ticket creation.
 
-# Stop the service
-nssm stop ATC-Support-Backend
+### 6. Troubleshooting / Edge Cases
+- **Duplicate emails:** Contact emails should ideally be unique to avoid thread matching collisions.
 
-# Start the service
-nssm start ATC-Support-Backend
-
-# Restart (stop + start)
-nssm restart ATC-Support-Backend
-
-# View full configuration
-nssm get ATC-Support-Backend Application
-nssm get ATC-Support-Backend AppDirectory
-nssm get ATC-Support-Backend AppParameters
-
-# Edit configuration interactively
-nssm edit ATC-Support-Backend
-```
-
-**To recreate the service from scratch** (e.g., on a fresh server):
-
-```powershell
-nssm install ATC-Support-Backend "D:\Program Files\nodejs\node.exe" "C:\Users\Admin\Desktop\ATC_Support\ATC_Support_Backend\dist\index.js"
-nssm set ATC-Support-Backend AppDirectory "C:\Users\Admin\Desktop\ATC_Support\ATC_Support_Backend"
-nssm set ATC-Support-Backend Start SERVICE_AUTO_START
-nssm set ATC-Support-Backend AppStdout "C:\Users\Admin\Desktop\ATC_Support\ATC_Support_Backend\logs\stdout.log"
-nssm set ATC-Support-Backend AppStderr "C:\Users\Admin\Desktop\ATC_Support\ATC_Support_Backend\logs\stderr.log"
-nssm start ATC-Support-Backend
-```
-
-### 4.2 IIS Frontend Configuration
-
-The IIS site `ATC_Support` serves the React SPA:
-
-| Property | Value |
-|----------|-------|
-| Site Name | `ATC_Support` |
-| Application Pool | `ATC_Support_Frontend` |
-| Physical Path | `C:\inetpub\ATC_Support_Frontend\` |
-| Binding | `http://192.168.10.12:4206` |
-
-**The `web.config` file** in the IIS directory is critical:
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<configuration>
-  <system.webServer>
-    <rewrite>
-      <rules>
-        <rule name="ReactRouterFallback" stopProcessing="true">
-          <match url=".*" />
-          <conditions logicalGrouping="MatchAll">
-            <add input="{REQUEST_FILENAME}" matchType="IsFile" negate="true" />
-            <add input="{REQUEST_FILENAME}" matchType="IsDirectory" negate="true" />
-          </conditions>
-          <action type="Rewrite" url="/index.html" />
-        </rule>
-      </rules>
-    </rewrite>
-  </system.webServer>
-</configuration>
-```
-
-**What it does**: Routes all URLs that don't match a physical file to `index.html`, allowing React Router to handle client-side routing. Without this, navigating to `/agent/dashboard` directly would return a 404.
-
-### 4.3 Port Reference
-
-| Port | Process | Protocol | Description |
-|------|---------|----------|-------------|
-| `3001` | node.exe | HTTP | Backend REST API |
-| `4206` | IIS (w3wp.exe) | HTTP | Frontend SPA |
-| `5432` | PostgreSQL | TCP | Database |
-
-**Check what's running on these ports:**
-```powershell
-netstat -ano | findstr ":3001 :4206 :5432"
-```
+### 7. Related SOPs
+- SOP-002: Creating and Configuring a New Client
 
 ---
 
-## 5. Database Operations
+## SOP-004: Creating a New Project and Generating a Widget Key
 
-### 5.1 Connection Details (Production)
+### 1. Purpose
+To isolate support workflows, configure the Julia AI widget, and define knowledge base boundaries for a specific client initiative.
 
-```
-Host:     localhost
-Port:     5432
-Database: atc_support_backend
-Schema:   public
-User:     atc_support_app
-Password: (see .env file)
-```
+### 2. Scope
+Project Managers (PM).
 
-### 5.2 Checking Migration Status
+### 3. Prerequisites
+- PM access level.
+- An existing Client record.
 
-```powershell
-cd C:\Users\Admin\Desktop\ATC_Support\ATC_Support_Backend
-npx prisma migrate status
-```
+### 4. Step-by-step Procedure
+1. Open the target client's profile and navigate to the **Projects** tab.
+   ![Client Projects Tab](ATC_Support_SS/Client-Projects_Tab.png)
+2. Click **+ New Project**. 
+   ![Project Main Page Overview](ATC_Support_SS/Project-Main_Page.png)
+3. Define the Project Name, Description, and set the unique **Widget Key** (e.g., `widget_clientname_project`).
+   ![Project Advanced Details](ATC_Support_SS/Project-Main_Page2.png)
+4. Assign a Support Engineer to act as the Project Lead.
+5. Save the project to activate it.
 
-This shows:
-- Total migrations found
-- Which migrations have/haven't been applied
-- If the schema is up to date
+### 5. Expected Outcome
+The project is created with a unique `widgetKey` ready to be embedded on the client's site, and SEs are assigned.
 
-### 5.3 Applying Pending Migrations
+### 6. Troubleshooting / Edge Cases
+- **Widget Key Format:** Do not include spaces or special characters in the Widget Key. Use underscores or hyphens.
 
-```powershell
-# Production-safe: only applies existing migration files, never creates new ones
-npx prisma migrate deploy
-```
-
-### 5.4 Database Backup
-
-```powershell
-# Full backup
-pg_dump -U atc_support_app -d atc_support_backend -F c -f "D:\Backups\atc_support_$(Get-Date -Format 'yyyyMMdd_HHmm').dump"
-
-# Table-only backup (schema + data)
-pg_dump -U atc_support_app -d atc_support_backend --format=plain > "D:\Backups\atc_support_$(Get-Date -Format 'yyyyMMdd').sql"
-```
-
-### 5.5 Database Restore
-
-```powershell
-# From custom-format dump
-pg_restore -U atc_support_app -d atc_support_backend -c "D:\Backups\atc_support_20260414_1200.dump"
-
-# From plain SQL
-psql -U atc_support_app -d atc_support_backend -f "D:\Backups\atc_support_20260414.sql"
-```
-
-### 5.6 Inspecting the Database
-
-```powershell
-# Visual browser (development only)
-npx prisma studio
-
-# Command-line
-psql -U atc_support_app -d atc_support_backend
-```
-
-Useful psql commands:
-```sql
-\dt                          -- List all tables
-\d "Ticket"                  -- Describe a table
-SELECT count(*) FROM "Ticket";  -- Count records
-SELECT * FROM "User";        -- List all users
-```
+### 7. Related SOPs
+- SOP-005: Configuring Julia AI
+- SOP-009: Widget Embed Flow
 
 ---
 
-## 6. Application Management
+## SOP-005: Configuring Julia AI
 
-### 6.1 Viewing Backend Logs
+### 1. Purpose
+To customize the behavior, greeting, and safety fallbacks of the Julia LLM agent for a designated Project.
 
-```powershell
-# Latest errors (most useful)
-Get-Content "C:\Users\Admin\Desktop\ATC_Support\ATC_Support_Backend\logs\stderr.log" -Tail 30
+### 2. Scope
+Project Managers (PM).
 
-# Latest general output
-Get-Content "C:\Users\Admin\Desktop\ATC_Support\ATC_Support_Backend\logs\stdout.log" -Tail 30
+### 3. Prerequisites
+- An active project.
+- A valid GROQ API key defined in backend `.env`.
 
-# Follow logs in real-time
-Get-Content "C:\Users\Admin\Desktop\ATC_Support\ATC_Support_Backend\logs\stderr.log" -Wait -Tail 5
-```
+### 4. Step-by-step Procedure
+1. Open the target Project profile.
+2. Navigate to the **Julia Settings / Widget Configuration** section or tab.
+   ![Project Julia Settings](ATC_Support_SS/Project-MainPage3.png)
+3. Enter the **Julia Greeting** (e.g., "Hi! I'm Julia, ATC's support assistant for this product").
+4. Enter the **Fallback Message** (what Julia says if it doesn't know the answer).
+5. Enter the **Escalation Hint** (instructions appended when Julia cannot resolve the issue).
+6. Under **Widget Allowed Domains**, list the URLs where the widget is permitted to be hosted.
+7. Toggle the "Enable Julia Widget" switch.
+8. Save settings.
 
-The backend uses structured JSON logging. Each line is a JSON object with:
-- `level`: `info`, `warn`, or `error`
-- `msg`: Event type (e.g., `request.completed`, `request.failed`)
-- `requestId`: Unique ID for tracing
-- `method`, `path`, `status`, `durationMs`
+### 5. Expected Outcome
+Julia AI operates according to the localized project guidelines and rejects requests originating from unlisted domains.
 
-### 6.2 Checking Service Health
+### 6. Troubleshooting / Edge Cases
+> 💡 **Tip:** Julia requires at least one "Published" Project Doc to be fully operational. Without context, it will quickly resort to the fallback message.
 
-```powershell
-# Backend service status
-Get-CimInstance Win32_Service -Filter "Name='ATC-Support-Backend'" | Select-Object Name, State, ProcessId
-
-# IIS status
-Get-Service -Name W3SVC | Select-Object Status, Name
-
-# Health endpoint (should return 200)
-Invoke-WebRequest -Uri http://localhost:3001/health -UseBasicParsing | Select-Object StatusCode
-```
-
-### 6.3 Managing the Frontend Widget Key
-
-The `VITE_WIDGET_KEY` in `.env.production` controls what the default landing page shows:
-
-| Value | Landing Page |
-|-------|-------------|
-| `general` | ATC General Support page (multi-type: Software, Hardware, General) |
-| `widget_warehouse_portal` | Warehouse Portal project-specific support center |
-| `widget_<any_project_key>` | That project's specific support center |
-
-**To change the default landing:**
-1. Edit `ATC_Support_Frontend\.env.production`
-2. Change `VITE_WIDGET_KEY="general"` to your desired key
-3. Rebuild: `npm run build`
-4. Redeploy to IIS (see §3.2, Steps 9-10)
+### 7. Related SOPs
+- SOP-006: Managing FAQs and Project Docs
 
 ---
 
-## 7. Common Operational Workflows
+## SOP-006: Managing FAQs and Project Docs
 
-### 7.1 Adding a New Client and Project
+### 1. Purpose
+To populate the knowledge base that feeds both the static end-user support portal and Julia's Retrieval-Augmented Generation (RAG) context.
 
-1. Login to the agent console at `http://192.168.10.12:4206/login`
-2. Navigate to `Clients` in the sidebar → Click **+ New Client**
-3. Fill in: Company name, industry, address, phone, email
-4. Save the client
-5. Open the new client → **Projects** tab → **+ New Project**
-6. Set the **Widget Key** — a unique identifier like `widget_clientname_project`
-7. Enable the widget toggle if you want Julia AI accessible
-8. Configure Julia AI:
-   - **Greeting**: The first message Julia shows (e.g., "Hi! I'm Julia, ATC's support assistant for [Project].")
-   - **Fallback Message**: Shown when Julia lacks context
-   - **Escalation Hint**: Appended to the fallback to guide users to human support
-9. Switch to the **Docs** tab → Add project documentation
-   - Julia uses these docs for RAG (Retrieval-Augmented Generation)
-   - Set status to **Published** for Julia to use them
-10. Switch to the **FAQs** tab → Add frequently asked questions
-    - These appear on the client-facing landing page
-11. Assign a **Project Lead** (Support Engineer) who will handle escalated tickets
+### 2. Scope
+Project Managers (PM), Support Engineers (SE - depending on permissions).
 
-### 7.2 Deploying the Julia Widget on a Client Website
+### 3. Prerequisites
+- An active project.
 
-Add this single script tag to the client's website:
+### 4. Step-by-step Procedure
+1. From the Project profile, click on the **FAQs** tab.
+   ![Project FAQs Tab](ATC_Support_SS/Projects-FAQs_Tab.png)
+2. Click **Add FAQ**, provide the question/answer pair, and set its display sorting order.
+3. Switch to the **Docs** tab to upload or write longer-form runbooks and operational documentation.
+   ![Project Docs Tab](ATC_Support_SS/Project-Docs_Tab.png)
+4. Ensure the status is set to **Published** for the document to be ingested by Julia AI.
 
-```html
-<script
-  src="http://192.168.10.12:4206/widget.js"
-  data-widget-key="widget_your_project_key"
-  defer
-></script>
-```
+### 5. Expected Outcome
+The client-facing portal reflects the updated FAQs, and Julia AI can now answer questions referencing the newly published documentation.
 
-This injects a floating chat widget in the bottom-right corner of their website.
+### 6. Troubleshooting / Edge Cases
+- **Draft Status:** Docs marked as 'Draft' are entirely hidden from the AI context and end-users.
 
-**To restrict access to specific domains** (recommended for production):
-1. Go to the Project settings in the agent console
-2. Add allowed domains to the `widgetAllowedDomains` list (e.g., `atcgroup.co.in`, `client-website.com`)
-3. Requests from unlisted origins will be rejected
+### 7. Related SOPs
+- SOP-005: Configuring Julia AI
 
-### 7.3 Creating a Support Engineer Account
+---
 
-As a PM:
+## SOP-007: Hardware Asset Management
 
-1. Navigate to `http://192.168.10.12:4206/agent/account` → (or wherever user management is)
-2. Use the Users API directly or Prisma Studio:
+### 1. Purpose
+To maintain a catalog of supported hardware and track specific deployed assets belonging to a client.
 
-```powershell
-# Generate a password hash
-node -e "require('bcrypt').hash('TempPassword123', 10).then(h => console.log(h))"
-```
+### 2. Scope
+Project Managers (PM) and Support Engineers (SE).
 
-3. Create the user record with:
-   - `role`: `SE`
-   - `supportLevel`: `SE1`, `SE2`, or `SE3`
-   - `scopeMode`: `GLOBAL` (sees all tickets) or `PROJECT_SCOPED` (restricted)
-   - `assignmentAuthority`: `SELF_ONLY` or `SELF_AND_OTHERS`
-   - `status`: `ACTIVE`
+### 3. Prerequisites
+- Access to the Hardware sections of the console.
 
-4. If the SE is project-scoped, add them as a member to their assigned projects
+### 4. Step-by-step Procedure
+1. To manage catalog definitions, go to the global **Hardware** section in the main navigation to define Brands and Models.
+   ![Hardware Landing Page](ATC_Support_SS/Hardware_Page.png)
+2. Add necessary definitions (e.g., Printers, Scanners) and specifications.
+   ![Hardware Definitions](ATC_Support_SS/Hardware_Page2.png)
+3. To assign a specific unit to a client, navigate to the **Clients** list, open a client, and switch to the **Hardware** tab.
+   ![Client Hardware Tab](ATC_Support_SS/Client-Hardware_Tab.png)
+4. Link the asset by entering its serial number, model, and status (Active/Retired).
 
-### 7.4 Setting Up Email Integration
+### 5. Expected Outcome
+A comprehensive inventory is mapped to clients, enabling hardware-specific support sessions and topic scoping.
 
-#### Outbound (Sending notifications to customers):
+### 6. Troubleshooting / Edge Cases
+- Make sure to categorize legacy hardware as 'Retired' rather than deleting it if past tickets reference it.
 
-1. Edit the backend `.env` file:
+### 7. Related SOPs
+- SOP-008: Annual Maintenance Contract (AMC) Management
 
-```ini
-MAIL_FROM_EMAIL=support@atcgroup.co.in
-MAIL_FROM_NAME=ATC Support
-SMTP_HOST=smtp.your-provider.com
-SMTP_PORT=587
-SMTP_SECURE=false
-SMTP_USER=support@atcgroup.co.in
-SMTP_PASS=your-smtp-password
-```
+---
 
-2. Restart the backend service: `nssm restart ATC-Support-Backend`
-3. Test: Create a ticket through the widget with a real email — you should receive a confirmation
+## SOP-008: Annual Maintenance Contract (AMC) Management
 
-#### Inbound (Receiving customer email replies):
+### 1. Purpose
+To track pre-purchased maintenance hours and contract validities tied to specific hardware and projects.
 
-1. Configure your email provider to forward incoming replies to:
+### 2. Scope
+Project Managers (PM).
+
+### 3. Prerequisites
+- An active Client.
+
+### 4. Step-by-step Procedure
+1. Navigate to the target Client and open the **AMC** tab.
+   ![Client AMC Tab](ATC_Support_SS/Client-AMC_Tab.png)
+2. Click to register a new contract.
+3. Input the valid date range, the total allotted service hours, and attach it to the relevant Hardware Assets and Project scope.
+4. Save the contract details.
+
+### 5. Expected Outcome
+The system tracks the expiration date and hour consumption for the client's support agreement.
+
+### 6. Troubleshooting / Edge Cases
+- Ensure AMCs are transitioned to 'Expired' once the end date is breached to alert agents during ticket triage.
+
+### 7. Related SOPs
+- SOP-007: Hardware Asset Management
+
+---
+
+## SOP-009: Widget Embed Flow
+
+### 1. Purpose
+To instruct clients on how to embed the ATC Support widget into their external websites.
+
+### 2. Scope
+Project Managers (PM), Client IT Teams.
+
+### 3. Prerequisites
+- A properly configured Project with Julia AI enabled.
+- A generated `widgetKey`.
+
+### 4. Step-by-step Procedure
+1. Navigate to the project settings to copy the generated script tag.
+2. Instruct the client to insert the following HTML tag before the closing `</body>` tag on their website:
+   ```html
+   <script src="https://<ATC_SUPPORT_DOMAIN>/widget.js" data-widget-key="YOUR_PROJECT_WIDGET_KEY" defer></script>
    ```
-   POST http://192.168.10.12:3001/api/email/inbound
-   Header: x-inbound-secret: <your INBOUND_EMAIL_SECRET>
-   Body: { fromEmail, fromName, subject, text }
-   ```
-2. The system automatically matches the thread token `[ATC:xxx]` in the subject line
-3. Customer replies auto-create ticket messages and trigger status transitions
+3. Ensure the client's domains are added to the **Widget Allowed Domains** list in the project settings.
+   *[Screenshot pending — ATC_Support_SS/sop-009-step3.png]*
 
-### 7.5 Handling Support Session Escalations
+### 5. Expected Outcome
+The floating support widget appears on the client's web properties and successfully communicates with the ATC backend.
 
-When Julia AI can't resolve an issue, the customer can click "Escalate to support":
+### 6. Troubleshooting / Edge Cases
+- If the widget throws a CORS or 403 error, verify the `Widget Allowed Domains` configuration.
 
-1. The system captures the full chat history, client details, hardware context, and identified support topic
-2. A new **Ticket** is created automatically with:
-   - Source: `GENERAL_WIDGET` or `PROJECT_WIDGET`
-   - Status: `NEW`
-   - Linked support session for full conversation history
-   - AI-generated issue summary and confidence score
-3. The ticket appears in the agent queue at `/agent/tickets/queue`
-4. Agents can view the entire chat history in the ticket's **Session** tab
+### 7. Related SOPs
+- SOP-004: Creating a New Project and Generating a Widget Key
 
 ---
 
-## 8. Troubleshooting Playbook
+## SOP-010: Julia AI Escalation to Ticket
 
-### 8.1 Backend Returns 500 — "table does not exist"
+### 1. Purpose
+To capture the flow when an automated Julia AI session fails to resolve an issue, creating an actionable human support request.
 
-**Symptom**: API calls fail with errors like `The table 'public.SupportTopic' does not exist in the current database.`
+### 2. Scope
+End Users (Customers).
 
-**Cause**: Database migrations haven't been applied. The schema file defines new tables that don't exist in the database yet.
+### 3. Prerequisites
+- An active Chat Session or Support Session with Julia.
 
-**Fix**:
-```powershell
-cd C:\Users\Admin\Desktop\ATC_Support\ATC_Support_Backend
-npx prisma migrate status      # Shows pending migrations
-npx prisma migrate deploy       # Applies them
-nssm restart ATC-Support-Backend  # Restart to use updated schema
-```
+### 4. Step-by-step Procedure
+1. The user interacts with Julia. When Julia cannot provide a resolution, it offers the Escalation Hint.
+2. The user clicks "Escalate to Support" within the widget interface.
+   *[Screenshot pending — ATC_Support_SS/sop-010-step2.png]*
+3. The widget packages the Chat Session history, AI confidence summary, and user contact details.
+4. The system automatically creates a `NEW` Ticket.
 
----
+### 5. Expected Outcome
+A ticket is deposited into the SE inbound queue containing the full context of the AI interaction.
 
-### 8.2 Frontend Shows Old Version After Deployment
+### 6. Troubleshooting / Edge Cases
+- Ensure users provide an email address during the widget session; otherwise, the ticket cannot be linked to a contact.
 
-**Symptom**: You deployed new code but the browser still shows the old UI, even after hard refresh on multiple browsers.
-
-**Cause**: This is almost always because the build output wasn't copied to the **IIS directory** (`C:\inetpub\ATC_Support_Frontend\`). The frontend builds to `ATC_Support_Frontend\dist\`, but IIS serves from a completely different path.
-
-**Fix**:
-```powershell
-# Verify what IIS is actually serving
-Get-ChildItem "C:\inetpub\ATC_Support_Frontend\index.html" | Select-Object LastWriteTime
-
-# If the date is old, redeploy:
-Copy-Item "C:\inetpub\ATC_Support_Frontend\web.config" "C:\inetpub\ATC_Support_Frontend\web.config.bak"
-Remove-Item "C:\inetpub\ATC_Support_Frontend\assets" -Recurse -Force
-Remove-Item "C:\inetpub\ATC_Support_Frontend\index.html" -Force
-Copy-Item -Path "C:\Users\Admin\Desktop\ATC_Support\ATC_Support_Frontend\dist\*" -Destination "C:\inetpub\ATC_Support_Frontend\" -Recurse -Force
-Move-Item "C:\inetpub\ATC_Support_Frontend\web.config.bak" "C:\inetpub\ATC_Support_Frontend\web.config" -Force
-```
+### 7. Related SOPs
+- SOP-011: Support Ticket Triage and Queue Management
 
 ---
 
-### 8.3 Build Fails with Merge Conflict Markers
+## SOP-011: Support Ticket Triage and Queue Management
 
-**Symptom**: `npm run build` fails with `error TS1185: Merge conflict marker encountered.`
+### 1. Purpose
+To identify, categorize, prioritize, and assign incoming tickets escalating from widgets or emails.
 
-**Cause**: There are unresolved git merge conflicts in `.ts` files (lines with `<<<<<<<`, `=======`, `>>>>>>>`).
+### 2. Scope
+Support Engineers (SE), Project Managers (PM).
 
-**Fix**:
-```powershell
-# Find all conflict markers
-Select-String -Path ".\src\**\*.ts" -Pattern "<<<<<<< " -Recurse
+### 3. Prerequisites
+- SE access level.
 
-# Open each file, resolve conflicts, then rebuild
-npm run build
-```
+### 4. Step-by-step Procedure
+1. Log in and navigate to the **Tickets** section (Inbound Queue).
+   ![Ticket List View](ATC_Support_SS/Ticket-List_View.png)
+2. Filter the view by `Status: NEW` or `Status: UNASSIGNED`.
+3. Open a ticket to view the detail pane.
+   ![Ticket Detail View](ATC_Support_SS/Ticket-Detail_View.png)
+4. Review the AI Resolution Summary and the chat session logs.
+5. Set the Ticket Priority (Low, Medium, High, Critical).
+6. Assign the ticket to yourself or another SE by using the assignment action button.
 
----
+### 5. Expected Outcome
+The ticket transitions to `ASSIGNED` and is claimed by an agent capable of resolving the issue.
 
-### 8.4 Backend Service Won't Start or Crashes Immediately
+### 6. Troubleshooting / Edge Cases
+- Agents with `PROJECT_SCOPED` restrictions will only see tickets originating from their assigned projects.
 
-**Symptom**: `nssm restart ATC-Support-Backend` succeeds but the service crashes within seconds.
-
-**Diagnosis**:
-```powershell
-# Check service state
-Get-CimInstance Win32_Service -Filter "Name='ATC-Support-Backend'" | Select-Object State
-
-# Read the error log — this is usually the answer
-Get-Content "C:\Users\Admin\Desktop\ATC_Support\ATC_Support_Backend\logs\stderr.log" -Tail 30
-```
-
-**Common causes**:
-
-| Error in Log | Cause | Fix |
-|-------------|-------|-----|
-| `DATABASE_URL is required` | Missing or broken `.env` file | Verify `.env` exists and has a valid `DATABASE_URL` |
-| `ECONNREFUSED 127.0.0.1:5432` | PostgreSQL is not running | Start the PostgreSQL service |
-| `EADDRINUSE :::3001` | Port 3001 already in use | `netstat -ano \| findstr :3001` → kill the process or change the port |
-| `Cannot find module './dist/index.js'` | Backend wasn't built | Run `npm run build` |
-| `Invalid prisma client` | Prisma Client out of sync with schema | Run `npx prisma generate` then `npm run build` |
+### 7. Related SOPs
+- SOP-012: Ticket Escalation
+- SOP-013: Replying to and Resolving a Ticket
 
 ---
 
-### 8.5 Julia AI Not Responding
+## SOP-012: Ticket Escalation
 
-**Symptom**: The Julia chat widget shows fallback messages instead of AI responses.
+### 1. Purpose
+To formally pass a ticket from a first-responder (SE) to a more senior engineer or project lead.
 
-**Diagnosis**:
-```powershell
-# Check if GROQ_API_KEY is set
-Select-String "GROQ_API_KEY" "C:\Users\Admin\Desktop\ATC_Support\ATC_Support_Backend\.env"
-```
+### 2. Scope
+Support Engineers (SE1, SE2).
 
-**Common causes**:
+### 3. Prerequisites
+- An `IN_PROGRESS` or `ASSIGNED` ticket you currently own.
 
-| Cause | Fix |
-|-------|-----|
-| `GROQ_API_KEY` is empty | Get a key from https://console.groq.com and add it to `.env` |
-| Groq service outage | Check https://status.groq.com — use fallback messages until resolved |
-| No published project docs | Julia needs at least some published docs for context. Add docs and set status to PUBLISHED |
-| Rate limit exceeded | The logs will show `rate_limit_exceeded`. Wait or upgrade your Groq plan |
+### 4. Step-by-step Procedure
+1. Open the Ticket detail view.
+2. Navigate to the actions menu and click **Escalate**.
+3. Provide an internal note explaining why the escalation is necessary.
+   ![Ticket Log History](ATC_Support_SS/Ticket-Log_History.png)
+4. The ticket status updates to `ESCALATED` and is routed to a higher-tier SE or the designated Project Lead.
 
----
+### 5. Expected Outcome
+The system records an Escalation Event in the ticket history and alerts the newly assigned party.
 
-### 8.6 PM2 Permission Errors
+### 6. Troubleshooting / Edge Cases
+- Once escalated, ensure any ongoing external communication is temporarily paused until the new owner reviews the thread.
 
-**Symptom**: Running `pm2 list` or similar fails with `connect EPERM //./pipe/rpc.sock`
-
-**Cause**: PM2 is **not** the process manager for this project. The system uses **NSSM**. Residual PM2 artifacts can cause errors.
-
-**Fix**: Ignore PM2 entirely and use NSSM commands:
-```powershell
-nssm status ATC-Support-Backend
-nssm restart ATC-Support-Backend
-```
-
-If PM2 artifacts are causing issues:
-```powershell
-Remove-Item "$env:USERPROFILE\.pm2" -Recurse -Force -ErrorAction SilentlyContinue
-```
+### 7. Related SOPs
+- SOP-011: Support Ticket Triage and Queue Management
 
 ---
 
-### 8.7 Cannot Access Agent Console (401 Errors)
+## SOP-013: Replying to and Resolving a Ticket
 
-**Symptom**: After logging in, API calls fail with 401 Unauthorized.
+### 1. Purpose
+To communicate with the requester and ultimately close out the support request.
 
-**Causes**:
-- **JWT_SECRET changed**: If the `.env` `JWT_SECRET` was modified, all existing tokens are invalidated. Users need to log out and log back in.
-- **User set to INACTIVE**: Check the User table — `status` must be `ACTIVE`
-- **Clock skew**: JWT validation is time-sensitive. Ensure the server clock is accurate.
+### 2. Scope
+Support Engineers (SE).
 
----
+### 3. Prerequisites
+- An `IN_PROGRESS` assigned ticket.
 
-### 8.8 IIS Returns 404 on Page Refresh
+### 4. Step-by-step Procedure
+1. Open the Ticket Detail interface.
+   ![Ticket Detail Messages view](ATC_Support_SS/Ticket-Detail2.png)
+2. Use the message composer to draft a response. You can toggle between `Public Reply` (sent to customer) and `Internal Note` (agents only).
+3. Post the reply. The system sends an email.
+4. If awaiting a response from the user, transition the status to `WAITING_ON_CUSTOMER`.
+5. Once the issue is resolved, click the **Resolve** action, provide a closing summary, and finalize the ticket.
 
-**Symptom**: Going to `http://192.168.10.12:4206/agent/dashboard` directly (or refreshing) returns a 404 page.
+### 5. Expected Outcome
+The customer receives the update or resolution notice via email, and the ticket status is updated to `RESOLVED`.
 
-**Cause**: The `web.config` file is missing from `C:\inetpub\ATC_Support_Frontend\`. This happens when it gets deleted during deployment.
+### 6. Troubleshooting / Edge Cases
+- If a customer replies via email to a `RESOLVED` ticket, it will automatically shift back to `REOPENED`.
 
-**Fix**: Recreate the file:
-```powershell
-@"
-<?xml version="1.0" encoding="utf-8"?>
-<configuration>
-  <system.webServer>
-    <rewrite>
-      <rules>
-        <rule name="ReactRouterFallback" stopProcessing="true">
-          <match url=".*" />
-          <conditions logicalGrouping="MatchAll">
-            <add input="{REQUEST_FILENAME}" matchType="IsFile" negate="true" />
-            <add input="{REQUEST_FILENAME}" matchType="IsDirectory" negate="true" />
-          </conditions>
-          <action type="Rewrite" url="/index.html" />
-        </rule>
-      </rules>
-    </rewrite>
-  </system.webServer>
-</configuration>
-"@ | Out-File -Encoding utf8 "C:\inetpub\ATC_Support_Frontend\web.config"
-```
+### 7. Related SOPs
+- SOP-014: Email Thread Handling
 
 ---
 
-## 9. Quick Reference Checklists
+## SOP-014: Email Thread Handling
 
-### 9.1 Deployment Checklist
+### 1. Purpose
+To audit and verify the delivery status of inbound and outbound communication streams attached to a ticket.
 
-```
-□  git pull origin main
-□  Resolve any merge conflicts (git diff --check)
-□  cd ATC_Support_Backend
-□    npm install
-□    npx prisma generate
-□    npx prisma migrate deploy
-□    npm run build → zero errors
-□    nssm restart ATC-Support-Backend
-□    GET http://localhost:3001/health → {"status":"ok"}
-□    Check logs\stderr.log for errors
-□  cd ATC_Support_Frontend
-□    npm install
-□    npm run build → zero errors
-□    Backup web.config from IIS directory
-□    Clear old files from C:\inetpub\ATC_Support_Frontend\
-□    Copy dist\* → C:\inetpub\ATC_Support_Frontend\
-□    Restore web.config
-□    Browse http://192.168.10.12:4206 (Ctrl+Shift+R)
-□  Done
-```
+### 2. Scope
+Support Engineers (SE), Project Managers (PM).
 
-### 9.2 Emergency Rollback
+### 3. Prerequisites
+- A ticket with external communications.
 
-If a deployment breaks production:
+### 4. Step-by-step Procedure
+1. Open the target Ticket's details.
+2. Navigate to the **Emails / Timeline** view tab.
+   ![Ticket Email History](ATC_Support_SS/Ticket-Email_History.png)
+3. Review the logs to confirm the `SENT` or `LOGGED` status of outbound notifications.
+4. Verify that inbound `RECEIVED` emails were properly mapped to the internal `TicketMessage` thread.
 
-```powershell
-# 1. Roll back to the previous known-good commit
-cd C:\Users\Admin\Desktop\ATC_Support
-git log --oneline -5                    # Find the good commit hash
-git reset --hard <commit_hash>          # Reset to it
+### 5. Expected Outcome
+Agents can diagnose if a client failed to receive an expected communication due to an SMTP bounce or filtering issue.
 
-# 2. Rebuild and redeploy
-cd ATC_Support_Backend
-npx prisma generate
-npm run build
-nssm restart ATC-Support-Backend
+### 6. Troubleshooting / Edge Cases
+- Look for thread routing tokens (e.g., `[ATC:xxxx]`) in the subject lines. If these are stripped by external mail clients, manual re-association may be required.
 
-cd ..\ATC_Support_Frontend
-npm run build
-# Copy dist to IIS directory (same steps as §3.2 Step 9)
-```
-
-> ⚠️ **Database migrations cannot be easily rolled back.** If a migration added tables, they'll remain in the database. This is usually harmless — unused tables don't affect the older code.
-
-### 9.3 Common NSSM Commands
-
-```powershell
-nssm status ATC-Support-Backend       # Check if running
-nssm start ATC-Support-Backend        # Start the service
-nssm stop ATC-Support-Backend         # Stop the service
-nssm restart ATC-Support-Backend      # Restart the service
-nssm edit ATC-Support-Backend         # Open GUI config editor
-```
-
-### 9.4 Useful PowerShell One-Liners
-
-```powershell
-# What's using port 3001?
-netstat -ano | findstr :3001
-
-# Check all node processes
-Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Select ProcessId,CommandLine
-
-# Tail the error log
-Get-Content "C:\Users\Admin\Desktop\ATC_Support\ATC_Support_Backend\logs\stderr.log" -Wait -Tail 5
-
-# Check IIS site configuration
-Get-Content "$env:SystemRoot\System32\inetsrv\config\applicationHost.config" | Select-String "ATC_Support" -Context 3
-
-# Quick health check
-Invoke-WebRequest -Uri http://localhost:3001/health -UseBasicParsing | Select StatusCode
-```
+### 7. Related SOPs
+- SOP-013: Replying to and Resolving a Ticket
 
 ---
 
-*End of Standard Operating Procedures*
+## SOP-015: Notification Management
+
+### 1. Purpose
+To ensure agents are alerted to critical workflow transitions without constantly monitoring the queue map.
+
+### 2. Scope
+Support Engineers (SE), Project Managers (PM).
+
+### 3. Prerequisites
+- Active agent session.
+
+### 4. Step-by-step Procedure
+1. Check the Notification Bell icon in the top header of the agent dashboard.
+   *[Screenshot pending — ATC_Support_SS/sop-015-step1.png]*
+2. Review newly received alerts (e.g., `TICKET_ASSIGNED`, `TICKET_CUSTOMER_REPLIED`).
+3. Click on a notification to navigate directly to the resulting ticket or action item.
+4. Dismiss notifications or select "Mark All as Read."
+
+### 5. Expected Outcome
+Agents are informed of asynchronous updates promptly.
+
+### 6. Troubleshooting / Edge Cases
+- Ensure browser notifications are enabled if pop-up toast alerts are desired while tabbed out.
+
+### 7. Related SOPs
+- SOP-011: Support Ticket Triage and Queue Management
+
+---
+
+## SOP-016: Reports and Dashboard Usage
+
+### 1. Purpose
+To analyze ticket volume, agent performance, resolution times, and hardware failure trends.
+
+### 2. Scope
+Project Managers (PM), Senior IT Leadership.
+
+### 3. Prerequisites
+- PM access level or specifically permitted SE roles.
+
+### 4. Step-by-step Procedure
+1. From the sidebar, navigate to the **Reports** section.
+   ![Reports Page Filters](ATC_Support_SS/Reports_Page.png)
+2. Use the timeline constraints and filtering tools (by Project, Client, Assignee) to scope the dataset.
+3. Review the aggregated metrics and charts.
+4. To view the raw ticketing data behind the charts, switch to the list view breakdown.
+   ![Reports List View](ATC_Support_SS/Reports_ListView.png)
+5. Export the dataset via CSV if external analysis (e.g., Excel/BI) is required.
+
+### 5. Expected Outcome
+Administrators derive actionable intelligence regarding SLA compliance and product reliability.
+
+### 6. Troubleshooting / Edge Cases
+- Large date ranges may take a moment to query. Use granular filters when investigating specific anomalies.
+
+### 7. Related SOPs
+- N/A
+
+---
+
+## SOP-017: User and Role Management
+
+### 1. Purpose
+To onboard, modify, and terminate internal team member access to the platform.
+
+### 2. Scope
+Project Managers (PM).
+
+### 3. Prerequisites
+- PM access level.
+
+### 4. Step-by-step Procedure
+1. Navigate to the **Users / Account Management** pane.
+   *[Screenshot pending — ATC_Support_SS/sop-017-step1.png]*
+2. Click to invite or **Create a new internal user**.
+3. Supply their Name, Email, and assign a temporary password.
+4. Define the Role (`PM` or `SE`).
+5. For SEs, define their tier (`SE1`, `SE2`, `SE3`), scope mode (`GLOBAL` vs `PROJECT`), and assignment authority.
+6. Save the user profile. To disable access, toggle their status to `INACTIVE`.
+
+### 5. Expected Outcome
+The user hierarchy accurately mirrors organizational authorization boundaries, securing client data.
+
+### 6. Troubleshooting / Edge Cases
+> ⚠️ **Warning:** Never delete user records associated with historical tickets to preserve auditing integrity; use the `INACTIVE` state instead.
+
+### 7. Related SOPs
+- SOP-001: User Login and Session Management
+
+---
+*End of Document*
